@@ -6,3 +6,5 @@ frontend.py
 keep_common_tiles.py
 GEDOT.ini
 TODO_LIST.txt
+resource/shapes/land_polygons.*
+GEDOT.ini.template-copy

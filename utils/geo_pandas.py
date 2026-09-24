@@ -38,6 +38,9 @@ from constants import GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES
     ROAD_REMOVAL_LANDUSE_OSM_KEY, ROAD_REMOVAL_NATURAL_OSM_KEY, PROPOSED_OSM_TAG, LANDMARK_PREFIX, LON_OSM_KEY, LAT_OSM_KEY, FOREST_OSM_TAG, WOOD_OSM_TAG, SHAPELY_TYPE, OSMNX_LIB_VERSION, DEFAULT_OVERPASS_API_URI
 from utils.colored_print import pr_bg_orange
 from utils.install_lib import install_python_lib, install_alternate_python_lib, install_shapefile_resource
+from utils.script_errors import ScriptError
+import time
+import requests
 
 try:
     import osgeo
@@ -370,6 +373,28 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
 # load_gdf splits it per key/tags instead of sending one Overpass query per data type (rate limiting)
 prefetched_osm_data = []
 PREFETCH_OSM_TIMEOUT = 600
+OVERPASS_CONNECTION_TIMEOUT = 15
+SLOW_OVERPASS_CONNECTION = 5
+
+
+def check_overpass_api_connection():
+    # osmnx uses its query timeout to connect too, so an Overpass server that doesn't answer (e.g. one that blocks
+    # this IP) makes each query wait for minutes. Fail fast instead, with a hint to choose another server
+    overpass_api_uri = ox.settings.overpass_endpoint.rstrip("/")
+    start = time.time()
+    try:
+        requests.get(overpass_api_uri + "/status", timeout=OVERPASS_CONNECTION_TIMEOUT, headers={"User-Agent": ox.settings.default_user_agent})
+    except requests.exceptions.RequestException as ex:
+        raise overpass_connection_error(ex)
+
+    # some of the addresses of the server don't answer: each query may wait for the timeout before using another one
+    if time.time() - start > SLOW_OVERPASS_CONNECTION:
+        pr_bg_orange("Slow connection to the Overpass API server " + overpass_api_uri + " (%.0fs): if the OSM data retrieval hangs, choose another server in the addon preferences, e.g. https://lz4.overpass-api.de/api" % (time.time() - start) + EOL + CEND)
+
+
+def overpass_connection_error(ex):
+    return ScriptError("Unable to connect to the Overpass API server " + ox.settings.overpass_endpoint.rstrip("/") + " (" + ex.__class__.__name__ + "). "
+                       "Please choose another Overpass API server in the addon preferences, e.g. https://lz4.overpass-api.de/api" + EOL)
 
 
 def prefetch_osm_data(coords, requested_data):
@@ -378,6 +403,8 @@ def prefetch_osm_data(coords, requested_data):
     missing_data = [(key, tags) for key, tags, shp_file_path in requested_data if not os.path.isfile(shp_file_path)]
     if coords is None or not missing_data:
         return None
+
+    check_overpass_api_connection()
 
     merged_tags = {}
     for key, tags in missing_data:
@@ -394,6 +421,9 @@ def prefetch_osm_data(coords, requested_data):
         entry = (tuple(coords), merged_tags, ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags=merged_tags))
         prefetched_osm_data.append(entry)
         return entry
+    except requests.exceptions.ConnectionError as ex:
+        # separate queries to the same server would fail the same way
+        raise overpass_connection_error(ex)
     except Exception as ex:
         # load_gdf falls back to one Overpass query per data type
         print("Unable to retrieve the OSM data in a single query, retrieving them separately:", ex)
