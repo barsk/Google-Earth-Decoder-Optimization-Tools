@@ -21,7 +21,8 @@ import bpy
 from UI.common import draw_splitted_prop, ALTERNATE_SPLIT_LABEL_FACTOR, PREFS_SPLIT_LABEL_FACTOR
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty, IntProperty
 from bpy.types import Operator, AddonPreferences
-from constants import ALTERNATE_PYTHON_LIB_REPO, GDAL_LIB_PREFIX, FIONA_LIB_PREFIX, ADDON_NAME, BLENDERGIS_GITHUB_DOWNLOAD_REPO, BLENDERGIS_ADDON_RELEASE, LAND_MASS_REPO, LAND_MASS_ARCHIVE, DEFAULT_OVERPASS_API_URI
+from constants import ALTERNATE_PYTHON_LIB_REPO, GDAL_LIB_PREFIX, FIONA_LIB_PREFIX, ADDON_NAME, BLENDERGIS_GITHUB_DOWNLOAD_REPO, BLENDERGIS_ADDON_RELEASE, LAND_MASS_REPO, LAND_MASS_ARCHIVE, DEFAULT_OVERPASS_API_URI, \
+    AUTO_MSFS_TARGET, MSFS_2020_TARGET, MSFS_2024_TARGET
 from utils.global_settings import GlobalSettings
 from utils.folders import get_global_path
 from utils.console import isolated_print
@@ -68,6 +69,16 @@ class GEDOT_PREFS(AddonPreferences):
         name="Msfs Steam version",
         description="Set this to true if you have the MSFS 2020 Steam version",
         default=False
+    )
+    msfs_target: EnumProperty(
+        name="Target simulator",
+        description="Microsoft Flight Simulator version the scenery packages are built for",
+        items=[
+            (AUTO_MSFS_TARGET, "Automatic", "MSFS 2024 if the path of the package builder contains 2024 or is not set, MSFS 2020 otherwise"),
+            (MSFS_2020_TARGET, "MSFS 2020", "Build the packages for Microsoft Flight Simulator 2020"),
+            (MSFS_2024_TARGET, "MSFS 2024", "Build the packages for Microsoft Flight Simulator 2024 (texture configuration files, package order hint)"),
+        ],
+        default=AUTO_MSFS_TARGET
     )
 
     ########################################################################
@@ -148,6 +159,7 @@ class GEDOT_PREFS(AddonPreferences):
         box = layout.box()
         box.label(text="MSFS building package tools")
         box.prop(self, "msfs_build_exe_path")
+        box.prop(self, "msfs_target")
         row = box.row()
         col = row.column()
         draw_splitted_prop(self, col, PREFS_SPLIT_LABEL_FACTOR, "msfs_steam_version", "Msfs Steam version")

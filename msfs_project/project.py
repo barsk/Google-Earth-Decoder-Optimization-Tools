@@ -68,6 +68,7 @@ from utils import replace_in_file, is_octant, backup_file, ScriptError, print_ti
 from pathlib import Path
 
 from utils.compressonator import Compressonator
+from utils.msfs_sdk import is_msfs_2024_target
 from utils.minidom_xml import add_scenery_object, create_new_definition_file, add_new_lod
 from utils.progress_bar import ProgressBar
 
@@ -225,7 +226,7 @@ class MsfsProject:
         self.__clean_objects(self.colliders)
         self.__clean_objects(self.objects)
 
-        self.__update_texture_configuration_files()
+        self.__update_texture_configuration_files(is_msfs_2024_target())
 
         # from UI.prefs import get_prefs
         # prefs = get_prefs()
@@ -506,6 +507,9 @@ class MsfsProject:
         self.package_definitions_xml_path = os.path.join(self.package_definitions_folder, self.package_definitions_xml)
         if init_structure:
             self.__create_project_file(sources_path, PACKAGE_DEFINITIONS_TEMPLATE_PATH, self.package_definitions_xml_path, True)
+            # the package order hint is only known by MSFS 2024
+            if is_msfs_2024_target():
+                MsfsPackageDefinitionsXml(self.package_definitions_folder, self.package_definitions_xml).set_package_order_hint(PACKAGE_ORDER_HINT)
 
         # create business.json file if it does not exist
         self.business_json_path = os.path.join(self.business_json_folder, BUSINESS_JSON_TEMPLATE)
@@ -561,24 +565,33 @@ class MsfsProject:
             replace_in_file(dest_file_path, self.AUTHOR_STRING.capitalize(), self.author_name)
             replace_in_file(dest_file_path, self.AUTHOR_STRING, self.author_name.lower())
 
-    def __update_texture_configuration_files(self):
+    def __update_texture_configuration_files(self, msfs_2024_target):
         if not os.path.isdir(self.texture_folder):
             return
 
         texture_extensions = (PNG_FILE_EXT, JPG_FILE_EXT)
-        textures = [path for path in Path(self.texture_folder).iterdir() if path.suffix.lower() in texture_extensions]
-        pbar = ProgressBar(textures, title="CREATE THE TEXTURE CONFIGURATION FILES FOR MSFS")
-        for texture in textures:
-            configuration_file_path = str(texture) + XML_FILE_EXT
-            if not os.path.isfile(configuration_file_path):
-                with open(configuration_file_path, "w", encoding=ENCODING) as configuration_file:
-                    configuration_file.write(TEXTURE_CONFIGURATION_XML)
-            pbar.update("%s configuration file created" % texture.name)
+        if msfs_2024_target:
+            textures = [path for path in Path(self.texture_folder).iterdir() if path.suffix.lower() in texture_extensions]
+            pbar = ProgressBar(textures, title="CREATE THE TEXTURE CONFIGURATION FILES FOR MSFS")
+            for texture in textures:
+                configuration_file_path = str(texture) + XML_FILE_EXT
+                if not os.path.isfile(configuration_file_path):
+                    with open(configuration_file_path, "w", encoding=ENCODING) as configuration_file:
+                        configuration_file.write(TEXTURE_CONFIGURATION_XML)
+                pbar.update("%s configuration file created" % texture.name)
 
-        # remove the configuration files of textures that no longer exist (e.g. after a png/jpg conversion)
+        # remove the configuration files of textures that no longer exist (e.g. after a png/jpg conversion), and for
+        # MSFS 2020, which doesn't use them, the ones created for MSFS 2024
         for configuration_file in Path(self.texture_folder).glob(XML_FILE_PATTERN):
-            if Path(configuration_file.stem).suffix.lower() in texture_extensions and not os.path.isfile(os.path.join(self.texture_folder, configuration_file.stem)):
+            if Path(configuration_file.stem).suffix.lower() not in texture_extensions:
+                continue
+            if not os.path.isfile(os.path.join(self.texture_folder, configuration_file.stem)) or (not msfs_2024_target and self.__is_default_texture_configuration_file(configuration_file)):
                 os.remove(configuration_file)
+
+    @staticmethod
+    def __is_default_texture_configuration_file(configuration_file):
+        with open(configuration_file, encoding=ENCODING) as file:
+            return "".join(file.read().split()) == "".join(TEXTURE_CONFIGURATION_XML.split())
 
     def __retrieve_objects(self):
         self.__retrieve_scene_objects()

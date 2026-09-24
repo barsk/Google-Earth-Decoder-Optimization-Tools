@@ -9,7 +9,6 @@
 		<VisibleInStore>false</VisibleInStore>
 		<CanBeReferenced>false</CanBeReferenced>
 	</Flags>
-	<PackageOrderHint>CUSTOM_WORLD_SCENERY</PackageOrderHint>
 	<AssetGroups>
 		<AssetGroup Name="ContentInfo">
 			<Type>Copy</Type>

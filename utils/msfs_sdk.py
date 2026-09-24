@@ -18,12 +18,34 @@
 
 import subprocess
 
+from constants import AUTO_MSFS_TARGET, MSFS_2020_TARGET, MSFS_2024_TARGET, MSFS_2024_SDK_PATH_HINT
 from utils import ScriptError
+from utils.install_lib import get_pref_value
 
 MSFS_BUILD_EXE_FORCE_STEAM_OPTION = "-forcesteam"
 MSFS_BUILD_EXE_OUTPUT_DIR_OPTION = "-outputdir"
 MSFS_BUILD_EXE_OUTPUT_TO_SEPARATE_CONSOLE_OPTION = "-outputtoseparateconsole"
 ERROR_MSG = "MSFS SDK tools not installed"
+
+
+######################################################
+# Microsoft Flight Simulator version the packages are built for
+######################################################
+def get_msfs_target():
+    # set in the addon preferences, or deduced from the path of the package builder (MSFS 2024 if not set)
+    msfs_target = get_pref_value("msfs_target", AUTO_MSFS_TARGET)
+    if msfs_target != AUTO_MSFS_TARGET:
+        return msfs_target
+
+    msfs_build_exe_path = get_pref_value("msfs_build_exe_path", str())
+    if msfs_build_exe_path and MSFS_2024_SDK_PATH_HINT not in msfs_build_exe_path:
+        return MSFS_2020_TARGET
+
+    return MSFS_2024_TARGET
+
+
+def is_msfs_2024_target():
+    return get_msfs_target() == MSFS_2024_TARGET
 
 
 ######################################################

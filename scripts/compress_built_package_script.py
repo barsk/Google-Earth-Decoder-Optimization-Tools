@@ -24,7 +24,8 @@ settings = GlobalSettings(get_global_path())
 reload_modules(settings)
 
 from constants import *
-from utils import check_configuration, ScriptError, build_package, pr_bg_green, pr_bg_red
+from utils import check_configuration, ScriptError, build_package, pr_bg_green, pr_bg_red, pr_bg_orange
+from utils.msfs_sdk import is_msfs_2024_target
 from msfs_project import MsfsProject
 
 
@@ -32,6 +33,11 @@ def compress_built_package(global_settings):
     try:
         # instantiate the msfsProject and create the necessary resources if it does not exist
         msfs_project = MsfsProject(global_settings.projects_path, global_settings.project_name, global_settings.definition_file, global_settings.path, global_settings.author_name, fast_init=True)
+
+        # MSFS 2024 builds KTX2 textures already compressed in BC1, there are no DDS textures to compress
+        if is_msfs_2024_target():
+            pr_bg_orange("The textures of MSFS 2024 packages are already compressed (BC1 KTX2 files), nothing to do. This step is only useful for MSFS 2020 packages" + constants.CEND)
+            return
 
         check_configuration(global_settings, msfs_project, check_built_package=True, check_compressonator=True)
 
