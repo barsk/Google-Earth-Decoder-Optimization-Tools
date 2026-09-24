@@ -36,13 +36,28 @@ import bpy
 
 from os.path import normpath, join, dirname
 
-from constants import ALTERNATE_PYTHON_LIB_REPO, WIN64_SUFFIX, WIN32_SUFFIX, WHL_FILE_EXT, ZIP_FILE_EXT, TXT_FILE_EXT
+from constants import ALTERNATE_PYTHON_LIB_REPO, GDAL_LIB_PREFIX, FIONA_LIB_PREFIX, WIN64_SUFFIX, WIN32_SUFFIX, WHL_FILE_EXT, ZIP_FILE_EXT, TXT_FILE_EXT
 from utils.python_bin import get_python_bin_path
 from utils.script_errors import ScriptError
 
 PIP_LIB = "pip"
 WILDCARD = "*"
 CHUNK_SIZE = 1048576
+# addon preferences that override the default version of the alternate python libs
+ALTERNATE_PYTHON_LIB_PREFS = {GDAL_LIB_PREFIX: "gdal_library", FIONA_LIB_PREFIX: "fiona_library"}
+
+
+def get_pref_value(pref_name, default):
+    # the addon preferences can't be imported at module level (circular import), and are not
+    # available yet while the addon registers, so fall back to the default value
+    try:
+        from UI.prefs import get_prefs
+        prefs = get_prefs()
+    except Exception:
+        prefs = None
+
+    value = getattr(prefs, pref_name, None) if prefs is not None and pref_name else None
+    return value.strip() if value and value.strip() else default
 
 
 def install_python_lib(lib, version=None, install_pip=False, force=False):
@@ -100,6 +115,12 @@ def install_alternate_python_lib(lib_prefix):
     if python_lib_path is None:
         raise ScriptError(python_missing_msg)
 
+    # use the repository and library versions set in the addon preferences
+    lib_prefix = get_pref_value(ALTERNATE_PYTHON_LIB_PREFS.get(lib_prefix), lib_prefix)
+    repo_url = get_pref_value("alternate_python_libs_repo_url", ALTERNATE_PYTHON_LIB_REPO)
+    if not repo_url.endswith("/"):
+        repo_url += "/"
+
     if is_installed(python_lib_path, PIP_LIB) and is_installed(python_lib_path, lib_prefix):
         print(PIP_LIB, "and", lib_prefix, "correctly installed in blender lib folder")
         return True
@@ -107,10 +128,12 @@ def install_alternate_python_lib(lib_prefix):
     is_64bits = sys.maxsize > 2 ** 32
     whl_file_name = lib_prefix + "-cp" + sys.winver.replace(".", str()) + "-cp" + sys.winver.replace(".", str()) + "-" + (WIN64_SUFFIX if is_64bits else WIN32_SUFFIX) + WHL_FILE_EXT
     whl_file = os.path.join(tempfile.gettempdir(), whl_file_name)
-    download_file(ALTERNATE_PYTHON_LIB_REPO + whl_file_name, whl_file)
-    install_python_lib(whl_file)
+    download_file(repo_url + whl_file_name, whl_file)
+    installed = install_python_lib(whl_file)
     if os.path.isfile(whl_file):
         os.remove(whl_file)
+
+    return installed
 
 
 def install_shapefile_resource(repo, archive, dest):
