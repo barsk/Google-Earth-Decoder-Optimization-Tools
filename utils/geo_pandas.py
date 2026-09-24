@@ -222,6 +222,18 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
 
     load_gdf_list = [None] * 8 if result.empty else [None] * 1
 
+    # retrieve the OSM data loaded below in a single Overpass query
+    requested_osm_data = [(BUILDING_OSM_KEY, True, os.path.join(shpfiles_folder, BUILDING_OSM_KEY + SHP_FILE_EXT))]
+    if result.empty:
+        requested_osm_data += [(MAN_MADE_OSM_KEY, True, os.path.join(shpfiles_folder, LANDMARK_PREFIX + MAN_MADE_OSM_KEY + SHP_FILE_EXT)),
+                               (NATURAL_OSM_KEY, True, os.path.join(shpfiles_folder, FULL_PREFIX + NATURAL_OSM_KEY + SHP_FILE_EXT)),
+                               (LANDUSE_OSM_KEY, True, os.path.join(shpfiles_folder, FULL_PREFIX + LANDUSE_OSM_KEY + SHP_FILE_EXT)),
+                               (LEISURE_OSM_KEY, True, os.path.join(shpfiles_folder, LEISURE_OSM_KEY + SHP_FILE_EXT)),
+                               (LANDUSE_OSM_KEY, OSM_TAGS[CONSTRUCTION_OSM_KEY], os.path.join(shpfiles_folder, CONSTRUCTION_OSM_KEY + SHP_FILE_EXT)),
+                               (ROAD_OSM_KEY, True, os.path.join(shpfiles_folder, ROAD_OSM_KEY + SHP_FILE_EXT)),
+                               (RAILWAY_OSM_KEY, True, os.path.join(shpfiles_folder, RAILWAY_OSM_KEY + SHP_FILE_EXT))]
+    prefetched_entry = prefetch_osm_data(coords, requested_osm_data)
+
     if display_warnings:
         pbar = ProgressBar(load_gdf_list, title="RETRIEVE GEODATAFRAMES (THE FIRST TIME, MAY TAKE SOME TIME TO COMPLETE, BE PATIENT...)")
         pbar.update("retrieving buildings geodataframe...", stall=True)
@@ -231,6 +243,9 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
 
     if display_warnings:
         pbar.update("buildings geodataframe retrieved")
+
+    if not result.empty:
+        release_prefetched_osm_data(prefetched_entry)
 
     if result.empty:
         if display_warnings:
@@ -276,6 +291,7 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
         orig_railway = load_gdf(coords, RAILWAY_OSM_KEY, True, shp_file_path=os.path.join(shpfiles_folder, RAILWAY_OSM_KEY + SHP_FILE_EXT), is_roads=True, keep_geocode_data=True)
         if display_warnings:
             pbar.update("railways geodataframe retrieved")
+        release_prefetched_osm_data(prefetched_entry)
         road = prepare_roads_gdf(orig_road, orig_railway, bridge_only=False)
         try:
             if coords is not None and shpfiles_folder is not None:
@@ -350,6 +366,72 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
     return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
 
 
+# OSM data downloaded in a single Overpass query for the whole project bounding box: list of (coords, merged tags, gdf).
+# load_gdf splits it per key/tags instead of sending one Overpass query per data type (rate limiting)
+prefetched_osm_data = []
+PREFETCH_OSM_TIMEOUT = 600
+
+
+def prefetch_osm_data(coords, requested_data):
+    # requested_data: list of (key, tags, shp_file_path) that load_gdf will be called with.
+    # Returns the prefetched entry, to be released with release_prefetched_osm_data
+    missing_data = [(key, tags) for key, tags, shp_file_path in requested_data if not os.path.isfile(shp_file_path)]
+    if coords is None or not missing_data:
+        return None
+
+    merged_tags = {}
+    for key, tags in missing_data:
+        if tags is True or merged_tags.get(key) is True:
+            merged_tags[key] = True
+        else:
+            merged_tags[key] = sorted(set(merged_tags.get(key, [])) | set(tags))
+
+    # a single query retrieves more data than each separate one, so give it more time
+    timeout = ox.settings.timeout
+    ox.settings.timeout = max(timeout, PREFETCH_OSM_TIMEOUT)
+    try:
+        warnings.simplefilter("ignore", DeprecationWarning, append=True)
+        entry = (tuple(coords), merged_tags, ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags=merged_tags))
+        prefetched_osm_data.append(entry)
+        return entry
+    except Exception as ex:
+        # load_gdf falls back to one Overpass query per data type
+        print("Unable to retrieve the OSM data in a single query, retrieving them separately:", ex)
+        return None
+    finally:
+        ox.settings.timeout = timeout
+
+
+def release_prefetched_osm_data(entry):
+    # release the prefetched data once loaded, so that later runs don't reuse outdated OSM data
+    if entry is not None:
+        prefetched_osm_data[:] = [e for e in prefetched_osm_data if e is not entry]
+
+
+def get_prefetched_osm_data(coords, key, tags):
+    if coords is None:
+        return None
+
+    for entry_coords, merged_tags, gdf in prefetched_osm_data:
+        merged_key_tags = merged_tags.get(key)
+        if entry_coords == tuple(coords) and merged_key_tags is not None and (merged_key_tags is True or (tags is not True and set(tags) <= set(merged_key_tags))):
+            return filter_prefetched_osm_data(gdf, key, tags)
+
+    return None
+
+
+def filter_prefetched_osm_data(gdf, key, tags):
+    if key not in gdf:
+        return gdf.iloc[0:0]
+
+    result = gdf[gdf[key].notna()] if tags is True else gdf[gdf[key].isin(tags)]
+    if result.empty:
+        return result
+
+    # only keep the tag columns of the selected elements, as a separate query would have returned
+    return result.dropna(axis=1, how="all")
+
+
 def load_gdf(coords, key, tags, shp_file_path="", keep_geocode_data=False, is_roads=False, is_sea=False, is_waterway=False, is_grass=False, is_wall=False, land_mass=None, bbox=None, keep_points=False):
     result = create_empty_gdf()
     has_cache = os.path.isfile(shp_file_path)
@@ -368,7 +450,9 @@ def load_gdf(coords, key, tags, shp_file_path="", keep_geocode_data=False, is_ro
             result = symmetric_difference_gdf(land_mass, bbox).assign(boundary=BOUNDING_BOX_OSM_KEY)
         elif coords is not None:
             warnings.simplefilter("ignore", DeprecationWarning, append=True)
-            result = ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags={key: tags})
+            result = get_prefetched_osm_data(coords, key, tags)
+            if result is None:
+                result = ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags={key: tags})
 
             # truncate index fields to avoid ogr2ogr warning logs
             if not result.empty:

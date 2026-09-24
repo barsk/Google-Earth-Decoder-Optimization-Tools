@@ -21,6 +21,7 @@ import os
 import shutil
 
 from utils import Settings
+from utils.install_lib import get_pref_value
 
 from constants import ENCODING, INI_FILE, XML_FILE_EXT, CONFIG_TEMPLATES_FOLDER, GLOBAL_SETTINGS_TEMPLATE_FILE, DEFAULT_OVERPASS_API_URI
 
@@ -72,6 +73,13 @@ class GlobalSettings(Settings):
 
         # ensure to convert float settings values
         self.nb_parallel_blender_tasks = int(self.nb_parallel_blender_tasks)
+
+        # the ini file stores the Overpass uri as "overpass_api", but the scripts use overpass_api_uri.
+        # A uri changed in the addon preferences wins, otherwise use the one from the ini file
+        ini_overpass_api_uri = getattr(self, "overpass_api", str()).strip() or DEFAULT_OVERPASS_API_URI
+        self.overpass_api_uri = get_pref_value("overpass_api_uri", DEFAULT_OVERPASS_API_URI)
+        if self.overpass_api_uri == DEFAULT_OVERPASS_API_URI:
+            self.overpass_api_uri = ini_overpass_api_uri
 
     def save(self):
         config = super().set_config(self.path, self.file_name)

@@ -30,7 +30,7 @@ from shapely.errors import ShapelyDeprecationWarning
 
 from utils.install_lib import install_python_lib
 from utils.string import remove_accents
-from utils.geo_pandas import prepare_wall_gdf, create_exclusion_water_gdf, prepare_water_gdf, prepare_amenity_gdf, prepare_hidden_roads_gdf, prepare_water_exclusion_gdf, prepare_residential_gdf, create_point_gdf, prepare_forest_gdf, prepare_wood_gdf, prepare_natural_gdf, prepare_landuse_gdf, create_vegetation_polygons_gdf, create_exclusion_vegetation_water_gdf
+from utils.geo_pandas import prepare_wall_gdf, create_exclusion_water_gdf, prepare_water_gdf, prepare_amenity_gdf, prepare_hidden_roads_gdf, prepare_water_exclusion_gdf, prepare_residential_gdf, create_point_gdf, prepare_forest_gdf, prepare_wood_gdf, prepare_natural_gdf, prepare_landuse_gdf, create_vegetation_polygons_gdf, create_exclusion_vegetation_water_gdf, prefetch_osm_data, release_prefetched_osm_data
 from constants import *
 
 try:
@@ -1460,6 +1460,32 @@ class MsfsProject:
             pbar.update("exclusion mask created for %s tile" % tile.name)
 
     def __load_geodataframes(self, settings, orig_bbox, b):
+        # retrieve the OSM data loaded below in a single Overpass query (the sea is computed from the land mass)
+        shp_file_path = lambda name: os.path.join(self.shpfiles_folder, name + SHP_FILE_EXT)
+        prefetched_entry = prefetch_osm_data(self.coords, [
+            (BOUNDARY_OSM_KEY, True, shp_file_path(BOUNDARY_OSM_KEY)),
+            (ROAD_OSM_KEY, True, shp_file_path(ROAD_OSM_KEY)),
+            (RAILWAY_OSM_KEY, True, shp_file_path(RAILWAY_OSM_KEY)),
+            (LANDUSE_OSM_KEY, OSM_TAGS[LANDUSE_OSM_KEY], shp_file_path(LANDUSE_OSM_KEY)),
+            (LANDUSE_OSM_KEY, OSM_TAGS[GRASS_OSM_KEY], shp_file_path(GRASS_OSM_KEY)),
+            (LEISURE_OSM_KEY, OSM_TAGS[LEISURE_OSM_KEY], shp_file_path(NATURE_RESERVE_OSM_TAG)),
+            (NATURAL_OSM_KEY, OSM_TAGS[NATURAL_OSM_KEY], shp_file_path(NATURAL_OSM_KEY)),
+            (NATURAL_OSM_KEY, OSM_TAGS[NATURAL_WATER_OSM_KEY], shp_file_path(NATURAL_WATER_OSM_KEY)),
+            (WATER_OSM_KEY, OSM_TAGS[WATER_OSM_KEY], shp_file_path(WATER_OSM_KEY)),
+            (WATERWAY_OSM_KEY, OSM_TAGS[WATERWAY_OSM_KEY], shp_file_path(WATERWAY_OSM_KEY)),
+            (AEROWAY_OSM_KEY, True, shp_file_path(AEROWAY_OSM_KEY)),
+            (LEISURE_OSM_KEY, OSM_TAGS[PITCH_OSM_KEY], shp_file_path(PITCH_OSM_KEY)),
+            (LANDUSE_OSM_KEY, OSM_TAGS[CONSTRUCTION_OSM_KEY], shp_file_path(CONSTRUCTION_OSM_KEY)),
+            (LEISURE_OSM_KEY, OSM_TAGS[PARK_OSM_KEY], shp_file_path(PARK_OSM_KEY)),
+            (BUILDING_OSM_KEY, True, shp_file_path(BUILDING_OSM_KEY)),
+            (BARRIER_OSM_KEY, OSM_TAGS[BARRIER_OSM_KEY], shp_file_path(WALL_OSM_TAG)),
+            (MAN_MADE_OSM_KEY, OSM_TAGS[MAN_MADE_OSM_KEY], shp_file_path(MAN_MADE_OSM_KEY)),
+            (NATURAL_OSM_KEY, OSM_TAGS[ROCKS_OSM_KEY], shp_file_path(ROCKS_OSM_KEY)),
+            (AMENITY_OSM_KEY, True, shp_file_path(AMENITY_OSM_KEY)),
+            (LANDUSE_OSM_KEY, OSM_TAGS[RESIDENTIAL_OSM_KEY], shp_file_path(RESIDENTIAL_OSM_KEY)),
+            (LANDUSE_OSM_KEY, OSM_TAGS[INDUSTRIAL_OSM_KEY], shp_file_path(INDUSTRIAL_OSM_KEY))
+        ])
+
         # load all necessary GeoPandas Dataframes
         load_gdf_list = [None] * 24
         pbar = ProgressBar(load_gdf_list, title="RETRIEVE GEODATAFRAMES (THE FIRST TIME, MAY TAKE SOME TIME TO COMPLETE, BE PATIENT...)", sleep=0.0)
@@ -1535,6 +1561,7 @@ class MsfsProject:
         pbar.update("retrieving airports geodataframe...", stall=True)
         orig_airport = load_gdf_from_geocode(AIRPORT_GEOCODE + ", " + self.settings.airport_city.lower(), settings.overpass_api_uri, shpfiles_folder=self.shpfiles_folder, coords=self.coords, keep_data=True, display_warnings=False)
         pbar.update("airports geodataframe retrieved")
+        release_prefetched_osm_data(prefetched_entry)
 
         return orig_land_mass, orig_boundary, orig_road, orig_railway, orig_sea, orig_landuse, orig_grass, orig_nature_reserve, \
                orig_natural, orig_natural_water, orig_water, orig_waterway, orig_aeroway, orig_pitch, orig_construction, orig_park, orig_building, \
