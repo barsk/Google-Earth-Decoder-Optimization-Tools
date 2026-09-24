@@ -119,6 +119,8 @@ UTILS_FOLDER = "utils"
 SCRIPT_FOLDER = "scripts"
 UI_FOLDER = "UI"
 TEXTURE_FOLDER = "texture"
+# MSFS 2024 only converts a model texture to KTX2 if a <texture file>.xml configuration file sits next to it
+TEXTURE_CONFIGURATION_XML = "<BitmapConfiguration>\n\t<BitmapSlot>MTL_BITMAP_DECAL0</BitmapSlot>\n</BitmapConfiguration>\n"
 CLEANUP_3D_DATA_BACKUP_FOLDER = "cleanup_3d_data"
 RESIZE_SCENERY_TEXTURES_BACKUP_FOLDER = "resize_scenery_textures"
 

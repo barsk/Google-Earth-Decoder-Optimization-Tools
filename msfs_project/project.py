@@ -225,6 +225,8 @@ class MsfsProject:
         self.__clean_objects(self.colliders)
         self.__clean_objects(self.objects)
 
+        self.__update_texture_configuration_files()
+
         # from UI.prefs import get_prefs
         # prefs = get_prefs()
         # compressonator = Compressonator(prefs.compressonator_exe_path, package_sources_folder=os.path.join(self.package_sources_folder, os.path.basename(self.model_lib_folder)))
@@ -559,6 +561,25 @@ class MsfsProject:
             replace_in_file(dest_file_path, self.AUTHOR_STRING.capitalize(), self.author_name)
             replace_in_file(dest_file_path, self.AUTHOR_STRING, self.author_name.lower())
 
+    def __update_texture_configuration_files(self):
+        if not os.path.isdir(self.texture_folder):
+            return
+
+        texture_extensions = (PNG_FILE_EXT, JPG_FILE_EXT)
+        textures = [path for path in Path(self.texture_folder).iterdir() if path.suffix.lower() in texture_extensions]
+        pbar = ProgressBar(textures, title="CREATE THE TEXTURE CONFIGURATION FILES FOR MSFS")
+        for texture in textures:
+            configuration_file_path = str(texture) + XML_FILE_EXT
+            if not os.path.isfile(configuration_file_path):
+                with open(configuration_file_path, "w", encoding=ENCODING) as configuration_file:
+                    configuration_file.write(TEXTURE_CONFIGURATION_XML)
+            pbar.update("%s configuration file created" % texture.name)
+
+        # remove the configuration files of textures that no longer exist (e.g. after a png/jpg conversion)
+        for configuration_file in Path(self.texture_folder).glob(XML_FILE_PATTERN):
+            if Path(configuration_file.stem).suffix.lower() in texture_extensions and not os.path.isfile(os.path.join(self.texture_folder, configuration_file.stem)):
+                os.remove(configuration_file)
+
     def __retrieve_objects(self):
         self.__retrieve_scene_objects()
         self.__retrieve_shapes()
@@ -566,7 +587,9 @@ class MsfsProject:
         self.__retrieve_landmarks()
 
     def __retrieve_scene_objects(self):
-        pbar = ProgressBar(list(Path(self.model_lib_folder).rglob(XML_FILE_PATTERN)), title="Retrieve project infos")
+        # skip the texture configuration files, they are not object definitions
+        xml_files = [path for path in Path(self.model_lib_folder).rglob(XML_FILE_PATTERN) if path.parent != Path(self.texture_folder)]
+        pbar = ProgressBar(xml_files, title="Retrieve project infos")
         for i, path in enumerate(pbar.iterable):
             if not is_octant(path.stem):
                 msfs_scene_object = MsfsSceneObject(self.model_lib_folder, path.stem, path.name)
