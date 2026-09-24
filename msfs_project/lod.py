@@ -161,10 +161,14 @@ class MsfsLod:
             if lod.has_unbaked_textures():
                 has_unbaked_textures = True
 
+        baked = False
         if bake_textures_enabled and has_unbaked_textures:
             isolated_print("bake textures for", self.name)
-            bake_texture_files(os.path.join(os.path.dirname(self.folder), TEXTURE_FOLDER), self.name + "." + output_texture_format)
-        else:
+            baked = bake_texture_files(os.path.join(os.path.dirname(self.folder), TEXTURE_FOLDER), self.name + "." + output_texture_format)
+            if not baked:
+                isolated_print("textures of", self.name, "can't be packed, keeping them separate")
+
+        if not baked:
             for texture in textures:
                 shutil.copyfile(os.path.join(self.folder, texture.file), os.path.join(os.path.dirname(self.folder), TEXTURE_FOLDER, texture.file))
 

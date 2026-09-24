@@ -113,7 +113,6 @@ try:
     clean_scene()
 
     global_settings = GlobalSettings(get_global_path())
-    check_lily_texture_packer_availability(global_settings)
 
     lod = MsfsLod(int(args.folder[-2:]), 0, args.folder, args.model_file)
     lod.optimize(global_settings.bake_textures_enabled, args.output_texture_format)

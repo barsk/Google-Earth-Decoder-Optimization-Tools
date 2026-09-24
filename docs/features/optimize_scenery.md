@@ -3,7 +3,7 @@
 Once the photogrammetry tiles have been retrieved, you can optimize them for MSFS using the optimization feature.
 
 * this script optimizes an existing Google Earth Decoder scenery project (textures, Lods, CTD fix).
-* if you installed and enabled the Lily Texture Packer Blender addon, and you ticked the "Bake textures enabled" checkbox in the tool menu (section PROJECT), the textures of the project are merged per tile lods, which significantly reduce the number of the project files.
+* if the "Bake textures enabled" checkbox is ticked (enabled by default) in the tool menu (section PROJECT), the textures of the project are merged per tile lods, which significantly reduce the number of the project files.
 * it fixes the bounding box of each tile in order for them to fit the MSFS lod management system.
 * it adds Asobo extension tags in order to manage collisions, road traffic, and correct lightning.
 
@@ -20,7 +20,7 @@ All you have to do is to select `Google Earth Decoder Optimization Tools` > `2. 
 
     The more the number of parallel [Blender][1] tasks, the more CPU, GPU and memory resources needed.   
 
-* (optional) if you have purchased the [Lily texture packer Blender addon][3] (which i strongly recommend), you can enable the texture baking by ticking the `Bake textures enabled` checkbox.
+* the texture baking is enabled by the `Bake textures enabled` checkbox (ticked by default). It packs the textures of each tile lod into a single texture, keeping only the parts used by the tile.
 
 !!! question "What is texture baking ?"
 
@@ -104,7 +104,7 @@ If you look at a material definition, you should see this type of definition:
 As you can see, the optimization process automatically adds ASOBO extensions (road traffic, collision detection, day night switch and lightning adaptation for ground tiles)
 
 
-If you purchased [Lily texture packer Blender addon][3], and enabled the texture backing, you should see that the number of textures has decreased:
+With the texture baking enabled, you should see that the number of textures has decreased:
 
 
 ```title="before"
@@ -155,4 +155,3 @@ Arcachon
 
 [1]:https://www.blender.org/
 [2]:https://www.flightsimulator.com/
-[3]:https://eliemichel.gumroad.com/l/DFExj

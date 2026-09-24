@@ -22,7 +22,7 @@ This addon is coded in Python, and sources are available here: https://github.co
 
 * Blender 2.83 or superior
 
-* Optional: to reduce the number of texture files, you can get the Lily texture Packer. Download version 1.1.x if you use Blender 2.83. If you use Blender 3.x, you can use the last version. Reducing the number of texture files reduce the loading time of the scenery, and can reduce stuttering related to texture streaming inside the sim
+* Texture packing (no external addon needed): the textures of each tile lod are packed into a single texture, to reduce the number of texture files. Reducing the number of texture files reduce the loading time of the scenery, and can reduce stuttering related to texture streaming inside the sim
 
 * Optional: once your package has been successfully built, you can further reduce its size by using the "Optimize the bulilt package by compressing the texture files" entry of the addon menu. To do so, you have to download the Compressonator tool from GPUOpen.
 
@@ -46,7 +46,7 @@ The structure is the same as the one provided in the SimpleScenery project of th
 
 * **Optimize an existing Msfs scenery project:**
 This script optimizes an existing Google Earth Decoder scenery project (textures, Lods, CTD fix).
-If you installed and enabled the Lily Texture Packer Blender addon, and you ticked the "Bake textures enabled" checkbox in the tool menu (section PROJECT), the textures of the project are merged per tile lods, which significantly reduce the number of the project files.
+If the "Bake textures enabled" checkbox is ticked (enabled by default) in the tool menu (section PROJECT), the textures of the project are merged per tile lods, which significantly reduce the number of the project files.
 It fixes the bounding box of each tile in order for them to fit the MSFS lod management system.
 This script also adds Asobo extension tags in order to manage collisions, road traffic, and correct lightning.
  

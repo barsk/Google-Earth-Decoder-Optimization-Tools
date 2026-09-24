@@ -339,7 +339,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     bake_textures_enabled: BoolProperty(
         name="Bake textures enabled",
-        description="Reduce the number of texture files (Lily Texture Packer addon is necessary https://gumroad.com/l/DFExj)",
+        description="Reduce the number of texture files by packing the textures of each tile lod into a single texture",
         default=bpy.types.Scene.global_settings.bake_textures_enabled,
         update=bake_textures_enabled_updated
     )

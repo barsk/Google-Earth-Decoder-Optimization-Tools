@@ -31,7 +31,7 @@ RESULT_MSG_LENGTH = 40
 ######################################################
 # check configuration methods
 ######################################################
-def check_configuration(settings, msfs_project, check_optimization=False, check_lily_texture_packer=False, check_built_package=False, check_compressonator=False, check_description_file=True, check_blendergis_addon=False):
+def check_configuration(settings, msfs_project, check_optimization=False, check_built_package=False, check_compressonator=False, check_description_file=True, check_blendergis_addon=False):
     error_msg = "Configuration error found ! "
     warning_msg = "Configuration warning ! "
     from UI.prefs import get_prefs
@@ -192,10 +192,6 @@ def check_configuration(settings, msfs_project, check_optimization=False, check_
             raise ScriptError(error_msg + "Pygeodesy python lib is not correctly installed. Please check what can prevent this library to be installed correctly")
     pr_ok_green(str("Pygeodesy lib installation").ljust(RESULT_MSG_LENGTH))
 
-    # check if Lily texture packer is installed
-    if check_lily_texture_packer and settings.bake_textures_enabled:
-        check_lily_texture_packer_availability(settings, warning_msg=warning_msg)
-
     if check_built_package:
         # check if the folder containing project package exists
         if not os.path.isdir(msfs_project.built_project_package_folder):
@@ -216,18 +212,3 @@ def check_configuration(settings, msfs_project, check_optimization=False, check_
             raise ScriptError(error_msg + compressonator_exe_path + "file was not found. Please check the compressonator_exe_path value or install compressonator")
         else:
             pr_ok_green(str("compressonator_exe_path value").ljust(RESULT_MSG_LENGTH))
-
-
-def check_lily_texture_packer_availability(settings, warning_msg=str()):
-    texture_packer_enabled = False
-    try:
-        if LILY_TEXTURE_PACKER_ADDON in bpy.context.preferences.addons:
-            texture_packer_enabled = True
-            pr_ok_green(str("Lily texture packer enabled").ljust(RESULT_MSG_LENGTH))
-    except:
-        pass
-
-    if not texture_packer_enabled:
-        pr_ko_orange(str("Lily texture packer disabled").ljust(RESULT_MSG_LENGTH))
-        settings.bake_textures_enabled = False
-        isolated_print(CORANGE + warning_msg + " Lily texture packer is not enabled in your blender addons. Baking of the tile textures is disabled" + CEND + EOL)

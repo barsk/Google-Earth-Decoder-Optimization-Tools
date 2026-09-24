@@ -73,10 +73,10 @@ import bmesh
 import bpy
 import mathutils
 from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
-from blender.image import get_image_node, fix_texture_size_for_package_compilation
+from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material
-from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT
+from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -86,7 +86,6 @@ DESELECT_ACTION = "DESELECT"
 ACTIVE_OBJ = "active_object"
 SELECTED_OBJ = "selected_objects"
 SELECTED_EDITABLE_OBJ = "selected_editable_objects"
-PACKED_IMAGE_NAME = "LilyPackedImage"
 MESH_OBJECT_TYPE = "MESH"
 CURSOR_ORIGIN = "ORIGIN_CURSOR"
 GEOMETRY_ORIGIN = "ORIGIN_GEOMETRY"
@@ -259,9 +258,9 @@ def bake_texture_files(folder, file_name):
     objects = bpy.context.scene.objects
 
     source_image_nodes = []
-    for obj in bpy.context.scene.objects:
+    for obj in list(bpy.context.scene.objects):
         image_node = get_image_node(obj)
-        if image_node.image is not None:
+        if image_node is not None and image_node.image is not None:
             source_image_nodes.append(image_node)
         else:
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -273,30 +272,24 @@ def bake_texture_files(folder, file_name):
     if error is True:
         return False
 
-    for obj in objects:
-        obj.select_set(True)
-
-    try:
-        bpy.ops.object.lily_texture_packer()
-    except:
-        raise ScriptError("Lily texture packer error detected when trying to pack the textures for " + file_name)
-
-    # create baked texture with Lily texture packer addon
-    packed_image = PACKED_IMAGE_NAME
-    for image in bpy.data.images:
-        if PACKED_IMAGE_NAME in image.name:
-            packed_image = image
-            break
+    # pack the textures of the tile lod into a single texture, and remap the uvs to it
+    packed_image = pack_textures(list(objects))
+    if packed_image is None:
+        return False
 
     # fix texture final size for package compilation
     fix_texture_size_for_package_compilation(packed_image)
 
-    # isolated_print("Save new baked texture", os.path.join(folder, file_name))
-    packed_image.save_render(os.path.join(folder, file_name))
+    # save the pixels as is (save_render would apply the view transform of the scene)
+    packed_image.filepath_raw = os.path.join(folder, file_name)
+    packed_image.file_format = "JPEG" if file_name.lower().endswith(JPG_FILE_EXT) else "PNG"
+    packed_image.save()
 
     # link the tile materials to the new packed texture
     link_materials_to_packed_texture(objects, folder, file_name)
     bpy.data.images.remove(packed_image)
+
+    return True
 
 
 ##################################################################
