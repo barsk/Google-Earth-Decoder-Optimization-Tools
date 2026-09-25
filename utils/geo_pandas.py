@@ -990,6 +990,30 @@ def create_water_bridge_exclusion_gdf(natural_water, water, sea, roads):
     return result.dissolve().assign(building=BRIDGE_OSM_TAG)
 
 
+def write_water_areas_file(shp_file_paths, file_path):
+    # union of the water shapefiles of the project, in a GeoJSON file read by the height data calculation
+    geometries = []
+
+    for shp_file_path in shp_file_paths:
+        if not os.path.isfile(shp_file_path) or os.path.getsize(shp_file_path) == 0:
+            continue
+
+        gdf = gpd.read_file(shp_file_path)
+        gdf = gdf[gdf.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]
+        if not gdf.empty:
+            geometries.append(gdf.to_crs(EPSG.key + str(EPSG.WGS84_degree_unit)).unary_union)
+
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+
+    if not geometries:
+        return False
+
+    water_areas = gpd.GeoDataFrame(geometry=[unary_union(geometries)], crs=EPSG.key + str(EPSG.WGS84_degree_unit))
+    water_areas.to_file(file_path, driver="GeoJSON")
+    return True
+
+
 def create_whole_water_gdf(natural_water, water, sea):
     result = create_empty_gdf()
     result = union_gdf(result, water)

@@ -18,7 +18,7 @@
 
 import os
 import shutil
-from math import floor
+from math import floor, cos, radians
 
 from mathutils.bvhtree import BVHTree
 from collections import defaultdict
@@ -746,7 +746,7 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
-def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), debug=False):
+def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), water_areas_file_path=str(), debug=False):
     if not bpy.context.scene:
         return False
 
@@ -792,8 +792,13 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
         tile = get_tile_for_ray_cast(model_file_path, imported=False, objects_to_keep=[grid, height_grid])
         hmatrix = fix_bridge_height_data_on_water(tile, depsgraph, lat, lon, altitude, hmatrix)
 
+    # the water keeps its height data, the ground filter would lower it, and the shores with it
+    water_keys = set()
+    if os.path.exists(positioning_file_path) and os.path.exists(water_areas_file_path):
+        water_keys = find_height_data_in_areas(hmatrix, positioning_file_path, water_areas_file_path)
+
     if ground_filter_size > 0.0:
-        hmatrix = filter_ground_height_data(hmatrix, ground_filter_size, height_adjustment=height_adjustment, high_precision=high_precision, outer_edges=outer_edges)
+        hmatrix = filter_ground_height_data(hmatrix, ground_filter_size, height_adjustment=height_adjustment, high_precision=high_precision, outer_edges=outer_edges, water_keys=water_keys)
 
     inverted_hmatrix = defaultdict(dict)
 
@@ -825,12 +830,54 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
     return hmatrix, inverted_hmatrix, width, altitude
 
 
-def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_precision=False, outer_edges=str()):
+def read_osm_polygons(osm_file_path):
+    import xml.etree.ElementTree as ET
+    from shapely.ops import unary_union
+
+    root = ET.parse(osm_file_path).getroot()
+    nodes = {node.get("id"): (float(node.get("lon")), float(node.get("lat"))) for node in root.iter("node")}
+    polygons = []
+
+    for way in root.iter("way"):
+        points = [nodes[nd.get("ref")] for nd in way.iter("nd") if nd.get("ref") in nodes]
+        if len(points) >= 4 and points[0] == points[-1]:
+            polygon = geometry.Polygon(points).buffer(0)
+            if not polygon.is_empty:
+                polygons.append(polygon)
+
+    return unary_union(polygons) if polygons else None
+
+
+def find_height_data_in_areas(hmatrix, positioning_file_path, areas_file_path):
+    # height data points (y, x) inside the areas of a GeoJSON file.
+    # The tiles are imported with their south west corner (the minimum of the positioning bounding box) at the origin,
+    # the north is -Y and the east is -X
+    import geopandas as gpd
+    from shapely.prepared import prep
+
+    bbox = read_osm_polygons(positioning_file_path)
+    areas_gdf = gpd.read_file(areas_file_path)
+    if bbox is None or areas_gdf.empty:
+        return set()
+
+    areas = areas_gdf.to_crs("EPSG:4326").unary_union
+
+    west, south = bbox.bounds[0], bbox.bounds[1]
+    meters_per_lat_degree = 111320.0
+    meters_per_lon_degree = meters_per_lat_degree * cos(radians(south))
+    areas = prep(areas)
+
+    return {(y, x) for y, heights in hmatrix.items() for x in heights
+            if areas.contains(geometry.Point(west - x / meters_per_lon_degree, south - y / meters_per_lat_degree))}
+
+
+def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_precision=False, outer_edges=str(), water_keys=frozenset()):
     # the rays hit the top of the buildings and trees, as the Google Earth tiles have no ground under them.
     # A morphological opening (minimum, then maximum over the filter window) removes everything narrower than the window,
     # then the result is smoothed and kept under the tile surface, so that the MSFS terrain does not go through the tiles.
     # On the outer edges of the scenery (N, S, E, W letters), the ground is raised up to the tiles ground, to avoid a step
-    # between the border of the tiles and the MSFS terrain
+    # between the border of the tiles and the MSFS terrain.
+    # The water points (water_keys) keep the height data of the water calculation, and do not lower the shores
     ys = sorted(hmatrix.keys())
     xs = sorted({x for heights in hmatrix.values() for x in heights})
     if len(xs) < 3 or len(ys) < 3:
@@ -846,10 +893,16 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
     if not known.any():
         return hmatrix
 
+    water = np.zeros(heights.shape, dtype=bool)
+    y_index = {y: j for j, y in enumerate(ys)}
+    for y, x in water_keys:
+        if y in y_index and x in x_index:
+            water[y_index[y], x_index[x]] = True
+
     cell_size = float(np.median(np.diff(xs)))
     window = max(3, int(round(filter_size / cell_size)) | 1)
 
-    filled = np.where(known, heights, np.nanmax(heights))
+    filled = np.where(known & ~water, heights, np.nanmax(heights))
     # the rays cast from the bottom on the outer ring of the grid can hit the skirts of the tiles, several meters under the ground
     filled[0, :], filled[-1, :] = filled[1, :], filled[-2, :]
     filled[:, 0], filled[:, -1] = filled[:, 1], filled[:, -2]
@@ -872,6 +925,8 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
         weight = weight * weight * (3.0 - 2.0 * weight)
         edge_ground = tiles_ground - HEIGHT_MAP_EDGE_CLEARANCE
         ground = ground + weight * np.maximum(edge_ground - ground, 0.0)
+
+    ground = np.where(water, heights, ground)
 
     results = defaultdict(dict)
     for j, y in enumerate(ys):

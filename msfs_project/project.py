@@ -65,7 +65,7 @@ from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
 from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
-from utils.geo_pandas import load_gdf_from_osm_id
+from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file
 from msfs_project.gltf import MsfsGltf
 from msfs_project.shape import MsfsShapes
 from utils import replace_in_file, is_octant, backup_file, ScriptError, print_title, \
@@ -962,7 +962,7 @@ class MsfsProject:
 
         return ",".join(edges)
 
-    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0, blend_outer_edges=True):
+    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0, blend_outer_edges=True, water_areas_file_path=str()):
         data = []
 
         for guid, tile in self.tiles.items():
@@ -991,8 +991,11 @@ class MsfsProject:
             params = ["--folder", str(tile_folder), "--name", str(tile.name), "--definition_file", str(tile.definition_file),
                       "--height_map_xml_folder", str(self.xmlfiles_folder), "--group_id", str(new_group_id), "--altitude", str(tile.pos.alt), "--height_adjustment", str(height_adjustment)]
 
-            if has_mask_file:
+            if has_mask_file or water_areas_file_path:
                 params.extend(["--positioning_file_path", str(os.path.join(self.osmfiles_folder, BOUNDING_BOX_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT))])
+
+            if water_areas_file_path:
+                params.extend(["--water_areas_file_path", str(water_areas_file_path)])
 
             if os.path.isfile(ground_mask_file_path):
                 params.extend(["--ground_mask_file_path", str(ground_mask_file_path)])
@@ -1374,7 +1377,12 @@ class MsfsProject:
         self.objects_xml.remove_height_maps(HEIGHT_MAPS_GROUP_DISPLAY_NAME, True)
         new_group_id = self.objects_xml.get_new_group_id()
 
-        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size), blend_outer_edges=self.settings.blend_outer_edges)
+        water_areas_file_path = os.path.join(self.osmfiles_folder, WATER_AREAS_FILE)
+        water_shp_file_paths = [os.path.join(self.shpfiles_folder, name + SHP_FILE_EXT) for name in (WATER_OSM_KEY, NATURAL_WATER_OSM_KEY, SEA_OSM_TAG)]
+        if not write_water_areas_file(water_shp_file_paths, water_areas_file_path):
+            water_areas_file_path = str()
+
+        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size), blend_outer_edges=self.settings.blend_outer_edges, water_areas_file_path=water_areas_file_path)
         self.__multithread_blender_process_data(tiles_data, "calculate_tile_height_data.py", "CALCULATE HEIGHT MAPS FOR EACH TILE", "height map calculated")
         self.__add_height_maps_to_objects_xml()
 

@@ -156,6 +156,8 @@ HEIGHT_MAP_EDGE_BLEND_DISTANCE = 20.0
 HEIGHT_MAP_EDGE_CLEARANCE = 0.2
 # the height calculation from the top (high precision) puts the height data 1 meter above the tiles surface
 HIGH_PRECISION_HEIGHT_OFFSET = 1.0
+# water areas of the project (osm water, natural water and sea), used by the height data calculation to keep the water level
+WATER_AREAS_FILE = "water_areas.geojson"
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"
