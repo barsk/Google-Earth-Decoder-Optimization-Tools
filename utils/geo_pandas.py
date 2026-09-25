@@ -511,12 +511,13 @@ def get_prefetched_osm_data(coords, key, tags):
 
 
 def filter_prefetched_osm_data(gdf, key, tags):
+    # an empty result must not carry the tag columns of the other categories of the merged query
     if key not in gdf:
-        return gdf.iloc[0:0]
+        return create_empty_gdf()
 
     result = gdf[gdf[key].notna()] if tags is True else gdf[gdf[key].isin(tags)]
     if result.empty:
-        return result
+        return create_empty_gdf()
 
     # only keep the tag columns of the selected elements, as a separate query would have returned
     return result.dropna(axis=1, how="all")
@@ -670,7 +671,8 @@ def prepare_roads_gdf(gdf, railway_gdf, bridge_only=True, automatic_road_width_c
 
             if MAN_MADE_OSM_KEY in roads:
                 pier = roads[(roads[ROAD_OSM_KEY] == FOOTWAY_OSM_TAG) & (roads[MAN_MADE_OSM_KEY] == PIER_OSM_TAG)]
-                pier = pier._append(roads[(roads[ROAD_OSM_KEY] == FOOTWAY_OSM_TAG) & ~(roads[BRIDGE_OSM_TAG].isna())])
+                if BRIDGE_OSM_TAG in roads:
+                    pier = pier._append(roads[(roads[ROAD_OSM_KEY] == FOOTWAY_OSM_TAG) & ~(roads[BRIDGE_OSM_TAG].isna())])
                 pier = resize_gdf(pier, 12, single_sided=False)
                 has_pier = not pier.empty
 
