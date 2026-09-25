@@ -600,8 +600,9 @@ class MsfsProject:
         self.__retrieve_landmarks()
 
     def __retrieve_scene_objects(self):
-        # skip the texture configuration files, they are not object definitions
-        xml_files = [path for path in Path(self.model_lib_folder).rglob(XML_FILE_PATTERN) if path.parent != Path(self.texture_folder)]
+        # the object definitions are in the modelLib folder itself: the xml files of the subfolders are not (e.g. the
+        # texture configuration files, or a copy of the texture folder)
+        xml_files = list(Path(self.model_lib_folder).glob(XML_FILE_PATTERN))
         pbar = ProgressBar(xml_files, title="Retrieve project infos")
         for i, path in enumerate(pbar.iterable):
             if not is_octant(path.stem):
