@@ -138,8 +138,8 @@ class ProjectSettings(Settings):
         self.add_lights = "False"
         self.light_guid = LIGHT_COLD_GUID
         self.collider_as_lower_lod = "False"
-        self.create_forests_vegetation: "False"
-        self.create_woods_vegetation: "False"
+        self.create_forests_vegetation = "False"
+        self.create_woods_vegetation = "False"
         self.resize_ratio = 0.5
 
         if not os.path.isfile(os.path.join(path, self.file_name)) and os.path.isdir(path):
@@ -211,6 +211,10 @@ class ProjectSettings(Settings):
 
     def save(self):
         config = super().set_config(self.path, self.file_name)
+        # the project is not created yet (no settings file): it will get the default settings when it is
+        if config is None:
+            return
+
         config.set(self.LODS_SECTION, self.TARGET_MIN_SIZE_VALUES_SETTING, ", ".join(self.target_min_size_values))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
