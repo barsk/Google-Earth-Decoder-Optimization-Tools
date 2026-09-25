@@ -1663,6 +1663,7 @@ class MsfsProject:
                 lod.model_file = new_lod_name + GLTF_FILE_EXT
 
             new_tile.to_xml(self.objects_xml, new_tile.xml.guid)
+            new_tiles.append(new_tile)
 
         lods = [lod for tile in new_tiles for lod in tile.lods]
         pbar = ProgressBar(list(lods), title="PREPARE THE TILES FOR MSFS")
