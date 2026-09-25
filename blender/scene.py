@@ -877,7 +877,7 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
     # then the result is smoothed and kept under the tile surface, so that the MSFS terrain does not go through the tiles.
     # On the outer edges of the scenery (N, S, E, W letters), the ground is raised up to the tiles ground, to avoid a step
     # between the border of the tiles and the MSFS terrain.
-    # The water points (water_keys) keep the height data of the water calculation, and do not lower the shores
+    # The water points (water_keys) keep the height data of the water calculation, and the shores are raised like the outer edges
     ys = sorted(hmatrix.keys())
     xs = sorted({x for heights in hmatrix.values() for x in heights})
     if len(xs) < 3 or len(ys) < 3:
@@ -914,14 +914,23 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
     tiles_ground = surface - (HIGH_PRECISION_HEIGHT_OFFSET if high_precision else height_adjustment)
     ground = tiles_ground + height_adjustment - GROUND_FILTER_MARGIN
 
+    # distance (in meters) to the outer edges of the scenery and to the water, where the ground is raised up to the tiles ground
+    blend_distances = []
+
     edges = {edge.strip().upper() for edge in outer_edges.split(",") if edge.strip()}
     if edges:
         # the tiles are imported with their south west corner at the origin: the north is -Y and the east is -X
         grid_y = np.array(ys)[:, None] * np.ones((1, len(xs)))
         grid_x = np.ones((len(ys), 1)) * np.array(xs)[None, :]
         distances = {"N": grid_y - ys[0], "S": ys[-1] - grid_y, "E": grid_x - xs[0], "W": xs[-1] - grid_x}
-        edge_distance = np.min([distances[edge] for edge in edges if edge in distances], axis=0)
-        weight = np.clip(1.0 - edge_distance / HEIGHT_MAP_EDGE_BLEND_DISTANCE, 0.0, 1.0)
+        blend_distances.append(np.min([distances[edge] for edge in edges if edge in distances], axis=0))
+
+    if water.any():
+        # the MSFS water does not follow the osm water exactly: a lowered shore shows as shallow water
+        blend_distances.append(ndimage.distance_transform_edt(~water, sampling=(float(np.median(np.abs(np.diff(ys)))), cell_size)))
+
+    if blend_distances:
+        weight = np.clip(1.0 - np.min(blend_distances, axis=0) / HEIGHT_MAP_EDGE_BLEND_DISTANCE, 0.0, 1.0)
         weight = weight * weight * (3.0 - 2.0 * weight)
         edge_ground = tiles_ground - HEIGHT_MAP_EDGE_CLEARANCE
         ground = ground + weight * np.maximum(edge_ground - ground, 0.0)
