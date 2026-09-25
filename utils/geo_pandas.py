@@ -369,6 +369,66 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
     return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
 
 
+OVERPASS_RETRIES = 4
+OVERPASS_RETRY_PAUSE = 30
+
+
+def overpass_query(overpass_api_uri, query):
+    # json result of an Overpass query, retried when the server is busy (429 too many requests, 504 gateway timeout)
+    for attempt in range(OVERPASS_RETRIES):
+        try:
+            response = requests.post(overpass_api_uri.rstrip("/") + "/interpreter", data={"data": query}, headers={"User-Agent": ox.settings.default_user_agent}, timeout=180)
+        except requests.exceptions.ConnectionError as ex:
+            raise overpass_connection_error(ex)
+        if response.status_code not in (429, 504):
+            break
+        pr_bg_orange("Overpass API server busy (%d), retrying in %d s" % (response.status_code, OVERPASS_RETRY_PAUSE) + EOL + CEND)
+        time.sleep(OVERPASS_RETRY_PAUSE)
+    if response.status_code != 200:
+        raise ScriptError("Overpass API query failed (" + str(response.status_code) + "), try again later or choose another Overpass API server in the addon preferences" + EOL)
+    return response.json()
+
+
+OSM_API_URI = "https://api.openstreetmap.org/api/0.6"
+
+
+def load_gdf_from_osm_id(osm_id, geocode_margin=5.0):
+    # outline of an OSM way or relation (osm_id: W<id> or R<id>), enlarged by the geocode margin. Read from the
+    # OpenStreetMap API, made to get single objects: unlike a Nominatim lookup, it also works for the objects without
+    # name nor address (e.g. many buildings), and it doesn't use the (rate limited) Overpass API
+    element_type = {"W": "way", "R": "relation"}[osm_id[0].upper()]
+    try:
+        response = requests.get("%s/%s/%s/full.json" % (OSM_API_URI, element_type, osm_id[1:]), headers={"User-Agent": ox.settings.default_user_agent}, timeout=60)
+    except requests.exceptions.RequestException as ex:
+        raise ScriptError("Unable to get " + osm_id + " from the OpenStreetMap API (" + ex.__class__.__name__ + ")" + EOL)
+    if response.status_code in (404, 410):
+        return create_empty_gdf()
+    if response.status_code != 200:
+        raise ScriptError("Unable to get " + osm_id + " from the OpenStreetMap API (" + str(response.status_code) + ")" + EOL)
+
+    elements = response.json().get("elements", [])
+    nodes = {e["id"]: (e["lon"], e["lat"]) for e in elements if e["type"] == "node"}
+    ways = {e["id"]: e["nodes"] for e in elements if e["type"] == "way"}
+    to_line = lambda way_nodes: LineString([nodes[n] for n in way_nodes if n in nodes])
+    if element_type == "way":
+        outer, inner = [to_line(ways[int(osm_id[1:])])], []
+    else:
+        relation = next(e for e in elements if e["type"] == "relation" and e["id"] == int(osm_id[1:]))
+        members = [m for m in relation.get("members", []) if m["type"] == "way" and m["ref"] in ways]
+        outer = [to_line(ways[m["ref"]]) for m in members if m.get("role") != "inner"]
+        inner = [to_line(ways[m["ref"]]) for m in members if m.get("role") == "inner"]
+    polygon = unary_union(list(polygonize(outer)))
+    if inner:
+        polygon = polygon.difference(unary_union(list(polygonize(inner))))
+    if polygon.is_empty:
+        return create_empty_gdf()
+
+    result = gpd.GeoDataFrame(geometry=[polygon], crs=EPSG.key + str(EPSG.WGS84_degree_unit))
+    # enlarge the outline on all sides (a single sided buffer can go inwards, depending on the way direction)
+    result = resize_gdf(result, float(geocode_margin), single_sided=False)[[GEOMETRY_OSM_COLUMN]]
+    return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
+
+
 # OSM data downloaded in a single Overpass query for the whole project bounding box: list of (coords, merged tags, gdf).
 # load_gdf splits it per key/tags instead of sending one Overpass query per data type (rate limiting)
 prefetched_osm_data = []

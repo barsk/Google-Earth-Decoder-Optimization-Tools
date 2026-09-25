@@ -691,6 +691,28 @@ class OT_Isolate3dDataFromGeocodePanel(SettingsOperator):
     ]
 
 
+class OT_UpgradeLandmarksPanel(SettingsOperator):
+    operator_name = "wm.upgrade_landmarks"
+    id_name = "wm.upgrade_landmarks_panel"
+    bl_idname = id_name
+    bl_label = "Upgrade the landmarks of the scenery (more detailed lods than the tiles)"
+    operator_description = """Keeps the most detailed lods (e.g. LOD 20) for some buildings, while the tiles keep less detailed lods (e.g. up to LOD 19).
+        The buildings are listed in the landmarks.txt file of the project folder, as OpenStreetMap ids (W for a way, R for a relation, e.g. W96307473).
+        If this file does not exist, it is created with candidates suggested from OpenStreetMap (churches, notable, historic, public or large buildings): review it, then run this script again.
+        Each building is isolated from the tiles as separate objects (named landmark_<id>_<tile>), then removed from the tiles.
+        Then the tile lods more detailed than the tiles_max_lod_level value ([LANDMARKS] section of the project ini file, 19 by default) are removed,
+        and the textures of the landmarks are repacked to keep only the parts they use.
+        The buildings already upgraded are skipped: define all the landmarks before the first run, as the removed tile lods can't be used anymore.
+        In the GEOCODE section, set the geocode margin (as OSM and Google Earth can have a slight difference between building positions)."""
+    starting_section = GEOCODE_INI_SECTION
+    displayed_sections = [
+        PROJECT_INI_SECTION,
+        GEOCODE_INI_SECTION,
+        BUILD_INI_SECTION,
+        BACKUP_INI_SECTION,
+    ]
+
+
 class OT_AddTileCollidersPanel(SettingsOperator):
     operator_name = "wm.add_tile_colliders"
     id_name = "wm.add_tile_colliders_panel"

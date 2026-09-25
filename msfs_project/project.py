@@ -16,6 +16,8 @@
 #
 #  <pep8 compliant>
 
+import copy
+import re
 import itertools
 import sys
 import warnings
@@ -61,6 +63,10 @@ from msfs_project.object_xml import MsfsObjectXml
 from msfs_project.scene_object import MsfsSceneObject
 from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
+from msfs_project.lod import MsfsLod
+from utils.landmarks import read_landmarks, write_landmark_candidates
+from utils.geo_pandas import load_gdf_from_osm_id
+from msfs_project.gltf import MsfsGltf
 from msfs_project.shape import MsfsShapes
 from utils import replace_in_file, is_octant, backup_file, ScriptError, print_title, \
     get_backup_file_path, isolated_print, chunks, create_bounding_box_from_tiles, clip_gdf, create_terraform_polygons_gdf, create_land_mass_gdf, preserve_holes, create_exclusion_building_polygons_gdf, create_whole_water_gdf, create_ground_exclusion_gdf, load_gdf, \
@@ -404,6 +410,118 @@ class MsfsProject:
         if not geocode_gdf.empty:
             self.__create_tiles_bounding_boxes()
             self.__isolate_lods_3d_data_from_geocode(geocode, geocode_gdf, settings)
+
+    def upgrade_landmarks(self, settings):
+        # The buildings listed in the landmarks file (OSM ids) keep more detailed lods than the tiles: they are isolated
+        # from the tiles as separate objects, excluded from the tiles, then the tile lods above the tiles max lod level
+        # are removed. Without landmarks file, it is created with the candidates suggested from OpenStreetMap
+        landmarks_file = os.path.join(self.project_folder, LANDMARKS_FILE)
+        if not os.path.isfile(landmarks_file):
+            nb_candidates, nb_active = write_landmark_candidates(landmarks_file, self.coords, settings.overpass_api_uri, self.project_name, LANDMARK_MIN_SCORE)
+            pr_bg_orange("%d landmark candidates found, %d suggested: review the list in %s, then run this tool again" % (nb_candidates, nb_active, landmarks_file) + EOL + CEND)
+            return False
+
+        max_level = int(getattr(self.settings, "tiles_max_lod_level", DEFAULT_TILES_MAX_LOD_LEVEL))
+        landmarks = [osm_id for osm_id in read_landmarks(landmarks_file) if not self.__landmark_exists(osm_id)]
+        isolated_print("%d new landmarks to upgrade, tiles max lod level %d" % (len(landmarks), max_level))
+
+        self.__create_tiles_bounding_boxes()
+        ox.config(overpass_endpoint=settings.overpass_api_uri, log_console=False, use_cache=False, log_level=lg.ERROR)
+        b = bbox_to_poly(self.coords[1], self.coords[0], self.coords[2], self.coords[3])
+
+        # isolate all the landmarks first, while the tiles are still complete
+        masks = {}
+        isolated_area = create_empty_gdf()
+        for osm_id in landmarks:
+            print_title("ISOLATE LANDMARK " + osm_id)
+            geocode_gdf = load_gdf_from_osm_id(osm_id, float(self.settings.geocode_margin))
+            if geocode_gdf.empty:
+                pr_bg_orange("Landmark " + osm_id + " not found in OSM data" + EOL + CEND)
+                continue
+            # neighbouring landmarks (enlarged by the margin) can overlap: isolate each area only once
+            geocode_gdf = difference_gdf(geocode_gdf, isolated_area)
+            if geocode_gdf.empty:
+                pr_bg_orange("Landmark " + osm_id + " is already part of another landmark" + EOL + CEND)
+                continue
+            geocode_gdf = geocode_gdf[[GEOMETRY_OSM_COLUMN]].dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
+            isolated_area = union_gdf(isolated_area, geocode_gdf[[GEOMETRY_OSM_COLUMN]])
+            self.__create_geocode_mask_file(geocode_gdf, b)
+            masks[osm_id] = geocode_gdf
+            self.__isolate_lods_3d_data_from_geocode(osm_id, geocode_gdf, settings, name_prefix=LANDMARK_OBJECT_PREFIX + osm_id)
+
+        # then remove them from the tiles
+        for osm_id, geocode_gdf in masks.items():
+            print_title("EXCLUDE LANDMARK " + osm_id + " FROM THE TILES")
+            self.__create_geocode_mask_file(geocode_gdf, b)
+            self.__exclude_lods_3d_data_from_geocode(osm_id, geocode_gdf, settings)
+
+        self.__drop_tiles_lods_above(max_level)
+        self.__repack_landmarks_textures(settings)
+        self.__remove_unused_textures()
+        return True
+
+    def __landmark_exists(self, osm_id):
+        return len(list(Path(self.model_lib_folder).glob(LANDMARK_OBJECT_PREFIX + osm_id + "_*" + XML_FILE_EXT))) > 0
+
+    def __drop_tiles_lods_above(self, max_level):
+        # remove the tile lods more detailed than max_level (the textures are removed later if no longer used)
+        print_title("REMOVE THE TILE LODS ABOVE LEVEL %d" % max_level)
+        for tile in self.tiles.values():
+            xml = MsfsObjectXml(self.model_lib_folder, tile.definition_file)
+            model_files = [lod.get(xml.MODEL_FILE_ATTR) for lod in xml.find_scenery_lods()]
+            numbers = {model_file: int(model_file[-7:-5]) for model_file in model_files if re.search(r"_LOD\d\d\.gltf$", model_file)}
+            if len(numbers) != len(model_files) or not numbers:
+                continue
+            # the least detailed lod (highest number) is the tile level, each lower number one level more
+            max_number = max(numbers.values())
+            dropped = [model_file for model_file, number in numbers.items() if len(tile.name) + max_number - number > max_level]
+            if len(dropped) == len(model_files):
+                continue
+            for model_file in dropped:
+                xml.remove_lod(model_file)
+                model_file_path = os.path.join(self.model_lib_folder, model_file)
+                if os.path.isfile(model_file_path):
+                    for binary in MsfsGltf(model_file_path).get_buffers():
+                        if os.path.isfile(os.path.join(self.model_lib_folder, binary)):
+                            os.remove(os.path.join(self.model_lib_folder, binary))
+                    os.remove(model_file_path)
+                isolated_print(model_file, "removed")
+            if dropped:
+                xml.save()
+
+    def __model_files_images(self, name_filter=lambda name: True):
+        images = {}
+        for model_file in Path(self.model_lib_folder).glob(GLTF_FILE_PATTERN):
+            if name_filter(model_file.stem):
+                images[model_file.name] = MsfsGltf(str(model_file)).get_images()
+        return images
+
+    def __repack_landmarks_textures(self, settings):
+        # the landmark lods more detailed than the tiles still use a part of a removed tile texture: pack only their parts
+        tiles_images = {image for images in self.__model_files_images(lambda name: is_octant(name)).values() for image in images}
+        data = []
+        for model_file, images in self.__model_files_images(lambda name: name.startswith(LANDMARK_OBJECT_PREFIX)).items():
+            texture_file = Path(model_file).stem + "." + self.settings.output_texture_format
+            if not images or set(images) & tiles_images or images == [texture_file]:
+                continue
+            data.append({"name": Path(model_file).stem, "params": ["--folder", str(self.model_lib_folder), "--model_file", model_file, "--texture_file", texture_file]})
+
+        self.__multithread_blender_process_data(chunks(data, settings.nb_parallel_blender_tasks), "repack_lod_textures.py", "REPACK THE LANDMARKS TEXTURES", "repacked")
+
+        for item in data:
+            lod = MsfsLod(0, 0, self.model_lib_folder, item["params"][3])
+            lod.optimization_in_progress = False
+            lod.prepare_for_msfs()
+
+    def __remove_unused_textures(self):
+        print_title("REMOVE THE UNUSED TEXTURES")
+        used = {image for images in self.__model_files_images().values() for image in images}
+        for texture in Path(self.texture_folder).iterdir():
+            if texture.suffix.lower() in (PNG_FILE_EXT, JPG_FILE_EXT) and texture.name not in used:
+                os.remove(texture)
+                if os.path.isfile(str(texture) + XML_FILE_EXT):
+                    os.remove(str(texture) + XML_FILE_EXT)
+                isolated_print(texture.name, "removed")
 
     def adjust_altitude(self, altitude_adjustment):
         self.__adjust_altitude(altitude_adjustment)
@@ -1000,7 +1118,8 @@ class MsfsProject:
 
         return modified_tiles, tiles_with_collider, chunks(data, settings.nb_parallel_blender_tasks)
 
-    def __retrieve_lods_to_isolate_3d_data_from_geocode(self, geocode, geocode_gdf, backup_subfolder, settings):
+    def __retrieve_lods_to_isolate_3d_data_from_geocode(self, geocode, geocode_gdf, backup_subfolder, settings, name_prefix=None):
+        name_prefix = name_prefix or self.__get_geocode_file_prefix(geocode)
         data = []
         src_tiles = []
 
@@ -1038,7 +1157,7 @@ class MsfsProject:
                 if not os.path.isdir(lod_folder):
                     continue
 
-                params = ["--folder", str(lod_folder), "--output_folder", str(lod.folder), "--output_name", self.__get_geocode_file_prefix(geocode) + "_" + tile.name, "--model_file", str(lod.model_file),
+                params = ["--folder", str(lod_folder), "--output_folder", str(lod.folder), "--output_name", name_prefix + "_" + tile.name, "--model_file", str(lod.model_file),
                                                           "--positioning_file_path", str(os.path.join(self.osmfiles_folder, BOUNDING_BOX_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT)),
                                                           "--mask_file_path", str(mask_file_path)]
 
@@ -1581,20 +1700,23 @@ class MsfsProject:
                orig_natural, orig_natural_water, orig_water, orig_waterway, orig_aeroway, orig_pitch, orig_construction, orig_park, orig_building, \
                orig_wall, orig_man_made, orig_rocks, orig_amenity, orig_residential, orig_industrial, orig_airport
 
-    def __create_geocode_osm_exclusion_files(self, geocode, settings, b, geocode_margin, preserve_roads, preserve_buildings, coords, shpfiles_folder):
+    def __create_geocode_osm_exclusion_files(self, geocode, settings, b, geocode_margin, preserve_roads, preserve_buildings, coords, shpfiles_folder, by_osmid=False):
         print_title("RETRIEVE GEOCODE OSM FILES")
 
-        geocode_gdf = load_gdf_from_geocode(geocode, settings.overpass_api_uri, geocode_margin=geocode_margin, preserve_roads=preserve_roads, preserve_buildings=preserve_buildings, coords=coords, shpfiles_folder=shpfiles_folder)
+        geocode_gdf = load_gdf_from_geocode(geocode, settings.overpass_api_uri, geocode_margin=geocode_margin, preserve_roads=preserve_roads, preserve_buildings=preserve_buildings, coords=coords, shpfiles_folder=shpfiles_folder, by_osmid=by_osmid)
 
         if geocode_gdf is None:
             return geocode_gdf
 
         if not geocode_gdf.empty:
-            # for debugging purpose, generate the osm file
-            osm_xml = OsmXml(self.osmfiles_folder, GEOCODE_OSM_FILE_PREFIX + "_" + EXCLUSION_OSM_FILE_PREFIX + OSM_FILE_EXT)
-            osm_xml.create_from_geodataframes([preserve_holes(geocode_gdf)], b, extrude=True, additional_tags=[(HEIGHT_OSM_TAG, 3000)])
+            self.__create_geocode_mask_file(geocode_gdf, b)
 
         return geocode_gdf
+
+    def __create_geocode_mask_file(self, geocode_gdf, b):
+        # osm file of the geocode area, used as a mask to isolate or exclude the 3d data of the tiles
+        osm_xml = OsmXml(self.osmfiles_folder, GEOCODE_OSM_FILE_PREFIX + "_" + EXCLUSION_OSM_FILE_PREFIX + OSM_FILE_EXT)
+        osm_xml.create_from_geodataframes([preserve_holes(geocode_gdf)], b, extrude=True, additional_tags=[(HEIGHT_OSM_TAG, 3000)])
 
     def __remove_full_water_tiles(self, water):
         tiles_to_remove = []
@@ -1639,26 +1761,28 @@ class MsfsProject:
             lod.prepare_for_msfs()
             pbar.update("%s prepared for msfs" % lod.name)
 
-    def __isolate_lods_3d_data_from_geocode(self, geocode, geocode_gdf, settings):
+    def __isolate_lods_3d_data_from_geocode(self, geocode, geocode_gdf, settings, name_prefix=None):
+        name_prefix = name_prefix or self.__get_geocode_file_prefix(geocode)
         new_tiles = []
-        src_tiles, lods_data = self.__retrieve_lods_to_isolate_3d_data_from_geocode(geocode, geocode_gdf, "isolate_3d_data_from_geocode", settings)
+        src_tiles, lods_data = self.__retrieve_lods_to_isolate_3d_data_from_geocode(geocode, geocode_gdf, "isolate_3d_data_from_geocode", settings, name_prefix=name_prefix)
         self.__multithread_blender_process_data(lods_data, "isolate_lod_3d_data.py", "ISOLATE LODS 3D DATA TILES FROM GEOCODE", "isolated")
 
         for tile in src_tiles:
-            new_tile = tile
-            new_tile.name = self.__get_geocode_file_prefix(geocode) + "_" + tile.name
+            # a copy: the project tiles stay unchanged (e.g. to isolate several geocodes)
+            new_tile = copy.deepcopy(tile)
+            new_tile.name = name_prefix + "_" + tile.name
             new_tile.definition_file = new_tile.name + XML_FILE_EXT
             new_tile.xml.file_path = os.path.join(new_tile.folder, new_tile.definition_file)
 
             if os.path.exists(new_tile.xml.file_path):
-                return
+                continue
 
             new_tile.xml.guid = "{" + str(new_tile.generate_guid()) + "}"
             new_tile.xml.root.set(new_tile.xml.GUID_ATTR, new_tile.xml.guid)
             new_tile.xml.save()
 
             for lod in new_tile.lods:
-                new_lod_name = self.__get_geocode_file_prefix(geocode) + "_" + lod.name
+                new_lod_name = name_prefix + "_" + lod.name
                 replace_in_file(new_tile.xml.file_path, lod.name, new_lod_name)
                 lod.name = new_lod_name
                 lod.model_file = new_lod_name + GLTF_FILE_EXT

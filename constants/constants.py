@@ -129,6 +129,12 @@ MSFS_2024_TARGET = "MSFS_2024"
 MSFS_2024_SDK_PATH_HINT = "2024"
 # package order hint of the created projects (MSFS 2024 only)
 PACKAGE_ORDER_HINT = "CUSTOM_WORLD_SCENERY"
+
+# landmarks: buildings (OSM ids listed in the project landmarks file) keeping more detailed LODs than the tiles
+LANDMARKS_FILE = "landmarks.txt"
+LANDMARK_OBJECT_PREFIX = "landmark_"
+DEFAULT_TILES_MAX_LOD_LEVEL = 19
+LANDMARK_MIN_SCORE = 3
 CLEANUP_3D_DATA_BACKUP_FOLDER = "cleanup_3d_data"
 RESIZE_SCENERY_TEXTURES_BACKUP_FOLDER = "resize_scenery_textures"
 

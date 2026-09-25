@@ -17,6 +17,7 @@
 #  <pep8 compliant>
 
 import os
+import shutil
 from math import floor
 
 from mathutils.bvhtree import BVHTree
@@ -73,9 +74,9 @@ import bmesh
 import bpy
 import mathutils
 from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
-from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures
+from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
-from blender.material import set_msfs_material, add_new_obj_material
+from blender.material import set_msfs_material, add_new_obj_material, get_material_output
 from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
@@ -289,6 +290,62 @@ def bake_texture_files(folder, file_name):
     link_materials_to_packed_texture(objects, folder, file_name)
     bpy.data.images.remove(packed_image)
 
+    return True
+
+
+##################################################################
+# Repack the textures of a model, keeping only the part used by each object
+##################################################################
+def repack_model_textures(model_file_path, texture_folder, file_name):
+    # e.g. for the 3d data isolated from a tile (a landmark), which only uses small parts of the tile packed texture.
+    # The objects without texture (e.g. the bounding box of the tile) are kept as is
+    import_model_files([model_file_path])
+
+    # the models reference their textures by name, but they are in the texture folder
+    for image in bpy.data.images:
+        if image.source == "FILE" and not image.has_data:
+            texture_file_path = os.path.join(os.path.dirname(model_file_path), texture_folder, os.path.basename(bpy.path.abspath(image.filepath)))
+            if os.path.isfile(texture_file_path):
+                image.filepath = texture_file_path
+                image.reload()
+
+    textured_objects = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != MESH_OBJECT_TYPE or not obj.material_slots or obj.material_slots[0].material is None or obj.material_slots[0].material.node_tree is None:
+            continue
+        image_nodes = list_image_nodes(get_material_output(obj.material_slots[0].material))
+        if image_nodes and image_nodes[0][0].image is not None:
+            textured_objects.append(obj)
+
+    packed_image = pack_textures(textured_objects, crop_per_object=True)
+    if packed_image is None:
+        return False
+
+    fix_texture_size_for_package_compilation(packed_image)
+    texture_file_path = os.path.join(os.path.dirname(model_file_path), texture_folder, file_name)
+    packed_image.filepath_raw = texture_file_path
+    packed_image.file_format = "JPEG" if file_name.lower().endswith(JPG_FILE_EXT) else "PNG"
+    packed_image.save()
+    bpy.data.images.remove(packed_image)
+
+    image = bpy.data.images.load(texture_file_path)
+    for obj in textured_objects:
+        get_image_node(obj).image = image
+
+    # keep the model files until the export succeeds (a failed export can remove them)
+    model_files = [model_file_path] + [os.path.join(os.path.dirname(model_file_path), binary) for binary in MsfsGltf(model_file_path).get_buffers()]
+    for file_path in model_files:
+        shutil.copyfile(file_path, file_path + ".bak")
+    try:
+        # no extras: the MSFS materials of the imported models have image properties, which can't be exported as extras
+        export_to_optimized_gltf_files(model_file_path, texture_folder, export_extras=False)
+    except Exception:
+        for file_path in model_files:
+            shutil.move(file_path + ".bak", file_path)
+        os.remove(texture_file_path)
+        raise
+    for file_path in model_files:
+        os.remove(file_path + ".bak")
     return True
 
 

@@ -37,7 +37,7 @@ from .operator import PanelPropertyGroup, OT_ProjectPathOperator, OT_ProjectsPat
     OT_CreateTerraformAndExclusionPolygonsOperator, OT_GenerateHeightDataPanel, OT_GenerateHeightDataOperator, OT_RemoveWaterFrom3dDataPanel, OT_RemoveWaterFrom3dDataOperator, \
     OT_RemoveForestsAndWoodsFrom3dDataPanel, OT_RemoveForestsAndWoodsFrom3dDataOperator, OT_RemoveForestsWoodsAndParksFrom3dDataPanel, OT_KeepOnlyBuildings3dDataOperator, OT_KeepOnlyBuildings3dDataPanel, \
     OT_KeepOnlyBuildingsAndRoads3dDataOperator, OT_KeepOnlyBuildingsAndRoads3dDataPanel, OT_RemoveForestsWoodsAndParksFrom3dDataOperator, OT_CreateLandmarkFromGeocodeOperator, OT_CreateLandmarkFromGeocodePanel, \
-    OT_Exclude3dDataFromGeocodeOperator, OT_Isolate3dDataFromGeocodeOperator, OT_Exclude3dDataFromGeocodePanel, OT_Isolate3dDataFromGeocodePanel, OT_AddTileCollidersPanel, OT_RemoveTileCollidersPanel, \
+    OT_Exclude3dDataFromGeocodeOperator, OT_Isolate3dDataFromGeocodeOperator, OT_Exclude3dDataFromGeocodePanel, OT_Isolate3dDataFromGeocodePanel, OT_UpgradeLandmarksOperator, OT_UpgradeLandmarksPanel, OT_AddTileCollidersPanel, OT_RemoveTileCollidersPanel, \
     OT_AddTileCollidersOperator, OT_RemoveTileCollidersOperator, OT_AdjustSceneryAltitudePanel, OT_AdjustSceneryAltitudeOperator, OT_AddLightsToGeocodeOperator, OT_AddLightsToGeocodePanel, OT_Cleanup3dDataPanel, OT_Cleanup3dDataOperator, OT_ResizeSceneryTexturesPanel, OT_ResizeSceneryTexturesOperator
 
 
@@ -123,6 +123,8 @@ class TOPBAR_MT_geocode_tools_menu(Menu):
         layout.operator(OT_Exclude3dDataFromGeocodePanel.bl_idname)
         layout.separator()
         layout.operator(OT_Isolate3dDataFromGeocodePanel.bl_idname)
+        layout.separator()
+        layout.operator(OT_UpgradeLandmarksPanel.bl_idname)
 
 
 class TOPBAR_MT_other_tools_menu(Menu):
@@ -174,6 +176,7 @@ classes = (
     OT_CreateLandmarkFromGeocodeOperator,
     OT_Exclude3dDataFromGeocodeOperator,
     OT_Isolate3dDataFromGeocodeOperator,
+    OT_UpgradeLandmarksOperator,
     OT_AddTileCollidersOperator,
     OT_RemoveTileCollidersOperator,
     OT_CompressBuiltPackageOperator,
@@ -203,6 +206,7 @@ classes = (
     OT_CreateLandmarkFromGeocodePanel,
     OT_Exclude3dDataFromGeocodePanel,
     OT_Isolate3dDataFromGeocodePanel,
+    OT_UpgradeLandmarksPanel,
     OT_AddTileCollidersPanel,
     OT_RemoveTileCollidersPanel,
     OT_CompressBuiltPackagePanel,

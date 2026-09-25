@@ -120,6 +120,16 @@ class MsfsGltf:
         for material in self.data[self.MATERIALS_TAG]:
             material[self.DOUBLESIDED_TAG] = False
 
+    def get_buffers(self):
+        # binary files of the model
+        if not self.data or self.BUFFERS_TAG not in self.data.keys(): return []
+        return [buffer[self.URI_TAG] for buffer in self.data[self.BUFFERS_TAG] if self.URI_TAG in buffer]
+
+    def get_images(self):
+        # texture file names of the model
+        if not self.data or self.IMAGES_TAG not in self.data.keys(): return []
+        return [image[self.URI_TAG].rsplit("/", 1)[-1] for image in self.data[self.IMAGES_TAG] if self.URI_TAG in image]
+
     def fix_metallic(self):
         # the tiles are not metallic (metallicFactor 0 when downloaded), but the MSFS glTF exporter writes its own
         # 1.0 default, as it doesn't read the imported material values of non-MSFS glTF files. Metallic surfaces have

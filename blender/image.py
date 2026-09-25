@@ -93,18 +93,21 @@ def fix_texture_size_for_package_compilation(packed_image):
 ##################################################################
 # pack the textures of the objects into a single image
 ##################################################################
-def pack_textures(objects):
+def pack_textures(objects, crop_per_object=False):
     # Pack the base color textures of the objects into a single image, and remap their uvs to it.
     # Only the part of each texture used by the uvs is kept. Returns the packed image, or None if
-    # the textures can't be packed (uvs repeating the texture, or packed image too large)
+    # the textures can't be packed (uvs repeating the texture, or packed image too large).
+    # crop_per_object: crop the part used by each object separately, e.g. when the objects share a packed texture
     textures = {}
     for obj in objects:
         image_node = get_image_node(obj)
         if image_node is None or image_node.image is None or not obj.data.uv_layers:
             return None
-        textures.setdefault(image_node.image.name, (image_node.image, []))[1].append(obj)
+        key = (image_node.image.name, obj.name) if crop_per_object else image_node.image.name
+        textures.setdefault(key, (image_node.image, []))[1].append(obj)
 
     rects = []
+    image_pixels = {}
     for image, texture_objects in textures.values():
         width, height = image.size
         uvs = [get_uvs(obj) for obj in texture_objects]
@@ -124,9 +127,11 @@ def pack_textures(objects):
         y0 = max(0, floor(uv_min[1] * height) - 1)
         x1 = min(width, max(ceil(uv_max[0] * width) + 1, x0 + 1))
         y1 = min(height, max(ceil(uv_max[1] * height) + 1, y0 + 1))
-        pixels = np.empty(width * height * 4, dtype=np.float32)
-        image.pixels.foreach_get(pixels)
-        crop = pixels.reshape(height, width, 4)[y0:y1, x0:x1]
+        if image.name not in image_pixels:
+            pixels = np.empty(width * height * 4, dtype=np.float32)
+            image.pixels.foreach_get(pixels)
+            image_pixels[image.name] = pixels.reshape(height, width, 4)
+        crop = image_pixels[image.name][y0:y1, x0:x1]
 
         rect_width = align_size(crop.shape[1] + 2 * PACKED_TEXTURE_PADDING, PACKED_TEXTURE_ALIGNMENT)
         rect_height = align_size(crop.shape[0] + 2 * PACKED_TEXTURE_PADDING, PACKED_TEXTURE_ALIGNMENT)

@@ -45,6 +45,7 @@ from scripts.create_landmark_from_geocode_script import create_landmark_from_geo
 from scripts.add_lights_to_geocode_script import add_lights_to_geocode
 from scripts.exclude_3d_data_from_geocode_script import exclude_3d_data_from_geocode
 from scripts.isolate_3d_data_from_geocode_script import isolate_3d_data_from_geocode
+from scripts.upgrade_landmarks_script import upgrade_landmarks
 from scripts.adjust_scenery_altitude_script import adjust_scenery_altitude
 from utils import open_console
 from .tools import reload_current_operator, reload_setting_props, reload_project_settings
@@ -449,6 +450,21 @@ class OT_Isolate3dDataFromGeocodeOperator(ActionOperator):
     def execute(self, context):
         super().execute(context)
         isolate_3d_data_from_geocode(context.scene.global_settings)
+        return {'FINISHED'}
+
+
+class OT_UpgradeLandmarksOperator(ActionOperator):
+    bl_idname = "wm.upgrade_landmarks"
+    bl_label = "Upgrade the landmarks of the scenery..."
+
+    @classmethod
+    def poll(cls, context):
+        msfs_project = super().poll(context)
+        return os.path.isdir(msfs_project.scene_folder)
+
+    def execute(self, context):
+        super().execute(context)
+        upgrade_landmarks(context.scene.global_settings)
         return {'FINISHED'}
 
 
