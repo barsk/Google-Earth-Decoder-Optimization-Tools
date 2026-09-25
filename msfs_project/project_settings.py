@@ -40,7 +40,7 @@ import shutil
 
 from utils.settings import Settings
 
-from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT
+from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT, DEFAULT_GROUND_FILTER_SIZE
 
 
 class ProjectSettings(Settings):
@@ -70,6 +70,7 @@ class ProjectSettings(Settings):
     saturation: float
     hue: float
     high_precision: str
+    ground_filter_size: float
     exclude_water: str
     exclude_forests: str
     exclude_woods: str
@@ -89,6 +90,8 @@ class ProjectSettings(Settings):
     resize_ratio: float
 
     LODS_SECTION = "LODS"
+    HEIGHT_MAPS_SECTION = "HEIGHT_MAPS"
+    GROUND_FILTER_SIZE_SETTING = "ground_filter_size"
     TARGET_MIN_SIZE_VALUES_SETTING = "target_min_size_values"
 
     def __init__(self, global_path, path, project_name):
@@ -121,6 +124,7 @@ class ProjectSettings(Settings):
         self.saturation = 1.0
         self.hue = 1.0
         self.high_precision = "False"
+        self.ground_filter_size = DEFAULT_GROUND_FILTER_SIZE
         self.exclude_ground = "False"
         self.exclude_water = "True"
         self.exclude_forests = "True"
@@ -161,6 +165,8 @@ class ProjectSettings(Settings):
         self.lon_correction = "{:.9f}".format(float(str(self.lon_correction))).rstrip("0").rstrip(".")
 
         self.height_adjustment = "{:.9f}".format(float(str(self.height_adjustment))).rstrip("0").rstrip(".")
+
+        self.ground_filter_size = "{:.1f}".format(float(str(self.ground_filter_size))).rstrip("0").rstrip(".")
 
         self.landmark_offset = "{:.9f}".format(float(str(self.landmark_offset))).rstrip("0").rstrip(".")
 
@@ -216,6 +222,11 @@ class ProjectSettings(Settings):
             return
 
         config.set(self.LODS_SECTION, self.TARGET_MIN_SIZE_VALUES_SETTING, ", ".join(self.target_min_size_values))
+
+        # setting added after the creation of older projects
+        if not config.has_section(self.HEIGHT_MAPS_SECTION):
+            config.add_section(self.HEIGHT_MAPS_SECTION)
+        config.set(self.HEIGHT_MAPS_SECTION, self.GROUND_FILTER_SIZE_SETTING, str(self.ground_filter_size))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
             config.write(configfile)

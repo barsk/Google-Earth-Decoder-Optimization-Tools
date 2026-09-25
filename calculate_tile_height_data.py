@@ -147,6 +147,11 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "-gfs", "--ground_filter_size", dest="ground_filter_size", type=str, required=False,
+    help="width in meters of the filter removing the buildings and trees from the height data (0 to disable it)",
+)
+
+parser.add_argument(
     "-dbg", "--debug", dest="debug", type=str, required=False,
     help="Debug the height data in blender",
 )
@@ -196,6 +201,6 @@ rocks_mask_file_path = args.rocks_mask_file_path if args.rocks_mask_file_path el
 water_mask_file_path = args.water_mask_file_path if args.water_mask_file_path else str()
 
 tile = MsfsTile(args.folder, args.name, args.definition_file)
-tile.generate_height_data(HeightMapXml(args.height_map_xml_folder, HEIGHT_MAP_PREFIX + args.name + XML_FILE_EXT), args.group_id, float(args.altitude), float(args.height_adjustment), high_precision=high_precision, positioning_file_path=positioning_file_path, water_mask_file_path=water_mask_file_path, ground_mask_file_path=ground_mask_file_path, rocks_mask_file_path=rocks_mask_file_path, building_mask_file_path=building_mask_file_path, debug=debug)
+tile.generate_height_data(HeightMapXml(args.height_map_xml_folder, HEIGHT_MAP_PREFIX + args.name + XML_FILE_EXT), args.group_id, float(args.altitude), float(args.height_adjustment), high_precision=high_precision, positioning_file_path=positioning_file_path, water_mask_file_path=water_mask_file_path, ground_mask_file_path=ground_mask_file_path, rocks_mask_file_path=rocks_mask_file_path, building_mask_file_path=building_mask_file_path, ground_filter_size=float(args.ground_filter_size) if args.ground_filter_size else 0.0, debug=debug)
 # except:
 #     pass

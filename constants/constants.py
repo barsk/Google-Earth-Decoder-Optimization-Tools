@@ -142,6 +142,10 @@ SCRIPT_PREFIX = "_script"
 COLLIDER_SUFFIX = "_collider"
 GEOCODE_SUFFIX = "_geocode"
 HEIGHT_MAP_PREFIX = "height_map_"
+# width (in meters) of the filter removing the buildings and trees from the height data, 0 to disable it
+DEFAULT_GROUND_FILTER_SIZE = 40.0
+# keep the filtered ground a bit under the Google Earth tiles surface
+GROUND_FILTER_MARGIN = 0.5
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"

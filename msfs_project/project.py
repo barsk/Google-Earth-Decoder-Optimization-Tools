@@ -942,7 +942,7 @@ class MsfsProject:
 
         return chunks(data, nb_parallel_blender_tasks)
 
-    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False):
+    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0):
         data = []
 
         for guid, tile in self.tiles.items():
@@ -987,6 +987,7 @@ class MsfsProject:
                 params.extend(["--water_mask_file_path", str(water_mask_file_path)])
 
             params.extend(["--high_precision", str(high_precision)])
+            params.extend(["--ground_filter_size", str(ground_filter_size)])
             data.append({"name": tile.name, "params": params})
 
         return chunks(data, nb_parallel_blender_tasks if parallel else 1)
@@ -1350,7 +1351,7 @@ class MsfsProject:
         self.objects_xml.remove_height_maps(HEIGHT_MAPS_GROUP_DISPLAY_NAME, True)
         new_group_id = self.objects_xml.get_new_group_id()
 
-        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision)
+        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size))
         self.__multithread_blender_process_data(tiles_data, "calculate_tile_height_data.py", "CALCULATE HEIGHT MAPS FOR EACH TILE", "height map calculated")
         self.__add_height_maps_to_objects_xml()
 

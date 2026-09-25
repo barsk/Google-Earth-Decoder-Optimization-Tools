@@ -189,6 +189,11 @@ def reload_high_precision(context):
         context.scene.setting_props.high_precision = context.scene.project_settings.high_precision
 
 
+def reload_ground_filter_size(context):
+    if context.scene.project_settings is not None:
+        context.scene.setting_props.ground_filter_size = float(context.scene.project_settings.ground_filter_size)
+
+
 def reload_height_adjustment(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.height_adjustment = float(context.scene.project_settings.height_adjustment)
@@ -353,6 +358,7 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_process_all(context)
     reload_high_precision(context)
     reload_height_adjustment(context)
+    reload_ground_filter_size(context)
     reload_geocode(context)
     reload_geocode_margin(context)
     reload_building_margin(context)

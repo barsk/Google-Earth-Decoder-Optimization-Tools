@@ -170,6 +170,9 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.high_precision = self.high_precision
         context.scene.project_settings.save()
 
+    def ground_filter_size_updated(self, context):
+        context.scene.project_settings.ground_filter_size = "{:.1f}".format(float(str(self.ground_filter_size))).rstrip("0").rstrip(".")
+
     def height_adjustment_updated(self, context):
         context.scene.project_settings.height_adjustment = "{:.1f}".format(float(str(self.height_adjustment))).rstrip("0").rstrip(".")
         context.scene.project_settings.save()
@@ -477,6 +480,16 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         description="Generate the height data, using the most detailed tile lods",
         default=bpy.types.Scene.project_settings.high_precision if bpy.types.Scene.project_settings is not None else False,
         update=high_precision_updated
+    )
+    ground_filter_size: FloatProperty(
+        name="Ground filter size",
+        description="Width (in meters) of the filter removing the buildings and trees from the height data, so that the terrain stays under the tiles (0 to disable it)",
+        min=0.0,
+        soft_max=200.0,
+        step=100,
+        precision=0,
+        default=float(bpy.types.Scene.project_settings.ground_filter_size) if bpy.types.Scene.project_settings is not None else 40.0,
+        update=ground_filter_size_updated
     )
     height_adjustment: FloatProperty(
         name="Height adjustment",
