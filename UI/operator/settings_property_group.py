@@ -166,6 +166,9 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.process_all = self.process_all
         context.scene.project_settings.save()
 
+    def blend_outer_edges_updated(self, context):
+        context.scene.project_settings.blend_outer_edges = self.blend_outer_edges
+
     def high_precision_updated(self, context):
         context.scene.project_settings.high_precision = self.high_precision
         context.scene.project_settings.save()
@@ -474,6 +477,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         description="Process all the tiles (if unticked, process only the tiles that have not been cleaned)",
         default=bpy.types.Scene.project_settings.process_all if bpy.types.Scene.project_settings is not None else False,
         update=process_all_updated
+    )
+    blend_outer_edges: BoolProperty(
+        name="Blend the outer edges of the scenery",
+        description="Raise the height data up to the tiles ground on the outer border of the scenery, to avoid a step between the tiles and the MSFS terrain. Disable it for sceneries stitched together from several projects",
+        default=bpy.types.Scene.project_settings.blend_outer_edges if bpy.types.Scene.project_settings is not None else True,
+        update=blend_outer_edges_updated
     )
     high_precision: BoolProperty(
         name="High precision height data generation",

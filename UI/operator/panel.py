@@ -191,6 +191,8 @@ class SettingsOperator(PanelOperator):
             col.separator()
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "ground_filter_size", "Ground filter size (in meters, 0 = off)")
             col.separator()
+            draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "blend_outer_edges", "Blend the outer edges of the scenery")
+            col.separator()
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "high_precision", "High precision height data generation")
             col.separator()
 

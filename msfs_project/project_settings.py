@@ -71,6 +71,7 @@ class ProjectSettings(Settings):
     hue: float
     high_precision: str
     ground_filter_size: float
+    blend_outer_edges: str
     exclude_water: str
     exclude_forests: str
     exclude_woods: str
@@ -92,6 +93,7 @@ class ProjectSettings(Settings):
     LODS_SECTION = "LODS"
     HEIGHT_MAPS_SECTION = "HEIGHT_MAPS"
     GROUND_FILTER_SIZE_SETTING = "ground_filter_size"
+    BLEND_OUTER_EDGES_SETTING = "blend_outer_edges"
     TARGET_MIN_SIZE_VALUES_SETTING = "target_min_size_values"
 
     def __init__(self, global_path, path, project_name):
@@ -125,6 +127,7 @@ class ProjectSettings(Settings):
         self.hue = 1.0
         self.high_precision = "False"
         self.ground_filter_size = DEFAULT_GROUND_FILTER_SIZE
+        self.blend_outer_edges = "True"
         self.exclude_ground = "False"
         self.exclude_water = "True"
         self.exclude_forests = "True"
@@ -188,6 +191,7 @@ class ProjectSettings(Settings):
         self.hue = "{:.2f}".format(float(str(self.hue))).rstrip("0").rstrip(".")
 
         self.high_precision = json.loads(self.high_precision.lower())
+        self.blend_outer_edges = json.loads(str(self.blend_outer_edges).lower())
         self.exclude_ground = json.loads(self.exclude_ground.lower())
         self.exclude_water = json.loads(self.exclude_water.lower())
         self.exclude_forests = json.loads(self.exclude_forests.lower())
@@ -227,6 +231,7 @@ class ProjectSettings(Settings):
         if not config.has_section(self.HEIGHT_MAPS_SECTION):
             config.add_section(self.HEIGHT_MAPS_SECTION)
         config.set(self.HEIGHT_MAPS_SECTION, self.GROUND_FILTER_SIZE_SETTING, str(self.ground_filter_size))
+        config.set(self.HEIGHT_MAPS_SECTION, self.BLEND_OUTER_EDGES_SETTING, str(self.blend_outer_edges))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
             config.write(configfile)

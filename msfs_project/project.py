@@ -962,7 +962,7 @@ class MsfsProject:
 
         return ",".join(edges)
 
-    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0):
+    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0, blend_outer_edges=True):
         data = []
 
         for guid, tile in self.tiles.items():
@@ -1008,7 +1008,7 @@ class MsfsProject:
 
             params.extend(["--high_precision", str(high_precision)])
             params.extend(["--ground_filter_size", str(ground_filter_size)])
-            outer_edges = self.__find_tile_outer_edges(tile)
+            outer_edges = self.__find_tile_outer_edges(tile) if blend_outer_edges else str()
             if outer_edges:
                 params.extend(["--outer_edges", outer_edges])
             data.append({"name": tile.name, "params": params})
@@ -1374,7 +1374,7 @@ class MsfsProject:
         self.objects_xml.remove_height_maps(HEIGHT_MAPS_GROUP_DISPLAY_NAME, True)
         new_group_id = self.objects_xml.get_new_group_id()
 
-        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size))
+        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size), blend_outer_edges=self.settings.blend_outer_edges)
         self.__multithread_blender_process_data(tiles_data, "calculate_tile_height_data.py", "CALCULATE HEIGHT MAPS FOR EACH TILE", "height map calculated")
         self.__add_height_maps_to_objects_xml()
 
