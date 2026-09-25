@@ -78,7 +78,7 @@ from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
 from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material, get_material_output
-from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, GROUND_FILTER_MARGIN
+from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -746,7 +746,7 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
-def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, debug=False):
+def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), debug=False):
     if not bpy.context.scene:
         return False
 
@@ -793,7 +793,7 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
         hmatrix = fix_bridge_height_data_on_water(tile, depsgraph, lat, lon, altitude, hmatrix)
 
     if ground_filter_size > 0.0:
-        hmatrix = filter_ground_height_data(hmatrix, ground_filter_size)
+        hmatrix = filter_ground_height_data(hmatrix, ground_filter_size, height_adjustment=height_adjustment, high_precision=high_precision, outer_edges=outer_edges)
 
     inverted_hmatrix = defaultdict(dict)
 
@@ -825,10 +825,12 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
     return hmatrix, inverted_hmatrix, width, altitude
 
 
-def filter_ground_height_data(hmatrix, filter_size):
+def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_precision=False, outer_edges=str()):
     # the rays hit the top of the buildings and trees, as the Google Earth tiles have no ground under them.
     # A morphological opening (minimum, then maximum over the filter window) removes everything narrower than the window,
-    # then the result is smoothed and kept under the tile surface, so that the MSFS terrain does not go through the tiles
+    # then the result is smoothed and kept under the tile surface, so that the MSFS terrain does not go through the tiles.
+    # On the outer edges of the scenery (N, S, E, W letters), the ground is raised up to the tiles ground, to avoid a step
+    # between the border of the tiles and the MSFS terrain
     ys = sorted(hmatrix.keys())
     xs = sorted({x for heights in hmatrix.values() for x in heights})
     if len(xs) < 3 or len(ys) < 3:
@@ -848,9 +850,28 @@ def filter_ground_height_data(hmatrix, filter_size):
     window = max(3, int(round(filter_size / cell_size)) | 1)
 
     filled = np.where(known, heights, np.nanmax(heights))
-    ground = ndimage.grey_opening(filled, size=(window, window), mode="nearest")
-    ground = ndimage.gaussian_filter(ground, sigma=1.0, mode="nearest")
-    ground = np.minimum(ground, filled) - GROUND_FILTER_MARGIN
+    # the rays cast from the bottom on the outer ring of the grid can hit the skirts of the tiles, several meters under the ground
+    filled[0, :], filled[-1, :] = filled[1, :], filled[-2, :]
+    filled[:, 0], filled[:, -1] = filled[:, 1], filled[:, -2]
+    surface = ndimage.grey_opening(filled, size=(window, window), mode="nearest")
+    surface = ndimage.gaussian_filter(surface, sigma=1.0, mode="nearest")
+    surface = np.minimum(surface, filled)
+
+    # the height data calculated from the bottom includes the height adjustment, the one calculated from the top is 1 meter above the tiles
+    tiles_ground = surface - (HIGH_PRECISION_HEIGHT_OFFSET if high_precision else height_adjustment)
+    ground = tiles_ground + height_adjustment - GROUND_FILTER_MARGIN
+
+    edges = {edge.strip().upper() for edge in outer_edges.split(",") if edge.strip()}
+    if edges:
+        # the tiles are imported with their south west corner at the origin: the north is -Y and the east is -X
+        grid_y = np.array(ys)[:, None] * np.ones((1, len(xs)))
+        grid_x = np.ones((len(ys), 1)) * np.array(xs)[None, :]
+        distances = {"N": grid_y - ys[0], "S": ys[-1] - grid_y, "E": grid_x - xs[0], "W": xs[-1] - grid_x}
+        edge_distance = np.min([distances[edge] for edge in edges if edge in distances], axis=0)
+        weight = np.clip(1.0 - edge_distance / HEIGHT_MAP_EDGE_BLEND_DISTANCE, 0.0, 1.0)
+        weight = weight * weight * (3.0 - 2.0 * weight)
+        edge_ground = tiles_ground - HEIGHT_MAP_EDGE_CLEARANCE
+        ground = ground + weight * np.maximum(edge_ground - ground, 0.0)
 
     results = defaultdict(dict)
     for j, y in enumerate(ys):

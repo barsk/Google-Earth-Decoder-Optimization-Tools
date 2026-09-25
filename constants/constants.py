@@ -149,6 +149,13 @@ BUILDING_EXCLUSION_BORDER_INSET = 0
 DEFAULT_GROUND_FILTER_SIZE = 40.0
 # keep the filtered ground a bit under the Google Earth tiles surface
 GROUND_FILTER_MARGIN = 0.5
+# on the outer border of the scenery, the ground is raised up to the tiles ground over this distance (in meters),
+# to avoid a step between the border of the tiles and the MSFS terrain
+HEIGHT_MAP_EDGE_BLEND_DISTANCE = 20.0
+# distance kept between the raised ground and the tiles ground on the outer border of the scenery (in meters)
+HEIGHT_MAP_EDGE_CLEARANCE = 0.2
+# the height calculation from the top (high precision) puts the height data 1 meter above the tiles surface
+HIGH_PRECISION_HEIGHT_OFFSET = 1.0
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"

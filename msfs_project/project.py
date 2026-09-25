@@ -942,6 +942,26 @@ class MsfsProject:
 
         return chunks(data, nb_parallel_blender_tasks)
 
+    def __find_tile_outer_edges(self, tile):
+        # sides of the tile which are on the border of the scenery (no neighbour tile)
+        eps = 1e-7
+        n, s, w, e = tile.coords
+        others = [other.coords for other in self.tiles.values() if other is not tile and other.valid and other.coords]
+        lat_overlap = lambda o: o[1] < n - eps and o[0] > s + eps
+        lon_overlap = lambda o: o[2] < e - eps and o[3] > w + eps
+        edges = []
+
+        if not any(abs(o[1] - n) < eps and lon_overlap(o) for o in others):
+            edges.append("N")
+        if not any(abs(o[0] - s) < eps and lon_overlap(o) for o in others):
+            edges.append("S")
+        if not any(abs(o[2] - e) < eps and lat_overlap(o) for o in others):
+            edges.append("E")
+        if not any(abs(o[3] - w) < eps and lat_overlap(o) for o in others):
+            edges.append("W")
+
+        return ",".join(edges)
+
     def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0):
         data = []
 
@@ -988,6 +1008,9 @@ class MsfsProject:
 
             params.extend(["--high_precision", str(high_precision)])
             params.extend(["--ground_filter_size", str(ground_filter_size)])
+            outer_edges = self.__find_tile_outer_edges(tile)
+            if outer_edges:
+                params.extend(["--outer_edges", outer_edges])
             data.append({"name": tile.name, "params": params})
 
         return chunks(data, nb_parallel_blender_tasks if parallel else 1)
