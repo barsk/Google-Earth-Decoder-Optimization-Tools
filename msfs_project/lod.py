@@ -185,6 +185,7 @@ class MsfsLod:
     def prepare_for_msfs(self, model_file_path=None):
         model_file = MsfsGltf(os.path.join(self.folder, self.model_file)) if model_file_path is None else MsfsGltf(model_file_path)
         model_file.fix_doublesided()
+        model_file.fix_metallic()
         model_file.add_asobo_extensions()
         model_file.remove_texture_path(self.name)
         model_file.fix_gltf_nodes()

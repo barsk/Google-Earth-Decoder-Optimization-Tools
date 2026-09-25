@@ -32,6 +32,8 @@ class MsfsGltf:
     MIME_TYPE_TAG = "mimeType"
     URI_TAG = "uri"
     DOUBLESIDED_TAG = "doubleSided"
+    PBR_METALLIC_ROUGHNESS_TAG = "pbrMetallicRoughness"
+    METALLIC_FACTOR_TAG = "metallicFactor"
     ASSET_TAG = "asset"
     SCENE_TAG = "scene"
     TAGS_TAG = "tags"
@@ -117,6 +119,16 @@ class MsfsGltf:
 
         for material in self.data[self.MATERIALS_TAG]:
             material[self.DOUBLESIDED_TAG] = False
+
+    def fix_metallic(self):
+        # the tiles are not metallic (metallicFactor 0 when downloaded), but the MSFS glTF exporter writes its own
+        # 1.0 default, as it doesn't read the imported material values of non-MSFS glTF files. Metallic surfaces have
+        # no diffuse color, so the tiles render much darker in the sim
+        if not self.data: return
+        if self.MATERIALS_TAG not in self.data.keys(): return
+
+        for material in self.data[self.MATERIALS_TAG]:
+            material.setdefault(self.PBR_METALLIC_ROUGHNESS_TAG, {})[self.METALLIC_FACTOR_TAG] = 0.0
 
     def clean_empty_meshes(self):
         if not self.data: return
