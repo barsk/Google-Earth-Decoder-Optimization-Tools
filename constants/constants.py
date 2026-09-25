@@ -142,6 +142,9 @@ SCRIPT_PREFIX = "_script"
 COLLIDER_SUFFIX = "_collider"
 GEOCODE_SUFFIX = "_geocode"
 HEIGHT_MAP_PREFIX = "height_map_"
+# inset of the MSFS buildings exclusion polygon from the border of the tiles (in Web Mercator units, about half a meter at 60° N).
+# GEDOT used 100, which left the MSFS buildings of a ~50 m band along the border of the scenery under the Google Earth tiles
+BUILDING_EXCLUSION_BORDER_INSET = 0
 # width (in meters) of the filter removing the buildings and trees from the height data, 0 to disable it
 DEFAULT_GROUND_FILTER_SIZE = 40.0
 # keep the filtered ground a bit under the Google Earth tiles surface
