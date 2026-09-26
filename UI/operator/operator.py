@@ -155,6 +155,12 @@ class ActionOperator(Operator):
         # clear and open the system console
         open_console()
 
+        # the scripts read the project settings from the ini file: save the settings displayed in the panels, which can differ
+        # from the file (the settings are loaded once, the file can be replaced or updated by a script)
+        project_settings = getattr(context.scene, "project_settings", None)
+        if project_settings is not None:
+            project_settings.save()
+
 
 class OT_InitMsfsSceneryProjectOperator(ActionOperator):
     bl_idname = "wm.init_msfs_scenery_project"

@@ -168,12 +168,15 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
 
     def water_depth_updated(self, context):
         context.scene.project_settings.water_depth = "{:.1f}".format(float(str(self.water_depth))).rstrip("0").rstrip(".")
+        context.scene.project_settings.save()
 
     def flat_water_level_updated(self, context):
         context.scene.project_settings.flat_water_level = self.flat_water_level
+        context.scene.project_settings.save()
 
     def blend_outer_edges_updated(self, context):
         context.scene.project_settings.blend_outer_edges = self.blend_outer_edges
+        context.scene.project_settings.save()
 
     def high_precision_updated(self, context):
         context.scene.project_settings.high_precision = self.high_precision
@@ -181,6 +184,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
 
     def ground_filter_size_updated(self, context):
         context.scene.project_settings.ground_filter_size = "{:.1f}".format(float(str(self.ground_filter_size))).rstrip("0").rstrip(".")
+        context.scene.project_settings.save()
 
     def height_adjustment_updated(self, context):
         context.scene.project_settings.height_adjustment = "{:.1f}".format(float(str(self.height_adjustment))).rstrip("0").rstrip(".")
