@@ -1014,11 +1014,12 @@ def write_water_areas_file(shp_file_paths, file_path):
     return True
 
 
-def flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=0.0, shore_margin=3.0, grid_coverage=0.95):
+def flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=0.0, shore_margin=3.0, grid_coverage=0.95, max_depth=0.0, shore_depth=1.0, depth_slope=0.15):
     # height_maps: list of dicts with the "values" (rows from south to north, columns from west to east), the "width" (values per row)
     # and the "bounds" (north, south, west, east) of the tiles. samples: list of dicts with the "water" and "shore" samples
     # ([lon, lat, height of the tiles surface]) of the tiles. Each water body gets a flat level: its waterline on the tiles
     # (a low percentile of its shore ground), limited by its water surface (for the water surrounded by walls).
+    # Inside the water bodies, the bottom goes down from shore_depth at the shore, by depth_slope, to max_depth (0: flat bottom at the level).
     # Returns the levels of the water bodies, with their number of points and the method used
     import numpy as np
 
@@ -1084,20 +1085,25 @@ def flatten_water_height_data(height_maps, samples, water_areas_file_path, level
         else:
             continue
 
-        body_points.append((level + level_offset, method, inside, within(points_gdf, body.buffer(shore_margin))))
+        depths = {}
+        if max_depth > 0.0:
+            distances = points_gdf.geometry.iloc[inside].distance(body.boundary)
+            depths = {i: min(max_depth, shore_depth + depth_slope * float(d)) for i, d in zip(inside, distances)}
+
+        body_points.append((level + level_offset, method, inside, within(points_gdf, body.buffer(shore_margin)), depths))
 
     # the points inside a water body first, then the points on its shore
     assigned = set()
     for key in (2, 3):
         for body in body_points:
-            level = body[0]
+            level, depths = body[0], body[4]
             for i in body[key]:
                 if i not in assigned:
                     height_map, j, _ = points[i]
-                    height_map["values"][j] = level
+                    height_map["values"][j] = level - depths.get(i, 0.0)
                     assigned.add(i)
 
-    return [(level, len(inside), method) for level, method, inside, _ in body_points]
+    return [(level, len(inside), method) for level, method, inside, _, _ in body_points]
 
 
 def create_whole_water_gdf(natural_water, water, sea):

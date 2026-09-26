@@ -172,6 +172,10 @@ WATERLINE_SAMPLE_DISTANCE = 6.0
 WATERLINE_PERCENTILE = 5
 WATER_SURFACE_PERCENTILE = 75
 WATERLINE_MIN_SAMPLES = 20
+# the bottom of the water bodies goes down from this depth at the shore (in meters), by this slope, to the water depth setting
+WATER_SHORE_DEPTH = 1.0
+WATER_DEPTH_SLOPE = 0.15
+DEFAULT_WATER_DEPTH = 3.0
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"

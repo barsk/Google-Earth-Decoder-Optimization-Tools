@@ -1414,7 +1414,8 @@ class MsfsProject:
                     height_maps.append({"xml": xml, "elem": height_data, "width": int(height_data.get(xml.WIDTH_ATTR)),
                                         "values": [float(h) for h in height_data.get(xml.DATA_ATTR).split()], "bounds": get_coords_from_file_name(tile.name)})
 
-        levels = flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=WATER_LEVEL_OFFSET, shore_margin=WATER_LEVEL_SHORE_MARGIN, grid_coverage=HEIGHT_MAP_GRID_COVERAGE)
+        levels = flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=WATER_LEVEL_OFFSET, shore_margin=WATER_LEVEL_SHORE_MARGIN, grid_coverage=HEIGHT_MAP_GRID_COVERAGE,
+                                           max_depth=float(self.settings.water_depth), shore_depth=WATER_SHORE_DEPTH, depth_slope=WATER_DEPTH_SLOPE)
 
         for height_map in height_maps:
             height_map["elem"].set(height_map["xml"].DATA_ATTR, " ".join(str(h) for h in height_map["values"]))

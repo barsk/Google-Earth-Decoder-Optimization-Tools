@@ -166,6 +166,9 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.process_all = self.process_all
         context.scene.project_settings.save()
 
+    def water_depth_updated(self, context):
+        context.scene.project_settings.water_depth = "{:.1f}".format(float(str(self.water_depth))).rstrip("0").rstrip(".")
+
     def flat_water_level_updated(self, context):
         context.scene.project_settings.flat_water_level = self.flat_water_level
 
@@ -480,6 +483,16 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         description="Process all the tiles (if unticked, process only the tiles that have not been cleaned)",
         default=bpy.types.Scene.project_settings.process_all if bpy.types.Scene.project_settings is not None else False,
         update=process_all_updated
+    )
+    water_depth: FloatProperty(
+        name="Water depth",
+        description="Maximum depth (in meters) of the bottom of the water bodies, under their flat level. The bottom goes down from 1 meter at the shore (0: flat bottom at the level)",
+        min=0.0,
+        soft_max=20.0,
+        step=50,
+        precision=1,
+        default=float(bpy.types.Scene.project_settings.water_depth) if bpy.types.Scene.project_settings is not None else 3.0,
+        update=water_depth_updated
     )
     flat_water_level: BoolProperty(
         name="Flat water level",
