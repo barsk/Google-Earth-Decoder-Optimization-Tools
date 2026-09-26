@@ -165,8 +165,9 @@ HEIGHT_MAP_GRID_COVERAGE = 0.95
 WATER_LEVEL_OFFSET = 0.0
 # the height data points closer than this distance (in meters) to a water body are set to its level
 WATER_LEVEL_SHORE_MARGIN = 3.0
-# the level of a water body is its waterline on the Google Earth tiles: a low percentile of the ground within this distance (in meters) of its shore.
-# The Google Earth water surface is too noisy (reflections), it only limits the level of the water bodies surrounded by walls
+# the level of a water body is the upper part of the Google Earth water surface (what remains of it after the water removal must be under
+# the MSFS water), at least its waterline (a low percentile of the ground within this distance (in meters) of its shore), at most the median
+# ground of its shore (water surrounded by walls)
 WATERLINE_FILE_PREFIX = "waterline_"
 WATERLINE_SAMPLE_DISTANCE = 6.0
 WATERLINE_PERCENTILE = 5
@@ -175,6 +176,9 @@ WATERLINE_MIN_SAMPLES = 20
 # the bottom of the water bodies goes down from this depth at the shore (in meters), by this slope, to the water depth setting.
 # The MSFS water is a thin layer (about 0.6 m) on the terrain: its surface follows a sloping bottom, so the default is a flat bottom
 WATER_SHORE_DEPTH = 1.0
+# the water areas removed from the Google Earth tiles were reduced by 5 (Web Mercator units, about 2.5 m at 60 N): it left a strip of the
+# Google Earth water surface along the shores and the border of the scenery, above the MSFS water. 0 cuts at the osm water outline
+WATER_EXCLUSION_INSET = 0
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

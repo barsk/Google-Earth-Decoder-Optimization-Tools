@@ -142,7 +142,8 @@ class MsfsTile(MsfsSceneObject):
         osm_xml.create_from_geodataframes([self.bbox_gdf.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
 
     def create_exclusion_mask_osm_file(self, dest_folder, b, exclusion_mask, building_mask, water_mask, construction_mask, road_mask, bridges_mask, hidden_roads, amenity_mask, residential_mask, industrial_mask, airport_mask, rocks_mask, keep_holes, file_prefix):
-        bbox_gdf = resize_gdf(self.bbox_gdf, 10 if keep_holes else 200)
+        # two sided: a single sided buffer of the (counter-clockwise) tile outline does not enlarge it, and the tile meshes overlap their neighbours
+        bbox_gdf = resize_gdf(self.bbox_gdf, 10 if keep_holes else 200, single_sided=False)
         exclusion_mask_gdf = exclusion_mask.clip(bbox_gdf)
 
         if not exclusion_mask_gdf.empty:

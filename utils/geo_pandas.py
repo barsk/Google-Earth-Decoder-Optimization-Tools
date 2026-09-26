@@ -33,7 +33,7 @@ with warnings.catch_warnings():
     warnings.simplefilter(action="ignore", category=RuntimeWarning, append=True)
     warnings.simplefilter(action="ignore", category=ShapelyDeprecationWarning, append=True)
 
-from constants import BUILDING_EXCLUSION_BORDER_INSET, WATERLINE_SAMPLE_DISTANCE, WATERLINE_PERCENTILE, WATER_SURFACE_PERCENTILE, WATERLINE_MIN_SAMPLES, GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES_FOLDER, OSM_LAND_SHAPEFILE, ROAD_OSM_KEY, BRIDGE_OSM_TAG, SERVICE_OSM_KEY, NOT_SHORE_WATER_OSM_KEY, WATER_OSM_KEY, NATURAL_OSM_KEY, OSM_TAGS, FOOTWAY_OSM_TAG, PATH_OSM_TAG, MAN_MADE_OSM_KEY, PIER_OSM_TAG, GOLF_OSM_KEY, FAIRWAY_OSM_TAG, EOL, CEND, TUNNEL_OSM_TAG, SEAMARK_TYPE_OSM_TAG, BUILDING_OSM_KEY, SHP_FILE_EXT, ELEMENT_TY_OSM_KEY, OSMID_OSM_KEY, RAILWAY_OSM_KEY, LANES_OSM_KEY, ONEWAY_OSM_KEY, ROAD_WITH_BORDERS, \
+from constants import BUILDING_EXCLUSION_BORDER_INSET, WATERLINE_SAMPLE_DISTANCE, WATERLINE_PERCENTILE, WATER_SURFACE_PERCENTILE, WATERLINE_MIN_SAMPLES, WATER_EXCLUSION_INSET, GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES_FOLDER, OSM_LAND_SHAPEFILE, ROAD_OSM_KEY, BRIDGE_OSM_TAG, SERVICE_OSM_KEY, NOT_SHORE_WATER_OSM_KEY, WATER_OSM_KEY, NATURAL_OSM_KEY, OSM_TAGS, FOOTWAY_OSM_TAG, PATH_OSM_TAG, MAN_MADE_OSM_KEY, PIER_OSM_TAG, GOLF_OSM_KEY, FAIRWAY_OSM_TAG, EOL, CEND, TUNNEL_OSM_TAG, SEAMARK_TYPE_OSM_TAG, BUILDING_OSM_KEY, SHP_FILE_EXT, ELEMENT_TY_OSM_KEY, OSMID_OSM_KEY, RAILWAY_OSM_KEY, LANES_OSM_KEY, ONEWAY_OSM_KEY, ROAD_WITH_BORDERS, \
     ROAD_LANE_WIDTH, GEOCODE_OSM_FILE_PREFIX, PEDESTRIAN_ROAD_TYPE, FOOTWAY_ROAD_TYPE, SERVICE_ROAD_TYPE, LANDUSE_OSM_KEY, CONSTRUCTION_OSM_KEY, GDAL_LIB_PREFIX, FIONA_LIB_PREFIX, LAND_MASS_REPO, LAND_MASS_ARCHIVE, LEISURE_OSM_KEY, NETWORKX_LIB, RTREE_LIB, MATPLOTLIB_LIB, PANDAS_LIB, GEOPANDAS_LIB, OSMNX_LIB, SHAPELY_LIB, PATH_ROAD_TYPE, TRACK_ROAD_TYPE, AREA_OSM_TAG, NOT_EXCLUSION_BUILDING_OSM_KEY, WALL_OSM_KEY, WALL_OSM_TAG, CASTLE_WALL_OSM_TAG, CYCLEWAY_ROAD_TYPE, FULL_PREFIX, \
     ROAD_REMOVAL_LANDUSE_OSM_KEY, ROAD_REMOVAL_NATURAL_OSM_KEY, PROPOSED_OSM_TAG, LANDMARK_PREFIX, LON_OSM_KEY, LAT_OSM_KEY, FOREST_OSM_TAG, WOOD_OSM_TAG, SHAPELY_TYPE, OSMNX_LIB_VERSION, DEFAULT_OVERPASS_API_URI
 from utils.colored_print import pr_bg_orange
@@ -920,7 +920,9 @@ def prepare_water_gdf(gdf, waterway):
 
 def prepare_water_exclusion_gdf(gdf, building, bridges):
     result = gdf.copy()
-    result = difference_gdf(resize_gdf(result, -5), building)
+    if WATER_EXCLUSION_INSET > 0:
+        result = resize_gdf(result, -WATER_EXCLUSION_INSET)
+    result = difference_gdf(result, building)
     result = difference_gdf(result, bridges)
 
     if not result.empty:
@@ -1072,16 +1074,20 @@ def flatten_water_height_data(height_maps, samples, water_areas_file_path, level
         water_heights = [water_samples[i][2] for i in within(water_samples_gdf, body)]
         shore_heights = [shore_samples[i][2] for i in within(shore_samples_gdf, body.buffer(WATERLINE_SAMPLE_DISTANCE + 1.0).difference(body))]
 
-        if len(shore_heights) >= WATERLINE_MIN_SAMPLES:
-            level = float(np.percentile(shore_heights, WATERLINE_PERCENTILE))
-            method = "waterline of %d shore samples" % len(shore_heights)
-            if len(water_heights) >= WATERLINE_MIN_SAMPLES:
-                surface = float(np.percentile(water_heights, WATER_SURFACE_PERCENTILE))
-                if surface < level:
-                    level, method = surface, "water surface, under the waterline of %d shore samples" % len(shore_heights)
+        if len(water_heights) >= WATERLINE_MIN_SAMPLES and len(shore_heights) >= WATERLINE_MIN_SAMPLES:
+            # the level of the Google Earth water surface, so that what remains of it is under the MSFS water, but not under the waterline,
+            # and not above the median shore ground (water surrounded by walls)
+            surface = float(np.percentile(water_heights, WATER_SURFACE_PERCENTILE))
+            waterline = float(np.percentile(shore_heights, WATERLINE_PERCENTILE))
+            shore = float(np.median(shore_heights))
+            level = min(max(surface, waterline), shore)
+            method = "water surface %.2f, waterline %.2f, shore %.2f, %d water and %d shore samples" % (surface, waterline, shore, len(water_heights), len(shore_heights))
         elif water_heights:
             level = float(np.median(water_heights))
             method = "water surface of %d samples" % len(water_heights)
+        elif len(shore_heights) >= WATERLINE_MIN_SAMPLES:
+            level = float(np.percentile(shore_heights, WATERLINE_PERCENTILE))
+            method = "waterline of %d shore samples" % len(shore_heights)
         else:
             continue
 
