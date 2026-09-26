@@ -55,6 +55,7 @@ ZIP_FILE_EXT = ".zip"
 TXT_FILE_EXT = ".txt"
 WHL_FILE_EXT = ".whl"
 XML_FILE_EXT = ".xml"
+JSON_FILE_EXT = ".json"
 GLTF_FILE_EXT = ".gltf"
 BIN_FILE_EXT = ".bin"
 DBF_FILE_EXT = ".dbf"
@@ -158,6 +159,19 @@ HEIGHT_MAP_EDGE_CLEARANCE = 0.2
 HIGH_PRECISION_HEIGHT_OFFSET = 1.0
 # water areas of the project (osm water, natural water and sea), used by the height data calculation to keep the water level
 WATER_AREAS_FILE = "water_areas.geojson"
+# the height data grid covers this part of the tile, centered, and is stretched on the whole tile by MSFS
+HEIGHT_MAP_GRID_COVERAGE = 0.95
+# the MSFS water surface follows the terrain: each water body gets a flat level at the Google Earth water surface, plus this offset (in meters)
+WATER_LEVEL_OFFSET = 0.0
+# the height data points closer than this distance (in meters) to a water body are set to its level
+WATER_LEVEL_SHORE_MARGIN = 3.0
+# the level of a water body is its waterline on the Google Earth tiles: a low percentile of the ground within this distance (in meters) of its shore.
+# The Google Earth water surface is too noisy (reflections), it only limits the level of the water bodies surrounded by walls
+WATERLINE_FILE_PREFIX = "waterline_"
+WATERLINE_SAMPLE_DISTANCE = 6.0
+WATERLINE_PERCENTILE = 5
+WATER_SURFACE_PERCENTILE = 75
+WATERLINE_MIN_SAMPLES = 20
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"

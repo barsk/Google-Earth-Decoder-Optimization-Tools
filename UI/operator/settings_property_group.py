@@ -166,6 +166,9 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.process_all = self.process_all
         context.scene.project_settings.save()
 
+    def flat_water_level_updated(self, context):
+        context.scene.project_settings.flat_water_level = self.flat_water_level
+
     def blend_outer_edges_updated(self, context):
         context.scene.project_settings.blend_outer_edges = self.blend_outer_edges
 
@@ -477,6 +480,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         description="Process all the tiles (if unticked, process only the tiles that have not been cleaned)",
         default=bpy.types.Scene.project_settings.process_all if bpy.types.Scene.project_settings is not None else False,
         update=process_all_updated
+    )
+    flat_water_level: BoolProperty(
+        name="Flat water level",
+        description="Set the height data of each water body to a flat level, at the Google Earth water surface. The MSFS water surface follows the terrain",
+        default=bpy.types.Scene.project_settings.flat_water_level if bpy.types.Scene.project_settings is not None else True,
+        update=flat_water_level_updated
     )
     blend_outer_edges: BoolProperty(
         name="Blend the outer edges of the scenery",

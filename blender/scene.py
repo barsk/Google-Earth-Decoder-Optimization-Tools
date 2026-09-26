@@ -19,6 +19,7 @@
 import os
 import shutil
 from math import floor, cos, radians
+import json
 
 from mathutils.bvhtree import BVHTree
 from collections import defaultdict
@@ -78,7 +79,7 @@ from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
 from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material, get_material_output
-from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET
+from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -746,7 +747,7 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
-def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), water_areas_file_path=str(), debug=False):
+def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), water_areas_file_path=str(), waterline_file_path=str(), debug=False):
     if not bpy.context.scene:
         return False
 
@@ -795,7 +796,14 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
     # the water keeps its height data, the ground filter would lower it, and the shores with it
     water_keys = set()
     if os.path.exists(positioning_file_path) and os.path.exists(water_areas_file_path):
-        water_keys = find_height_data_in_areas(hmatrix, positioning_file_path, water_areas_file_path)
+        water_keys, shore_keys, to_lon_lat = find_height_data_on_water(hmatrix, positioning_file_path, water_areas_file_path, WATERLINE_SAMPLE_DISTANCE)
+
+        # samples of the tiles surface on the water and its shore, used to find the level of the water bodies of the whole project
+        if waterline_file_path and water_keys:
+            calculation_offset = HIGH_PRECISION_HEIGHT_OFFSET if high_precision else height_adjustment
+            samples = {name: [to_lon_lat(y, x) + (hmatrix[y][x] - calculation_offset,) for y, x in keys] for name, keys in (("water", water_keys), ("shore", shore_keys))}
+            with open(waterline_file_path, "w") as waterline_file:
+                json.dump(samples, waterline_file)
 
     if ground_filter_size > 0.0:
         hmatrix = filter_ground_height_data(hmatrix, ground_filter_size, height_adjustment=height_adjustment, high_precision=high_precision, outer_edges=outer_edges, water_keys=water_keys)
@@ -848,27 +856,39 @@ def read_osm_polygons(osm_file_path):
     return unary_union(polygons) if polygons else None
 
 
-def find_height_data_in_areas(hmatrix, positioning_file_path, areas_file_path):
-    # height data points (y, x) inside the areas of a GeoJSON file.
+def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, shore_distance):
+    # height data points (y, x) inside the water areas of a GeoJSON file, and on their shore (closer than shore_distance meters).
     # The tiles are imported with their south west corner (the minimum of the positioning bounding box) at the origin,
-    # the north is -Y and the east is -X
+    # the north is -Y and the east is -X. Returns the water points, the shore points and a (y, x) -> (lon, lat) function
     import geopandas as gpd
+    from shapely import affinity
     from shapely.prepared import prep
 
     bbox = read_osm_polygons(positioning_file_path)
     areas_gdf = gpd.read_file(areas_file_path)
     if bbox is None or areas_gdf.empty:
-        return set()
-
-    areas = areas_gdf.to_crs("EPSG:4326").unary_union
+        return set(), set(), None
 
     west, south = bbox.bounds[0], bbox.bounds[1]
     meters_per_lat_degree = 111320.0
     meters_per_lon_degree = meters_per_lat_degree * cos(radians(south))
-    areas = prep(areas)
+    to_lon_lat = lambda y, x: (west - x / meters_per_lon_degree, south - y / meters_per_lat_degree)
 
-    return {(y, x) for y, heights in hmatrix.items() for x in heights
-            if areas.contains(geometry.Point(west - x / meters_per_lon_degree, south - y / meters_per_lat_degree))}
+    # the water areas in the coordinates of the tile, in meters
+    areas = affinity.affine_transform(areas_gdf.to_crs("EPSG:4326").unary_union, [-meters_per_lon_degree, 0.0, 0.0, -meters_per_lat_degree, meters_per_lon_degree * west, meters_per_lat_degree * south])
+    prepared_areas = prep(areas)
+    prepared_shores = prep(areas.buffer(shore_distance))
+    water_keys, shore_keys = set(), set()
+
+    for y, heights in hmatrix.items():
+        for x in heights:
+            point = geometry.Point(x, y)
+            if prepared_areas.contains(point):
+                water_keys.add((y, x))
+            elif prepared_shores.contains(point):
+                shore_keys.add((y, x))
+
+    return water_keys, shore_keys, to_lon_lat
 
 
 def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_precision=False, outer_edges=str(), water_keys=frozenset()):

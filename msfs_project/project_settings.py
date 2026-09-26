@@ -72,6 +72,7 @@ class ProjectSettings(Settings):
     high_precision: str
     ground_filter_size: float
     blend_outer_edges: str
+    flat_water_level: str
     exclude_water: str
     exclude_forests: str
     exclude_woods: str
@@ -94,6 +95,7 @@ class ProjectSettings(Settings):
     HEIGHT_MAPS_SECTION = "HEIGHT_MAPS"
     GROUND_FILTER_SIZE_SETTING = "ground_filter_size"
     BLEND_OUTER_EDGES_SETTING = "blend_outer_edges"
+    FLAT_WATER_LEVEL_SETTING = "flat_water_level"
     TARGET_MIN_SIZE_VALUES_SETTING = "target_min_size_values"
 
     def __init__(self, global_path, path, project_name):
@@ -128,6 +130,7 @@ class ProjectSettings(Settings):
         self.high_precision = "False"
         self.ground_filter_size = DEFAULT_GROUND_FILTER_SIZE
         self.blend_outer_edges = "True"
+        self.flat_water_level = "True"
         self.exclude_ground = "False"
         self.exclude_water = "True"
         self.exclude_forests = "True"
@@ -192,6 +195,7 @@ class ProjectSettings(Settings):
 
         self.high_precision = json.loads(self.high_precision.lower())
         self.blend_outer_edges = json.loads(str(self.blend_outer_edges).lower())
+        self.flat_water_level = json.loads(str(self.flat_water_level).lower())
         self.exclude_ground = json.loads(self.exclude_ground.lower())
         self.exclude_water = json.loads(self.exclude_water.lower())
         self.exclude_forests = json.loads(self.exclude_forests.lower())
@@ -232,6 +236,7 @@ class ProjectSettings(Settings):
             config.add_section(self.HEIGHT_MAPS_SECTION)
         config.set(self.HEIGHT_MAPS_SECTION, self.GROUND_FILTER_SIZE_SETTING, str(self.ground_filter_size))
         config.set(self.HEIGHT_MAPS_SECTION, self.BLEND_OUTER_EDGES_SETTING, str(self.blend_outer_edges))
+        config.set(self.HEIGHT_MAPS_SECTION, self.FLAT_WATER_LEVEL_SETTING, str(self.flat_water_level))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
             config.write(configfile)

@@ -17,6 +17,7 @@
 #  <pep8 compliant>
 
 import copy
+import json
 import re
 import itertools
 import sys
@@ -65,7 +66,8 @@ from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
 from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
-from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file
+from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, flatten_water_height_data
+from utils.octant import get_coords_from_file_name
 from msfs_project.gltf import MsfsGltf
 from msfs_project.shape import MsfsShapes
 from utils import replace_in_file, is_octant, backup_file, ScriptError, print_title, \
@@ -1377,6 +1379,9 @@ class MsfsProject:
         self.objects_xml.remove_height_maps(HEIGHT_MAPS_GROUP_DISPLAY_NAME, True)
         new_group_id = self.objects_xml.get_new_group_id()
 
+        for waterline_file in Path(self.xmlfiles_folder).glob(WATERLINE_FILE_PREFIX + "*" + JSON_FILE_EXT):
+            waterline_file.unlink()
+
         water_areas_file_path = os.path.join(self.osmfiles_folder, WATER_AREAS_FILE)
         water_shp_file_paths = [os.path.join(self.shpfiles_folder, name + SHP_FILE_EXT) for name in (WATER_OSM_KEY, NATURAL_WATER_OSM_KEY, SEA_OSM_TAG)]
         if not write_water_areas_file(water_shp_file_paths, water_areas_file_path):
@@ -1384,7 +1389,40 @@ class MsfsProject:
 
         tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size), blend_outer_edges=self.settings.blend_outer_edges, water_areas_file_path=water_areas_file_path)
         self.__multithread_blender_process_data(tiles_data, "calculate_tile_height_data.py", "CALCULATE HEIGHT MAPS FOR EACH TILE", "height map calculated")
+        if water_areas_file_path and self.settings.flat_water_level:
+            self.__flatten_water_levels(water_areas_file_path)
         self.__add_height_maps_to_objects_xml()
+
+    def __flatten_water_levels(self, water_areas_file_path):
+        # the MSFS water surface follows the terrain: give each water body a flat level, at the Google Earth water surface
+        height_maps = []
+        samples = []
+
+        for tile in self.tiles.values():
+            waterline_file_path = os.path.join(self.xmlfiles_folder, WATERLINE_FILE_PREFIX + tile.name + JSON_FILE_EXT)
+            if os.path.isfile(waterline_file_path):
+                with open(waterline_file_path) as waterline_file:
+                    samples.append(json.load(waterline_file))
+
+            file_name = HEIGHT_MAP_PREFIX + tile.name + XML_FILE_EXT
+            if not os.path.isdir(tile.folder) or not os.path.isfile(os.path.join(self.xmlfiles_folder, file_name)):
+                continue
+
+            xml = HeightMapXml(self.xmlfiles_folder, file_name)
+            for rectangle in xml.find_rectangles():
+                for height_data in xml.find_rectangle_height_data(rectangle):
+                    height_maps.append({"xml": xml, "elem": height_data, "width": int(height_data.get(xml.WIDTH_ATTR)),
+                                        "values": [float(h) for h in height_data.get(xml.DATA_ATTR).split()], "bounds": get_coords_from_file_name(tile.name)})
+
+        levels = flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=WATER_LEVEL_OFFSET, shore_margin=WATER_LEVEL_SHORE_MARGIN, grid_coverage=HEIGHT_MAP_GRID_COVERAGE)
+
+        for height_map in height_maps:
+            height_map["elem"].set(height_map["xml"].DATA_ATTR, " ".join(str(h) for h in height_map["values"]))
+        for xml in {id(height_map["xml"]): height_map["xml"] for height_map in height_maps}.values():
+            xml.save()
+
+        for level, nb_points, method in levels:
+            isolated_print("water body of %d height data points set to the level %.2f (%s)" % (nb_points, level, method) + EOL)
 
     def __add_height_maps_to_objects_xml(self):
         height_maps = None

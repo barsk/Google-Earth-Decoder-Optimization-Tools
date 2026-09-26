@@ -193,6 +193,8 @@ class SettingsOperator(PanelOperator):
             col.separator()
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "blend_outer_edges", "Blend the outer edges of the scenery")
             col.separator()
+            draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "flat_water_level", "Flat water level")
+            col.separator()
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "high_precision", "High precision height data generation")
             col.separator()
 

@@ -33,7 +33,7 @@ with warnings.catch_warnings():
     warnings.simplefilter(action="ignore", category=RuntimeWarning, append=True)
     warnings.simplefilter(action="ignore", category=ShapelyDeprecationWarning, append=True)
 
-from constants import BUILDING_EXCLUSION_BORDER_INSET, GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES_FOLDER, OSM_LAND_SHAPEFILE, ROAD_OSM_KEY, BRIDGE_OSM_TAG, SERVICE_OSM_KEY, NOT_SHORE_WATER_OSM_KEY, WATER_OSM_KEY, NATURAL_OSM_KEY, OSM_TAGS, FOOTWAY_OSM_TAG, PATH_OSM_TAG, MAN_MADE_OSM_KEY, PIER_OSM_TAG, GOLF_OSM_KEY, FAIRWAY_OSM_TAG, EOL, CEND, TUNNEL_OSM_TAG, SEAMARK_TYPE_OSM_TAG, BUILDING_OSM_KEY, SHP_FILE_EXT, ELEMENT_TY_OSM_KEY, OSMID_OSM_KEY, RAILWAY_OSM_KEY, LANES_OSM_KEY, ONEWAY_OSM_KEY, ROAD_WITH_BORDERS, \
+from constants import BUILDING_EXCLUSION_BORDER_INSET, WATERLINE_SAMPLE_DISTANCE, WATERLINE_PERCENTILE, WATER_SURFACE_PERCENTILE, WATERLINE_MIN_SAMPLES, GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES_FOLDER, OSM_LAND_SHAPEFILE, ROAD_OSM_KEY, BRIDGE_OSM_TAG, SERVICE_OSM_KEY, NOT_SHORE_WATER_OSM_KEY, WATER_OSM_KEY, NATURAL_OSM_KEY, OSM_TAGS, FOOTWAY_OSM_TAG, PATH_OSM_TAG, MAN_MADE_OSM_KEY, PIER_OSM_TAG, GOLF_OSM_KEY, FAIRWAY_OSM_TAG, EOL, CEND, TUNNEL_OSM_TAG, SEAMARK_TYPE_OSM_TAG, BUILDING_OSM_KEY, SHP_FILE_EXT, ELEMENT_TY_OSM_KEY, OSMID_OSM_KEY, RAILWAY_OSM_KEY, LANES_OSM_KEY, ONEWAY_OSM_KEY, ROAD_WITH_BORDERS, \
     ROAD_LANE_WIDTH, GEOCODE_OSM_FILE_PREFIX, PEDESTRIAN_ROAD_TYPE, FOOTWAY_ROAD_TYPE, SERVICE_ROAD_TYPE, LANDUSE_OSM_KEY, CONSTRUCTION_OSM_KEY, GDAL_LIB_PREFIX, FIONA_LIB_PREFIX, LAND_MASS_REPO, LAND_MASS_ARCHIVE, LEISURE_OSM_KEY, NETWORKX_LIB, RTREE_LIB, MATPLOTLIB_LIB, PANDAS_LIB, GEOPANDAS_LIB, OSMNX_LIB, SHAPELY_LIB, PATH_ROAD_TYPE, TRACK_ROAD_TYPE, AREA_OSM_TAG, NOT_EXCLUSION_BUILDING_OSM_KEY, WALL_OSM_KEY, WALL_OSM_TAG, CASTLE_WALL_OSM_TAG, CYCLEWAY_ROAD_TYPE, FULL_PREFIX, \
     ROAD_REMOVAL_LANDUSE_OSM_KEY, ROAD_REMOVAL_NATURAL_OSM_KEY, PROPOSED_OSM_TAG, LANDMARK_PREFIX, LON_OSM_KEY, LAT_OSM_KEY, FOREST_OSM_TAG, WOOD_OSM_TAG, SHAPELY_TYPE, OSMNX_LIB_VERSION, DEFAULT_OVERPASS_API_URI
 from utils.colored_print import pr_bg_orange
@@ -1012,6 +1012,92 @@ def write_water_areas_file(shp_file_paths, file_path):
     water_areas = gpd.GeoDataFrame(geometry=[unary_union(geometries)], crs=EPSG.key + str(EPSG.WGS84_degree_unit))
     water_areas.to_file(file_path, driver="GeoJSON")
     return True
+
+
+def flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=0.0, shore_margin=3.0, grid_coverage=0.95):
+    # height_maps: list of dicts with the "values" (rows from south to north, columns from west to east), the "width" (values per row)
+    # and the "bounds" (north, south, west, east) of the tiles. samples: list of dicts with the "water" and "shore" samples
+    # ([lon, lat, height of the tiles surface]) of the tiles. Each water body gets a flat level: its waterline on the tiles
+    # (a low percentile of its shore ground), limited by its water surface (for the water surrounded by walls).
+    # Returns the levels of the water bodies, with their number of points and the method used
+    import numpy as np
+
+    water_gdf = gpd.read_file(water_areas_file_path)
+    if water_gdf.empty:
+        return []
+
+    wgs84 = EPSG.key + str(EPSG.WGS84_degree_unit)
+    water_gdf = water_gdf.to_crs(wgs84)
+    metric_crs = water_gdf.estimate_utm_crs()
+    bodies = gpd.GeoDataFrame(geometry=[water_gdf.unary_union], crs=wgs84).explode(index_parts=False).to_crs(metric_crs)
+    bodies = [geom for geom in bodies.geometry if not geom.is_empty]
+
+    def to_gdf(lon_lats):
+        return gpd.GeoDataFrame({"idx": range(len(lon_lats))}, geometry=[Point(lon, lat) for lon, lat in lon_lats], crs=wgs84).to_crs(metric_crs)
+
+    def within(points_gdf, area):
+        if points_gdf.empty:
+            return []
+        return gpd.sjoin(points_gdf, gpd.GeoDataFrame(geometry=[area], crs=metric_crs), predicate="within")["idx"].tolist()
+
+    water_samples = [sample for tile_samples in samples for sample in tile_samples.get("water", [])]
+    shore_samples = [sample for tile_samples in samples for sample in tile_samples.get("shore", [])]
+    water_samples_gdf = to_gdf([(lon, lat) for lon, lat, _ in water_samples])
+    shore_samples_gdf = to_gdf([(lon, lat) for lon, lat, _ in shore_samples])
+
+    points = []
+    for height_map in height_maps:
+        n, s, w, e = height_map["bounds"]
+        cols = height_map["width"]
+        rows = len(height_map["values"]) // cols
+        margin = (1.0 - grid_coverage) / 2.0
+        for i in range(rows * cols):
+            r, c = divmod(i, cols)
+            lat = s + (margin + grid_coverage * r / max(rows - 1, 1)) * (n - s)
+            lon = w + (margin + grid_coverage * c / max(cols - 1, 1)) * (e - w)
+            points.append((height_map, i, (lon, lat)))
+
+    if not points:
+        return []
+
+    points_gdf = to_gdf([lon_lat for _, _, lon_lat in points])
+    body_points = []
+
+    for body in bodies:
+        inside = within(points_gdf, body)
+        if not inside:
+            continue
+
+        water_heights = [water_samples[i][2] for i in within(water_samples_gdf, body)]
+        shore_heights = [shore_samples[i][2] for i in within(shore_samples_gdf, body.buffer(WATERLINE_SAMPLE_DISTANCE + 1.0).difference(body))]
+
+        if len(shore_heights) >= WATERLINE_MIN_SAMPLES:
+            level = float(np.percentile(shore_heights, WATERLINE_PERCENTILE))
+            method = "waterline of %d shore samples" % len(shore_heights)
+            if len(water_heights) >= WATERLINE_MIN_SAMPLES:
+                surface = float(np.percentile(water_heights, WATER_SURFACE_PERCENTILE))
+                if surface < level:
+                    level, method = surface, "water surface, under the waterline of %d shore samples" % len(shore_heights)
+        elif water_heights:
+            level = float(np.median(water_heights))
+            method = "water surface of %d samples" % len(water_heights)
+        else:
+            continue
+
+        body_points.append((level + level_offset, method, inside, within(points_gdf, body.buffer(shore_margin))))
+
+    # the points inside a water body first, then the points on its shore
+    assigned = set()
+    for key in (2, 3):
+        for body in body_points:
+            level = body[0]
+            for i in body[key]:
+                if i not in assigned:
+                    height_map, j, _ = points[i]
+                    height_map["values"][j] = level
+                    assigned.add(i)
+
+    return [(level, len(inside), method) for level, method, inside, _ in body_points]
 
 
 def create_whole_water_gdf(natural_water, water, sea):

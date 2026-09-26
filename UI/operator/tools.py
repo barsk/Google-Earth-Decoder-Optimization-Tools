@@ -184,6 +184,11 @@ def reload_process_all(context):
         context.scene.setting_props.process_all = context.scene.project_settings.process_all
 
 
+def reload_flat_water_level(context):
+    if context.scene.project_settings is not None:
+        context.scene.setting_props.flat_water_level = context.scene.project_settings.flat_water_level
+
+
 def reload_blend_outer_edges(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.blend_outer_edges = context.scene.project_settings.blend_outer_edges
@@ -363,6 +368,7 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_process_all(context)
     reload_high_precision(context)
     reload_blend_outer_edges(context)
+    reload_flat_water_level(context)
     reload_height_adjustment(context)
     reload_ground_filter_size(context)
     reload_geocode(context)
