@@ -172,10 +172,11 @@ WATERLINE_SAMPLE_DISTANCE = 6.0
 WATERLINE_PERCENTILE = 5
 WATER_SURFACE_PERCENTILE = 75
 WATERLINE_MIN_SAMPLES = 20
-# the bottom of the water bodies goes down from this depth at the shore (in meters), by this slope, to the water depth setting
+# the bottom of the water bodies goes down from this depth at the shore (in meters), by this slope, to the water depth setting.
+# The MSFS water is a thin layer (about 0.6 m) on the terrain: its surface follows a sloping bottom, so the default is a flat bottom
 WATER_SHORE_DEPTH = 1.0
 WATER_DEPTH_SLOPE = 0.15
-DEFAULT_WATER_DEPTH = 3.0
+DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"

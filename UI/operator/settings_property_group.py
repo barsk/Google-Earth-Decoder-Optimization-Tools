@@ -490,12 +490,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     water_depth: FloatProperty(
         name="Water depth",
-        description="Maximum depth (in meters) of the bottom of the water bodies, under their flat level. The bottom goes down from 1 meter at the shore (0: flat bottom at the level)",
+        description="Maximum depth (in meters) of the bottom of the water bodies, under their flat level. The bottom goes down from 1 meter at the shore (0: flat bottom at the level). The MSFS water surface follows the bottom, keep 0 unless testing",
         min=0.0,
         soft_max=20.0,
         step=50,
         precision=1,
-        default=float(bpy.types.Scene.project_settings.water_depth) if bpy.types.Scene.project_settings is not None else 3.0,
+        default=float(bpy.types.Scene.project_settings.water_depth) if bpy.types.Scene.project_settings is not None else 0.0,
         update=water_depth_updated
     )
     flat_water_level: BoolProperty(
