@@ -657,11 +657,13 @@ def reduce_number_of_vertices(model_file_path):
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
-def push_down_water_in_mask(depth=1.5, shore_distance=6.0, mask_name="Areas", positioning_name="Ways"):
+def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, mask_name="Areas", positioning_name="Ways"):
     # push the vertices of the tile inside the (aligned) water mask under the water level, instead of cutting them:
     # the faces crossing the shore slope down into the water, without holes in the 3d data.
     # The water level of the tile: its water surface (75th percentile), at least its waterline (5th percentile of the ground
-    # within shore_distance of the water), at most the median ground of the shore, as the water level of the height data
+    # within shore_distance of the water), at most the median ground of the shore, as the water level of the height data.
+    # The level of the height data is calculated for whole water bodies and can be lower (large rivers): the vertices are pushed
+    # under the lower quarter of the water surface too, and progressively over ramp_distance from the shore
     from shapely.ops import unary_union
     from shapely.prepared import prep
 
@@ -708,7 +710,13 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, mask_name="Areas", po
     else:
         return None
 
+    if len(water_heights):
+        level = min(level, np.percentile(water_heights, 25))
     target = float(level) - depth
+
+    # the shore: the outline of the mask, without its borders clipped by the tile
+    minx, miny, maxx, maxy = footprint.bounds
+    shore = footprint.boundary.difference(geometry.box(minx, miny, maxx, maxy).boundary.buffer(0.5))
     nb_pushed = 0
     for obj, coords, in_water, _ in objects_data:
         indexes = np.where(in_water & (coords[:, 2] > target))[0]
@@ -716,7 +724,11 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, mask_name="Areas", po
             continue
         inverted_matrix = obj.matrix_world.inverted()
         for i in indexes:
-            obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((coords[i, 0], coords[i, 1], target))
+            weight = 1.0
+            if ramp_distance > 0.0 and not shore.is_empty:
+                weight = min(1.0, shore.distance(geometry.Point(coords[i, 0], coords[i, 1])) / ramp_distance)
+            z = coords[i, 2] - weight * (coords[i, 2] - target)
+            obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((coords[i, 0], coords[i, 1], z))
         obj.data.update()
         nb_pushed += len(indexes)
 

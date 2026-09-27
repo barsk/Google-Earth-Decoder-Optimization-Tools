@@ -22,7 +22,7 @@ import shutil
 from pathlib import Path
 
 from blender import import_model_files, bake_texture_files, fix_object_bounding_box, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask
-from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH
+from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE
 from msfs_project.binary import MsfsBinary
 from msfs_project.texture import MsfsTexture
 from msfs_project.gltf import MsfsGltf
@@ -254,7 +254,7 @@ class MsfsLod:
             align_model_with_mask(source_model_file_path, positioning_file_path, water_mask_file_path)
             # the alignment keeps only the mask: import the model in the aligned scene
             import_model_files([source_model_file_path], clean=False)
-            result = push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH)
+            result = push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH, ramp_distance=WATER_PUSH_DOWN_RAMP_DISTANCE)
             if result is not None:
                 isolated_print("water level %.2f, %d vertices pushed down" % result)
             self.__remove_mask_objects()

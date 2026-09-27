@@ -184,6 +184,8 @@ NOT_WATER_NATURAL_OSM_TAGS = ["beach", "wetland"]
 # the water is pushed down under the water level instead of being cut from the tiles (no holes in the 3d data along the shores)
 WATER_PUSH_DOWN_OSM_FILE_PREFIX = "water_push_down"
 WATER_PUSH_DOWN_DEPTH = 1.5
+# the vertices are pushed down progressively over this distance (in meters) from the shore, so that the shore slopes into the water
+WATER_PUSH_DOWN_RAMP_DISTANCE = 3.0
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"
