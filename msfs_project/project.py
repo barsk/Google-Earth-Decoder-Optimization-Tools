@@ -66,7 +66,7 @@ from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
 from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
-from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, flatten_water_height_data
+from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, flatten_water_height_data, remove_not_water_natural_gdf
 from utils.octant import get_coords_from_file_name
 from msfs_project.gltf import MsfsGltf
 from msfs_project.shape import MsfsShapes
@@ -2026,7 +2026,7 @@ class MsfsProject:
         natural = clip_gdf(prepare_natural_gdf(orig_natural), bbox)
         pbar.update("natural geodataframe prepared")
         pbar.update("preparing natural water geodataframe...", stall=True)
-        natural_water = clip_gdf(prepare_gdf(orig_natural_water), bbox)
+        natural_water = clip_gdf(prepare_gdf(remove_not_water_natural_gdf(orig_natural_water)), bbox)
         pbar.update("natural water geodataframe prepared")
         pbar.update("preparing water geodataframe...", stall=True)
         water = clip_gdf(prepare_water_gdf(orig_water, orig_waterway), bbox)

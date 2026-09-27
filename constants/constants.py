@@ -179,6 +179,8 @@ WATER_SHORE_DEPTH = 1.0
 # the water areas removed from the Google Earth tiles were reduced by 5 (Web Mercator units, about 2.5 m at 60 N): it left a strip of the
 # Google Earth water surface along the shores and the border of the scenery, above the MSFS water. 0 cuts at the osm water outline
 WATER_EXCLUSION_INSET = 0
+# natural features downloaded with the natural water, which are land on the Google Earth tiles: not removed from the tiles, not leveled as water
+NOT_WATER_NATURAL_OSM_TAGS = ["beach", "wetland"]
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"
