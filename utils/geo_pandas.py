@@ -887,7 +887,9 @@ def prepare_residential_gdf(gdf, water, natural, natural_water, forests, woods, 
 def prepare_bbox_gdf(bbox, land_mass, boundary):
     result = clip_gdf(bbox, land_mass)
     # result = clip_gdf(result, boundary)
-    return resize_gdf(result, 20)
+    # two sided: a single sided buffer of the (counter-clockwise) outline does not enlarge it, and the tiles overlap the border of the scenery,
+    # so the osm data clipped with it (the water removed from the tiles) must go a bit further
+    return resize_gdf(result, 20, single_sided=False)
 
 
 def prepare_building_gdf(gdf, wall, man_made):
