@@ -25,6 +25,8 @@ except ModuleNotFoundError:
     import shapely
 
 from uuid import uuid4
+import json
+import os
 
 from shapely.geometry import Polygon, MultiPolygon
 
@@ -182,10 +184,17 @@ class MsfsShapePolygon:
             self.vertices.append(self.__set_vertice_from_xml(xml, vertice))
 
     def __find_altitude_from_tiles(self, polygon, tiles):
-        coords = (polygon.centroid.coords.xy[1][0], polygon.centroid.xy[1][0], polygon.centroid.xy[0][0], polygon.centroid.xy[0][0])
-        for tile in tiles.values():
-            if tile.contains(coords):
-                self.altitude = min(self.altitude, tile.pos.alt)
+        # the ground altitude of the tile under the center of the polygon (the tile position is its origin, far under the ground)
+        lat, lon = polygon.centroid.y, polygon.centroid.x
+        coords = (lat, lat, lon, lon)
+        candidates = [tile for tile in tiles.values() if tile.coords and tile.contains(coords)]
+        if not candidates:
+            # the center of the polygon is outside the tiles: use the nearest tile
+            candidates = sorted((tile for tile in tiles.values() if tile.coords), key=lambda tile: (lat - (tile.coords[0] + tile.coords[1]) / 2) ** 2 + (lon - (tile.coords[2] + tile.coords[3]) / 2) ** 2)[:1]
+        for tile in candidates:
+            ground_altitude = get_tile_ground_altitude(tile, lat, lon)
+            self.altitude = ground_altitude if ground_altitude is not None else tile.pos.alt
+            return
 
     @staticmethod
     def __set_vertice_from_xml(xml, elem):
@@ -194,6 +203,71 @@ class MsfsShapePolygon:
     @staticmethod
     def __set_attribute_from_xml(xml, elem):
         return MsfsShapeAttribute(elem.get(xml.NAME_ATTR), elem.get(xml.GUID_ATTR), elem.get(xml.TYPE_ATTR), elem.get(xml.VALUE_ATTR))
+
+
+# vertices (east, north, height from the tile origin) of the less detailed lod of the tiles
+tiles_vertices_cache = {}
+
+
+def get_tile_vertices(tile):
+    import numpy as np
+
+    if tile.name in tiles_vertices_cache:
+        return tiles_vertices_cache[tile.name]
+
+    result = None
+    lods = [lod for lod in tile.lods if os.path.isfile(os.path.join(lod.folder, lod.model_file))]
+    if lods:
+        lod = max(lods, key=lambda lod: lod.model_file)
+        with open(os.path.join(lod.folder, lod.model_file), encoding="utf-8") as model_file:
+            gltf = json.load(model_file)
+        buffers = {}
+        arrays = []
+        for node in gltf.get("nodes", []):
+            if "mesh" not in node:
+                continue
+            scale = np.array(node.get("scale", [1.0, 1.0, 1.0]))
+            translation = np.array(node.get("translation", [0.0, 0.0, 0.0]))
+            for primitive in gltf["meshes"][node["mesh"]]["primitives"]:
+                accessor = gltf["accessors"][primitive["attributes"]["POSITION"]]
+                view = gltf["bufferViews"][accessor["bufferView"]]
+                uri = gltf["buffers"][view["buffer"]]["uri"]
+                if uri not in buffers:
+                    with open(os.path.join(lod.folder, uri), "rb") as buffer_file:
+                        buffers[uri] = buffer_file.read()
+                offset = view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
+                stride = view.get("byteStride", 12)
+                positions = np.ndarray((accessor["count"], 3), dtype="<f4", buffer=buffers[uri], offset=offset, strides=(stride, 4))
+                arrays.append(positions * scale + translation)
+        if arrays:
+            vertices = np.concatenate(arrays)
+            # the glTF tiles have their south west corner at the origin, the east is -X, the north is +Z and the height is +Y
+            result = np.column_stack((-vertices[:, 0], vertices[:, 2], vertices[:, 1]))
+
+    tiles_vertices_cache[tile.name] = result
+    return result
+
+
+def get_tile_ground_altitude(tile, lat, lon, radius=25.0, percentile=15, edge_margin=2.0):
+    # a low percentile of the tile heights around the position (to skip the roofs and trees), without the skirts of the tile borders
+    import numpy as np
+
+    vertices = get_tile_vertices(tile)
+    if vertices is None or not len(vertices) or not tile.coords:
+        return None
+
+    n, s, w, e = tile.coords
+    max_east, max_north = vertices[:, 0].max(), vertices[:, 1].max()
+    east = (lon - w) / (e - w) * max_east
+    north = (lat - s) / (n - s) * max_north
+
+    inner = (vertices[:, 0] > edge_margin) & (vertices[:, 0] < max_east - edge_margin) & (vertices[:, 1] > edge_margin) & (vertices[:, 1] < max_north - edge_margin)
+    near = inner & ((vertices[:, 0] - east) ** 2 + (vertices[:, 1] - north) ** 2 < radius ** 2)
+    heights = vertices[near, 2] if near.sum() >= 10 else vertices[inner, 2]
+    if not len(heights):
+        return None
+
+    return float(tile.pos.alt) + float(np.percentile(heights, percentile))
 
 
 class MsfsShapeGroup:

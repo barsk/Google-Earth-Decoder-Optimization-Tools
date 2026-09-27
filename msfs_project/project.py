@@ -1596,9 +1596,9 @@ class MsfsProject:
 
         new_group_id = self.objects_xml.get_new_group_id()
         if not exclusion_building_polygons.empty:
-            self.shapes[EXCLUSION_BUILDING_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=exclusion_building_polygons, group_display_name=EXCLUSION_BUILDING_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id, name_prefix=EXCLUSION_BUILDING_POLYGON_NAME_PREFIX, exclude_buildings=True)
+            self.shapes[EXCLUSION_BUILDING_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=exclusion_building_polygons, group_display_name=EXCLUSION_BUILDING_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id, name_prefix=EXCLUSION_BUILDING_POLYGON_NAME_PREFIX, exclude_buildings=True, tiles=self.tiles)
         if not exclusion_vegetation_polygons.empty:
-            self.shapes[EXCLUSION_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=exclusion_vegetation_polygons, group_display_name=EXCLUSION_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 1, name_prefix=EXCLUSION_VEGETATION_POLYGON_NAME_PREFIX, exclude_vegetation=True, exclude_buildings=True)
+            self.shapes[EXCLUSION_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=exclusion_vegetation_polygons, group_display_name=EXCLUSION_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 1, name_prefix=EXCLUSION_VEGETATION_POLYGON_NAME_PREFIX, exclude_vegetation=True, exclude_buildings=True, tiles=self.tiles)
         if not pitch_terraform_polygons.empty:
             self.shapes[PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=pitch_terraform_polygons, group_display_name=PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 2, name_prefix=PITCH_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=not disable_terraform)
         if not amenity_terraform_polygons.empty:
