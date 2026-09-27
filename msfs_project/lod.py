@@ -21,7 +21,7 @@ import re
 import shutil
 from pathlib import Path
 
-from blender import import_model_files, bake_texture_files, fix_object_bounding_box, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask
+from blender import import_model_files, bake_texture_files, fix_object_bounding_box, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask, trim_objects
 from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE, BEACH_SMOOTHING_RADIUS, BEACH_SMOOTHING_RAMP_DISTANCE
 from msfs_project.binary import MsfsBinary
 from msfs_project.texture import MsfsTexture
@@ -236,7 +236,7 @@ class MsfsLod:
         model_file.remove_texture_path(self.name)
         model_file.dump()
 
-    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None, beach_mask_file_path=None):
+    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None, beach_mask_file_path=None, trim_east=None, trim_north=None):
         # Import the gltf files located in the object folder
         model_file = MsfsGltf(os.path.join(self.folder, self.model_file))
         model_file.remove_texture_path(self.name)
@@ -248,6 +248,8 @@ class MsfsLod:
         cleanup = process_type == PROCESS_TYPE.cleanup_3d_data
         # the passes updating the vertices of the model (the alignment of each mask imports the model again)
         passes = []
+        if trim_east or trim_north:
+            passes.append(("trim the overlap with the neighbour tiles of", None, lambda: trim_objects(trim_east=trim_east, trim_north=trim_north)))
         if cleanup and is_file(water_mask_file_path):
             passes.append(("push down the water of", water_mask_file_path, lambda: push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH, ramp_distance=WATER_PUSH_DOWN_RAMP_DISTANCE)))
         if cleanup and is_file(beach_mask_file_path):
@@ -259,7 +261,8 @@ class MsfsLod:
         for idx, (title, pass_mask_file_path, update_vertices) in enumerate(passes):
             isolated_print(title, self.name)
             clean_scene()
-            align_model_with_mask(source_model_file_path, positioning_file_path, pass_mask_file_path)
+            if pass_mask_file_path:
+                align_model_with_mask(source_model_file_path, positioning_file_path, pass_mask_file_path)
             # the alignment keeps only the mask: import the model in the aligned scene
             import_model_files([source_model_file_path], clean=False)
             result = update_vertices()

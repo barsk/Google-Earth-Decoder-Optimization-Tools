@@ -17,6 +17,7 @@
 #  <pep8 compliant>
 
 import copy
+import math
 import json
 import re
 import itertools
@@ -963,6 +964,23 @@ class MsfsProject:
         beaches = beaches.to_crs(bbox.crs)[[GEOMETRY_OSM_COLUMN]]
         return clip_gdf(beaches, bbox)
 
+    def __find_tile_trim_distances(self, tile):
+        # distances (in meters, on the WGS84 ellipsoid) from the tile origin (its south west corner) to its east and north neighbour tiles,
+        # where the tile is cut: the tile meshes reach a few meters beyond, over their neighbours
+        if not self.settings.trim_tiles_overlap:
+            return None, None
+
+        n, s, w, e = get_coords_from_file_name(tile.name)
+        outer_edges = self.__find_tile_outer_edges(tile).split(",")
+        a, e2 = 6378137.0, 0.00669437999014
+        phi = math.radians((n + s) / 2.0)
+        k = math.sqrt(1.0 - e2 * math.sin(phi) ** 2)
+        meters_per_lat_degree = math.radians(1.0) * a * (1.0 - e2) / k ** 3
+        meters_per_lon_degree = math.radians(1.0) * a / k * math.cos(phi)
+        trim_east = (e - w) * meters_per_lon_degree if "E" not in outer_edges else None
+        trim_north = (n - s) * meters_per_lat_degree if "N" not in outer_edges else None
+        return trim_east, trim_north
+
     def __find_tile_outer_edges(self, tile):
         # sides of the tile which are on the border of the scenery (no neighbour tile)
         eps = 1e-7
@@ -1073,7 +1091,9 @@ class MsfsProject:
             has_mask_file = os.path.isfile(mask_file_path)
             has_water_mask_file = os.path.isfile(water_mask_file_path)
             has_beach_mask_file = os.path.isfile(beach_mask_file_path)
-            copy_lods = not has_mask_file and not has_water_mask_file and not has_beach_mask_file
+            trim_east, trim_north = self.__find_tile_trim_distances(tile)
+            has_trim = bool(trim_east or trim_north)
+            copy_lods = not has_mask_file and not has_water_mask_file and not has_beach_mask_file and not has_trim
 
             for lod in tile.lods:
                 if not os.path.isdir(lod.folder):
@@ -1120,7 +1140,13 @@ class MsfsProject:
                 if has_beach_mask_file:
                     params.extend(["--beach_mask_file_path", str(beach_mask_file_path)])
 
-                if has_mask_file or has_water_mask_file or has_beach_mask_file:
+                if trim_east:
+                    params.extend(["--trim_east", str(trim_east)])
+
+                if trim_north:
+                    params.extend(["--trim_north", str(trim_north)])
+
+                if has_mask_file or has_water_mask_file or has_beach_mask_file or has_trim:
                     data.append({"name": lod.name, "params": params})
 
         return tiles, chunks(data, nb_parallel_blender_tasks)

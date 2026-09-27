@@ -119,6 +119,16 @@ try:
     )
 
     parser.add_argument(
+        "-te", "--trim_east", dest="trim_east", type=str, required=False,
+        help="distance (in meters) from the tile origin where its east neighbour tile starts, the tile is cut there",
+    )
+
+    parser.add_argument(
+        "-tn", "--trim_north", dest="trim_north", type=str, required=False,
+        help="distance (in meters) from the tile origin where its north neighbour tile starts, the tile is cut there",
+    )
+
+    parser.add_argument(
         "-dbg", "--debug", dest="debug", type=str, required=False,
         help="Debug the height data in blender",
     )
@@ -140,8 +150,8 @@ try:
     if not args.positioning_file_path:
         raise ScriptError("Error: --positioning_file_path=\"some string\" argument not given, aborting.")
 
-    if not args.mask_file_path and not args.water_mask_file_path and not args.beach_mask_file_path:
-        raise ScriptError("Error: --mask_file_path=\"some string\", --water_mask_file_path or --beach_mask_file_path argument not given, aborting.")
+    if not args.mask_file_path and not args.water_mask_file_path and not args.beach_mask_file_path and not args.trim_east and not args.trim_north:
+        raise ScriptError("Error: --mask_file_path=\"some string\", --water_mask_file_path, --beach_mask_file_path or --trim_east/--trim_north argument not given, aborting.")
 
     clean_scene()
 
@@ -151,6 +161,6 @@ try:
         debug = False
 
     lod = MsfsLod(os.path.splitext(args.model_file)[0][-2:], 0, args.folder, args.model_file)
-    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, beach_mask_file_path=args.beach_mask_file_path)
+    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, beach_mask_file_path=args.beach_mask_file_path, trim_east=float(args.trim_east) if args.trim_east else None, trim_north=float(args.trim_north) if args.trim_north else None)
 except:
     pass

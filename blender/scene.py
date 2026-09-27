@@ -708,6 +708,38 @@ def get_mesh_objects(excluded_names=("Areas", "Ways")):
     return [obj for obj in bpy.context.scene.objects if obj.type == MESH_OBJECT_TYPE and obj.name not in excluded_names and BOUNDING_BOX_OSM_KEY not in obj.name]
 
 
+def trim_objects(trim_east=None, trim_north=None):
+    # cut the meshes of the tile where its east and north neighbour tiles start (in meters from the tile origin, its south west corner):
+    # the tile meshes reach a few meters beyond, over their neighbours, and the ground of both tiles flickers there.
+    # The tiles are imported with their south west corner at the origin: the east is -X and the north is -Y
+    planes = []
+    if trim_east:
+        planes.append((mathutils.Vector((-trim_east, 0.0, 0.0)), mathutils.Vector((-1.0, 0.0, 0.0))))
+    if trim_north:
+        planes.append((mathutils.Vector((0.0, -trim_north, 0.0)), mathutils.Vector((0.0, -1.0, 0.0))))
+    if not planes:
+        return None
+
+    nb_faces = 0
+    for obj in get_mesh_objects():
+        matrix = obj.matrix_world
+        inverted_matrix = matrix.inverted()
+        normal_matrix = matrix.to_3x3().transposed()
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        before = len(bm.faces)
+        for plane_co, plane_no in planes:
+            geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+            # the geometry on the side of the normal (beyond the neighbour tile origin) is removed
+            bmesh.ops.bisect_plane(bm, geom=geom, dist=0.0001, plane_co=inverted_matrix @ plane_co, plane_no=(normal_matrix @ plane_no).normalized(), clear_outer=True)
+        nb_faces += before - len(bm.faces)
+        bm.to_mesh(obj.data)
+        bm.free()
+        obj.data.update()
+
+    return nb_faces
+
+
 def smooth_in_mask(radius=4.0, ramp_distance=2.0, mask_name="Areas"):
     # smooth the heights of the vertices inside the (aligned) mask: the mean of the local medians within radius (the spikes, then
     # the facets are removed), progressively from the border of the mask over ramp_distance, so that it joins its surroundings

@@ -77,6 +77,7 @@ class ProjectSettings(Settings):
     exclude_water: str
     push_down_water: str
     smooth_beaches: str
+    trim_tiles_overlap: str
     exclude_forests: str
     exclude_woods: str
     exclude_nature_reserves: str
@@ -103,6 +104,7 @@ class ProjectSettings(Settings):
     OPENSTREETMAP_SECTION = "OPENSTREETMAP"
     PUSH_DOWN_WATER_SETTING = "push_down_water"
     SMOOTH_BEACHES_SETTING = "smooth_beaches"
+    TRIM_TILES_OVERLAP_SETTING = "trim_tiles_overlap"
     TARGET_MIN_SIZE_VALUES_SETTING = "target_min_size_values"
 
     def __init__(self, global_path, path, project_name):
@@ -143,6 +145,7 @@ class ProjectSettings(Settings):
         self.exclude_water = "True"
         self.push_down_water = "True"
         self.smooth_beaches = "True"
+        self.trim_tiles_overlap = "True"
         self.exclude_forests = "True"
         self.exclude_woods = "True"
         self.exclude_nature_reserves = "False"
@@ -214,6 +217,7 @@ class ProjectSettings(Settings):
         self.exclude_water = json.loads(self.exclude_water.lower())
         self.push_down_water = json.loads(str(self.push_down_water).lower())
         self.smooth_beaches = json.loads(str(self.smooth_beaches).lower())
+        self.trim_tiles_overlap = json.loads(str(self.trim_tiles_overlap).lower())
         self.exclude_forests = json.loads(self.exclude_forests.lower())
         self.exclude_woods = json.loads(self.exclude_woods.lower())
         self.exclude_nature_reserves = json.loads(self.exclude_nature_reserves.lower())
@@ -258,6 +262,7 @@ class ProjectSettings(Settings):
             config.add_section(self.OPENSTREETMAP_SECTION)
         config.set(self.OPENSTREETMAP_SECTION, self.PUSH_DOWN_WATER_SETTING, str(self.push_down_water))
         config.set(self.OPENSTREETMAP_SECTION, self.SMOOTH_BEACHES_SETTING, str(self.smooth_beaches))
+        config.set(self.OPENSTREETMAP_SECTION, self.TRIM_TILES_OVERLAP_SETTING, str(self.trim_tiles_overlap))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
             config.write(configfile)
