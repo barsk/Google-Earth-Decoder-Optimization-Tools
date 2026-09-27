@@ -944,6 +944,25 @@ class MsfsProject:
 
         return chunks(data, nb_parallel_blender_tasks)
 
+    def __load_beaches_gdf(self, bbox):
+        # the beaches (natural=beach) of the natural water data
+        import geopandas as gpd
+
+        shp_file_path = os.path.join(self.shpfiles_folder, NATURAL_WATER_OSM_KEY + SHP_FILE_EXT)
+        if not os.path.isfile(shp_file_path) or os.path.getsize(shp_file_path) == 0:
+            return create_empty_gdf()
+
+        natural_water = gpd.read_file(shp_file_path)
+        if NATURAL_OSM_KEY not in natural_water:
+            return create_empty_gdf()
+
+        beaches = natural_water[(natural_water[NATURAL_OSM_KEY] == BEACH_OSM_TAG_VALUE) & natural_water.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]
+        if beaches.empty:
+            return create_empty_gdf()
+
+        beaches = beaches.to_crs(bbox.crs)[[GEOMETRY_OSM_COLUMN]]
+        return clip_gdf(beaches, bbox)
+
     def __find_tile_outer_edges(self, tile):
         # sides of the tile which are on the border of the scenery (no neighbour tile)
         eps = 1e-7
@@ -1050,9 +1069,11 @@ class MsfsProject:
 
             mask_file_path = os.path.join(self.osmfiles_folder, EXCLUSION_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT)
             water_mask_file_path = os.path.join(self.osmfiles_folder, WATER_PUSH_DOWN_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT)
+            beach_mask_file_path = os.path.join(self.osmfiles_folder, BEACH_SMOOTHING_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT)
             has_mask_file = os.path.isfile(mask_file_path)
             has_water_mask_file = os.path.isfile(water_mask_file_path)
-            copy_lods = not has_mask_file and not has_water_mask_file
+            has_beach_mask_file = os.path.isfile(beach_mask_file_path)
+            copy_lods = not has_mask_file and not has_water_mask_file and not has_beach_mask_file
 
             for lod in tile.lods:
                 if not os.path.isdir(lod.folder):
@@ -1096,7 +1117,10 @@ class MsfsProject:
                 if has_water_mask_file:
                     params.extend(["--water_mask_file_path", str(water_mask_file_path)])
 
-                if has_mask_file or has_water_mask_file:
+                if has_beach_mask_file:
+                    params.extend(["--beach_mask_file_path", str(beach_mask_file_path)])
+
+                if has_mask_file or has_water_mask_file or has_beach_mask_file:
                     data.append({"name": lod.name, "params": params})
 
         return tiles, chunks(data, nb_parallel_blender_tasks)
@@ -1497,6 +1521,11 @@ class MsfsProject:
                 # the water is pushed down under the water level instead of being cut (no holes in the 3d data along the shores)
                 if self.settings.push_down_water and not water.empty:
                     self.__create_exclusion_masks_from_tiles(b, water.assign(building=WATER_OSM_KEY), file_prefix=WATER_PUSH_DOWN_OSM_FILE_PREFIX, title="CREATE WATER PUSH DOWN MASKS OSM FILES", process_all=process_all)
+                # the beaches are smoothed (the photogrammetry of the sand is spiky)
+                if self.settings.smooth_beaches:
+                    beaches = self.__load_beaches_gdf(bbox)
+                    if not beaches.empty:
+                        self.__create_exclusion_masks_from_tiles(b, beaches.assign(building=BEACH_OSM_TAG_VALUE), file_prefix=BEACH_SMOOTHING_OSM_FILE_PREFIX, title="CREATE BEACH SMOOTHING MASKS OSM FILES", process_all=process_all)
 
         if generate_height_data:
             if self.settings.isolate_3d_data:

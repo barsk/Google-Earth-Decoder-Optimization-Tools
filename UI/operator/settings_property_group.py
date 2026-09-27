@@ -174,6 +174,10 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.flat_water_level = self.flat_water_level
         context.scene.project_settings.save()
 
+    def smooth_beaches_updated(self, context):
+        context.scene.project_settings.smooth_beaches = self.smooth_beaches
+        context.scene.project_settings.save()
+
     def push_down_water_updated(self, context):
         context.scene.project_settings.push_down_water = self.push_down_water
         context.scene.project_settings.save()
@@ -411,6 +415,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.project_settings.airport_city if bpy.types.Scene.project_settings is not None else str(),
         maxlen=256,
         update=airport_city_updated
+    )
+    smooth_beaches: BoolProperty(
+        name="Smooth the beaches",
+        description="Smooth the beaches (OpenStreetMap natural=beach) of the Google Earth tiles, whose photogrammetry of the sand is spiky",
+        default=bpy.types.Scene.project_settings.smooth_beaches if bpy.types.Scene.project_settings is not None else True,
+        update=smooth_beaches_updated
     )
     push_down_water: BoolProperty(
         name="Push down the water",

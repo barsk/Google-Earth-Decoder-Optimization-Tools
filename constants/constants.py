@@ -186,6 +186,12 @@ WATER_PUSH_DOWN_OSM_FILE_PREFIX = "water_push_down"
 WATER_PUSH_DOWN_DEPTH = 1.5
 # the vertices are pushed down progressively over this distance (in meters) from the shore, so that the shore slopes into the water
 WATER_PUSH_DOWN_RAMP_DISTANCE = 3.0
+# the beaches (osm natural=beach) of the Google Earth tiles are smoothed (the photogrammetry of the sand is spiky): the height of their vertices
+# is the mean of the local medians within this radius (in meters), progressively from the border of the beach over the ramp distance
+BEACH_SMOOTHING_OSM_FILE_PREFIX = "beach_smoothing"
+BEACH_OSM_TAG_VALUE = "beach"
+BEACH_SMOOTHING_RADIUS = 4.0
+BEACH_SMOOTHING_RAMP_DISTANCE = 2.0
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

@@ -194,6 +194,11 @@ def reload_flat_water_level(context):
         context.scene.setting_props.flat_water_level = context.scene.project_settings.flat_water_level
 
 
+def reload_smooth_beaches(context):
+    if context.scene.project_settings is not None:
+        context.scene.setting_props.smooth_beaches = context.scene.project_settings.smooth_beaches
+
+
 def reload_push_down_water(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.push_down_water = context.scene.project_settings.push_down_water
@@ -379,6 +384,7 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_high_precision(context)
     reload_blend_outer_edges(context)
     reload_push_down_water(context)
+    reload_smooth_beaches(context)
     reload_flat_water_level(context)
     reload_water_depth(context)
     reload_height_adjustment(context)

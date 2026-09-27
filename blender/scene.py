@@ -482,7 +482,9 @@ def center_origin(obj):
     bpy.ops.object.location_clear(clear_delta=False)
 
 
-def align_model_with_mask(model_file_path, positioning_file_path, mask_file_path, objects_to_keep=[]):
+def align_model_with_mask(model_file_path, positioning_file_path, mask_file_path, objects_to_keep=None):
+    # not a mutable default argument: the positioning object is appended to the list, which must not survive the call
+    objects_to_keep = [] if objects_to_keep is None else objects_to_keep
     if not bpy.context.scene:
         return False
 
@@ -657,15 +659,9 @@ def reduce_number_of_vertices(model_file_path):
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
-def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, mask_name="Areas", positioning_name="Ways"):
-    # push the vertices of the tile inside the (aligned) water mask under the water level, instead of cutting them:
-    # the faces crossing the shore slope down into the water, without holes in the 3d data.
-    # The water level of the tile: its water surface (75th percentile), at least its waterline (5th percentile of the ground
-    # within shore_distance of the water), at most the median ground of the shore, as the water level of the height data.
-    # The level of the height data is calculated for whole water bodies and can be lower (large rivers): the vertices are pushed
-    # under the lower quarter of the water surface too, and progressively over ramp_distance from the shore
+def get_mask_footprint(mask_name="Areas"):
+    # the horizontal footprint of the (aligned, extruded) mask object
     from shapely.ops import unary_union
-    from shapely.prepared import prep
 
     mask = bpy.context.scene.objects.get(mask_name)
     if mask is None:
@@ -682,10 +678,74 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
             if not footprint.is_empty:
                 footprints.append(footprint)
 
-    if not footprints:
+    return unary_union(footprints) if footprints else None
+
+
+def get_mesh_objects(excluded_names=("Areas", "Ways")):
+    return [obj for obj in bpy.context.scene.objects if obj.type == MESH_OBJECT_TYPE and obj.name not in excluded_names and BOUNDING_BOX_OSM_KEY not in obj.name]
+
+
+def smooth_in_mask(radius=4.0, ramp_distance=2.0, mask_name="Areas"):
+    # smooth the heights of the vertices inside the (aligned) mask: the mean of the local medians within radius (the spikes, then
+    # the facets are removed), progressively from the border of the mask over ramp_distance, so that it joins its surroundings
+    from shapely.prepared import prep
+
+    footprint = get_mask_footprint(mask_name)
+    if footprint is None:
         return None
 
-    footprint = unary_union(footprints)
+    area = prep(footprint)
+    minx, miny, maxx, maxy = footprint.bounds
+    # the border of the mask, without its borders clipped by the tile
+    border = footprint.boundary.difference(geometry.box(minx, miny, maxx, maxy).boundary.buffer(0.5))
+
+    objects_data = []
+    for obj in get_mesh_objects((mask_name, "Ways")):
+        coords = np.array([(obj.matrix_world @ v.co)[:] for v in obj.data.vertices]) if len(obj.data.vertices) else np.zeros((0, 3))
+        inside = np.array([area.contains(geometry.Point(x, y)) for x, y in coords[:, :2]], dtype=bool)
+        if inside.any():
+            objects_data.append((obj, coords, np.where(inside)[0]))
+
+    if not objects_data:
+        return None
+
+    points = np.concatenate([coords[indexes] for _, coords, indexes in objects_data])
+    tree = cKDTree(points[:, :2])
+    neighbours = tree.query_ball_point(points[:, :2], r=radius)
+    medians = np.array([np.median(points[n, 2]) for n in neighbours])
+    smoothed = np.array([np.mean(medians[n]) for n in neighbours])
+
+    nb_smoothed = 0
+    offset = 0
+    for obj, coords, indexes in objects_data:
+        inverted_matrix = obj.matrix_world.inverted()
+        for j, i in enumerate(indexes):
+            x, y, z = coords[i]
+            weight = 1.0
+            if ramp_distance > 0.0 and not border.is_empty:
+                weight = min(1.0, border.distance(geometry.Point(x, y)) / ramp_distance)
+            obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((x, y, z + weight * (smoothed[offset + j] - z)))
+        obj.data.update()
+        offset += len(indexes)
+        nb_smoothed += len(indexes)
+
+    return nb_smoothed
+
+
+def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, mask_name="Areas", positioning_name="Ways"):
+    # push the vertices of the tile inside the (aligned) water mask under the water level, instead of cutting them:
+    # the faces crossing the shore slope down into the water, without holes in the 3d data.
+    # The water level of the tile: its water surface (75th percentile), at least its waterline (5th percentile of the ground
+    # within shore_distance of the water), at most the median ground of the shore, as the water level of the height data.
+    # The level of the height data is calculated for whole water bodies and can be lower (large rivers): the vertices are pushed
+    # under the lower quarter of the water surface too, and progressively over ramp_distance from the shore
+    from shapely.ops import unary_union
+    from shapely.prepared import prep
+
+    footprint = get_mask_footprint(mask_name)
+    if footprint is None:
+        return None
+
     water_area = prep(footprint)
     shore_area = prep(footprint.buffer(shore_distance))
 

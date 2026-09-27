@@ -114,6 +114,11 @@ try:
     )
 
     parser.add_argument(
+        "-bmsk", "--beach_mask_file_path", dest="beach_mask_file_path", type=str, required=False,
+        help="path of the beach mask file (the beaches are smoothed)",
+    )
+
+    parser.add_argument(
         "-dbg", "--debug", dest="debug", type=str, required=False,
         help="Debug the height data in blender",
     )
@@ -135,8 +140,8 @@ try:
     if not args.positioning_file_path:
         raise ScriptError("Error: --positioning_file_path=\"some string\" argument not given, aborting.")
 
-    if not args.mask_file_path and not args.water_mask_file_path:
-        raise ScriptError("Error: --mask_file_path=\"some string\" or --water_mask_file_path argument not given, aborting.")
+    if not args.mask_file_path and not args.water_mask_file_path and not args.beach_mask_file_path:
+        raise ScriptError("Error: --mask_file_path=\"some string\", --water_mask_file_path or --beach_mask_file_path argument not given, aborting.")
 
     clean_scene()
 
@@ -146,6 +151,6 @@ try:
         debug = False
 
     lod = MsfsLod(os.path.splitext(args.model_file)[0][-2:], 0, args.folder, args.model_file)
-    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path)
+    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, beach_mask_file_path=args.beach_mask_file_path)
 except:
     pass
