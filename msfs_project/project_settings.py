@@ -155,6 +155,9 @@ class ProjectSettings(Settings):
         self.create_woods_vegetation = "False"
         self.resize_ratio = 0.5
 
+        # the default min size values of the lods, from the most detailed one (the last one) in the template, used when a lod is added
+        self.default_target_min_size_values = self.__read_default_target_min_size_values(os.path.join(global_path, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE))
+
         if not os.path.isfile(os.path.join(path, self.file_name)) and os.path.isdir(path):
             config_template_path = os.path.join(global_path, CONFIG_TEMPLATES_FOLDER)
             shutil.copyfile(os.path.join(config_template_path, PROJECT_SETTINGS_TEMPLATE_FILE), os.path.join(path, self.file_name))
@@ -247,7 +250,26 @@ class ProjectSettings(Settings):
             config.write(configfile)
 
     def add_lod(self):
-        self.target_min_size_values.insert(0, "0")
+        # the value of the template for the same lod, counted from the most detailed one, not above the value of the next lod
+        default_value = 0
+        idx = len(self.default_target_min_size_values) - 1 - len(self.target_min_size_values)
+        if 0 <= idx < len(self.default_target_min_size_values):
+            default_value = int(self.default_target_min_size_values[idx])
+        if self.target_min_size_values:
+            default_value = min(default_value, int(self.target_min_size_values[0]))
+        self.target_min_size_values.insert(0, str(default_value))
+
+    @staticmethod
+    def __read_default_target_min_size_values(template_file_path):
+        import configparser
+
+        config = configparser.ConfigParser()
+        try:
+            config.read(template_file_path, encoding=ENCODING)
+            values = config.get("LODS", "target_min_size_values")
+        except (configparser.Error, OSError):
+            values = "0, 15, 50, 70, 80, 90, 100"
+        return str().join(values.split()).split(",")
 
     def remove_lower_lod(self):
         self.target_min_size_values.pop(0)

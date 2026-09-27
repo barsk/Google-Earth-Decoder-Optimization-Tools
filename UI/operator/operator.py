@@ -589,6 +589,7 @@ class OT_addLodOperator(Operator):
 
     def execute(self, context):
         context.scene.project_settings.add_lod()
+        context.scene.project_settings.save()
         reload_setting_props(context, reload_settings_file=False)
         return {'FINISHED'}
 
@@ -603,5 +604,6 @@ class OT_removeLowerLodOperator(Operator):
 
     def execute(self, context):
         context.scene.project_settings.remove_lower_lod()
+        context.scene.project_settings.save()
         reload_setting_props(context, reload_settings_file=False)
         return {'FINISHED'}
