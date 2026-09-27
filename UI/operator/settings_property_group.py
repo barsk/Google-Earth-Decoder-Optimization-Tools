@@ -174,10 +174,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.flat_water_level = self.flat_water_level
         context.scene.project_settings.save()
 
-    def trim_tiles_overlap_updated(self, context):
-        context.scene.project_settings.trim_tiles_overlap = self.trim_tiles_overlap
-        context.scene.project_settings.save()
-
     def smooth_beaches_updated(self, context):
         context.scene.project_settings.smooth_beaches = self.smooth_beaches
         context.scene.project_settings.save()
@@ -419,12 +415,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.project_settings.airport_city if bpy.types.Scene.project_settings is not None else str(),
         maxlen=256,
         update=airport_city_updated
-    )
-    trim_tiles_overlap: BoolProperty(
-        name="Trim the overlap between the tiles",
-        description="Cut the tiles where their east and north neighbour tiles start: the tile meshes reach a few meters over their neighbours, and the ground flickers there",
-        default=bpy.types.Scene.project_settings.trim_tiles_overlap if bpy.types.Scene.project_settings is not None else True,
-        update=trim_tiles_overlap_updated
     )
     smooth_beaches: BoolProperty(
         name="Smooth the beaches",
