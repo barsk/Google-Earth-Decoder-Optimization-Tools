@@ -16,6 +16,7 @@
 #
 #  <pep8 compliant>
 
+import bpy
 from bpy_types import Operator
 from constants import MAX_PHOTOGRAMMETRY_LOD, PROJECT_INI_SECTION, TILE_INI_SECTION, LODS_INI_SECTION, OSM_INI_SECTION, GEOCODE_INI_SECTION, ALTITUDE_ADJUSTMENT_INI_SECTION, COMPRESSONATOR_INI_SECTION, BUILD_INI_SECTION, MERGE_INI_SECTION, BACKUP_INI_SECTION, NONE_ICON, FILE_FOLDER_ICON, FILE_REFRESH_ICON, FILE_TICK_ICON, INFO_ICON, ADD_ICON, REMOVE_ICON, TEXTURES_INI_SECTION
 from .operator import OT_ProjectPathOperator, OT_ReloadSettingsOperator, \
@@ -45,13 +46,27 @@ class PanelOperator(Operator):
             reload_setting_props(context)
             panel_props.current_operator_class_name = type(self).__name__
             panel_props.current_operator = self.id_name
-            panel_props.setting_sections = self.starting_section
+            # the starting section may be missing: the settings file of the project does not exist (wrong project name)
+            available_sections = self.__available_sections()
+            starting_section = self.starting_section
+            if available_sections and starting_section not in available_sections:
+                starting_section = available_sections[0]
+            panel_props.setting_sections = starting_section
             panel_props.current_section = panel_props.setting_sections
             panel_props.first_mouse_x = event.mouse_x
             panel_props.first_mouse_y = context.window.height - 60
             context.window.cursor_warp(panel_props.first_mouse_x, panel_props.first_mouse_y)
         panel_props.invocation_type = "INVOKE_DEFAULT"
         context.window_manager.invoke_props_dialog(self, width=1024)
+
+    def __available_sections(self):
+        # the sections of the global and project settings displayed by the panel (as the items of the setting_sections property)
+        displayed_sections = getattr(type(self), "displayed_sections", [])
+        sections = [section[0] for section in bpy.types.Scene.global_settings.sections]
+        project_settings = getattr(bpy.types.Scene, "project_settings", None)
+        if project_settings is not None:
+            sections += [section[0] for section in project_settings.sections]
+        return [section for section in sections if section in displayed_sections]
 
 
 class SettingsOperator(PanelOperator):
