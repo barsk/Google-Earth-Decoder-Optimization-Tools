@@ -79,7 +79,7 @@ from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
 from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material, get_material_output
-from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET
+from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -436,7 +436,30 @@ def fix_object_bounding_box(resize_box=True):
 
     if resize_box:
         # resize objects to fix spacing between tiles
-        bpy.ops.transform.resize(value=(1.0045, 1.0045, 1))
+        bpy.ops.transform.resize(value=(LEGACY_TILE_SCALE, LEGACY_TILE_SCALE, 1))
+
+
+##################################################################
+# Place the tile in its MSFS frame
+##################################################################
+def place_tile_objects(frame, tile_lat, tile_lon, tile_alt):
+    # moves the vertices of the imported Earth2MSFS tile from the frame of its download to the local frame of the tile,
+    # placed by MSFS at the south west corner of its octree cell (utils.placement): Blender east = -X, north = -Y, up = Z
+    import numpy as np
+
+    for obj in bpy.context.scene.objects:
+        if obj.type != MESH_OBJECT_TYPE or not len(obj.data.vertices):
+            continue
+        count = len(obj.data.vertices)
+        co = np.empty(count * 3, dtype=np.float32)
+        obj.data.vertices.foreach_get("co", co)
+        co = co.reshape(-1, 3).astype(np.float64)
+        matrix = np.array(obj.matrix_world, dtype=np.float64)
+        world = co @ matrix[0:3, 0:3].T + matrix[0:3, 3]
+        east, north, up = frame.to_tile(-world[:, 0], -world[:, 1], world[:, 2], tile_lat, tile_lon, tile_alt)
+        obj.data.vertices.foreach_set("co", np.column_stack([-east, -north, up]).astype(np.float32).ravel())
+        obj.matrix_world = mathutils.Matrix.Identity(4)
+        obj.data.update()
 
 
 ######################################################
@@ -482,11 +505,110 @@ def center_origin(obj):
     bpy.ops.object.location_clear(clear_delta=False)
 
 
+def has_legacy_tile_scale(model_file_path):
+    # the tiles placed by their bounding box (fix_object_bounding_box) are scaled by 1.0045 (glTF node scale), the tiles
+    # placed in their octree cell (place_tile_objects) are not
+    try:
+        with open(model_file_path, "r") as file:
+            gltf = json.load(file)
+    except (OSError, ValueError):
+        return True
+
+    for node in gltf.get("nodes", []):
+        scale = node.get("scale")
+        if scale and abs(scale[0] - LEGACY_TILE_SCALE) < 1e-4:
+            return True
+
+    return False
+
+
+def get_osm_to_tile_affine(positioning_obj, positioning_file_path):
+    # affine transformation (3x2 matrix, for rows of x, y, 1) from the coordinates of the imported OSM data (BlenderGIS
+    # projection, east = +X, north = +Y) to the frame of a tile placed in its octree cell (east = -X, north = -Y, WGS84 meters
+    # from the south west corner), from the corners of the tile outline (positioning file)
+    import numpy as np
+    from utils.placement import wgs84_to_tile
+
+    outline = read_osm_polygons(positioning_file_path)
+    if outline is None:
+        return None
+    west, south, east, north = outline.bounds
+
+    matrix = np.array(positioning_obj.matrix_world, dtype=np.float64)
+    points = np.array([tuple(v.co) for v in positioning_obj.data.vertices], dtype=np.float64)
+    if len(points) < 4:
+        return None
+    points = (points @ matrix[0:3, 0:3].T + matrix[0:3, 3])[:, 0:2]
+    total, difference = points.sum(axis=1), points[:, 0] - points[:, 1]
+    projected = np.array([points[np.argmin(total)], points[np.argmax(difference)], points[np.argmax(total)], points[np.argmin(difference)]])
+
+    corner_lat, corner_lon = np.array([south, south, north, north]), np.array([west, east, east, west])
+    corner_east, corner_north, _ = wgs84_to_tile(corner_lat, corner_lon, 0.0, south, west, 0.0)
+    solution, *_ = np.linalg.lstsq(np.column_stack([projected, np.ones(4)]), np.column_stack([-corner_east, -corner_north]), rcond=None)
+    return solution
+
+
+def transform_object_xy(obj, affine, z_center=None):
+    # applies an affine transformation (3x2 matrix) to the world X and Y of the vertices of an object, optionally centering
+    # its Z on z_center, and resets its transformation
+    import numpy as np
+
+    count = len(obj.data.vertices)
+    co = np.empty(count * 3, dtype=np.float32)
+    obj.data.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3).astype(np.float64)
+    matrix = np.array(obj.matrix_world, dtype=np.float64)
+    world = co @ matrix[0:3, 0:3].T + matrix[0:3, 3]
+    xy = np.column_stack([world[:, 0:2], np.ones(count)]) @ affine
+    z = world[:, 2]
+    if z_center is not None and count:
+        z = z - (z.min() + z.max()) / 2.0 + z_center
+    obj.data.vertices.foreach_set("co", np.column_stack([xy, z]).astype(np.float32).ravel())
+    obj.matrix_world = mathutils.Matrix.Identity(4)
+    obj.data.update()
+
+
+def align_mask_with_tile_frame(positioning_file_path, mask_file_path, objects_to_keep):
+    # places the mask ("Areas" object) in the frame of a tile placed in its octree cell, from the corners of the tile
+    # outline (positioning file). Like align_model_with_mask, the scene then only has the objects to keep and the mask
+    clean_scene(objects_to_keep=objects_to_keep)
+    bpy.ops.object.select_all(action=DESELECT_ACTION)
+    import_osm_file(positioning_file_path)
+    outlines = [obj for obj in bpy.context.selected_objects if obj.type == MESH_OBJECT_TYPE]
+    if not outlines:
+        return False
+    affine = get_osm_to_tile_affine(outlines[0], positioning_file_path)
+    z_center = outlines[0].matrix_world.translation[2]
+    bpy.ops.object.select_all(action=DESELECT_ACTION)
+    for obj in bpy.context.scene.objects:
+        if obj not in objects_to_keep:
+            obj.select_set(True)
+    bpy.ops.object.delete()
+    if affine is None:
+        return False
+
+    import_osm_file(mask_file_path)
+    imported = [obj for obj in bpy.context.selected_objects if obj.type == MESH_OBJECT_TYPE]
+    if not imported:
+        return False
+    target = imported[0]
+    bpy.context.view_layer.objects.active = target
+    if len(imported) > 1:
+        bpy.ops.object.join()
+    target.name = "Areas"
+    transform_object_xy(target, affine, z_center=z_center)
+    bpy.ops.object.select_all(action=DESELECT_ACTION)
+    return True
+
+
 def align_model_with_mask(model_file_path, positioning_file_path, mask_file_path, objects_to_keep=None):
     # not a mutable default argument: the positioning object is appended to the list, which must not survive the call
     objects_to_keep = [] if objects_to_keep is None else objects_to_keep
     if not bpy.context.scene:
         return False
+
+    if not has_legacy_tile_scale(model_file_path):
+        return align_mask_with_tile_frame(positioning_file_path, mask_file_path, objects_to_keep)
 
     import_model_files([model_file_path], objects_to_keep=objects_to_keep)
     bpy.ops.object.select_all(action=SELECT_ACTION)
@@ -509,7 +631,7 @@ def align_model_with_mask(model_file_path, positioning_file_path, mask_file_path
     rot_z = 0.0
 
     import_osm_file(positioning_file_path)
-    bpy.ops.transform.resize(value=(1.0045, 1.0045, 1))
+    bpy.ops.transform.resize(value=(LEGACY_TILE_SCALE, LEGACY_TILE_SCALE, 1))
 
     for obj in bpy.context.selected_objects:
         obj.name = "Ways"
@@ -593,6 +715,24 @@ def align_models_with_masks(model_files, positionings, mask):
 
         bpy.context.view_layer.objects.active = mesh
         bpy.ops.object.join()
+
+        if not has_legacy_tile_scale(model_file_path):
+            # tile placed in its octree cell: moved to the coordinates of the OSM data, from the corners of its outline
+            import numpy as np
+
+            bpy.ops.object.select_all(action=DESELECT_ACTION)
+            import_osm_file(positioning)
+            outlines = [obj for obj in bpy.context.selected_objects if obj.type == MESH_OBJECT_TYPE]
+            affine = get_osm_to_tile_affine(outlines[0], positioning) if outlines else None
+            bpy.ops.object.delete()
+            if affine is not None:
+                inverse = np.linalg.inv(np.column_stack([affine, [0.0, 0.0, 1.0]]))[:, 0:2]
+                transform_object_xy(mesh, inverse)
+            bpy.ops.object.select_all(action=SELECT_ACTION)
+            for obj in bpy.context.selected_objects:
+                objects_to_keep.append(obj)
+            continue
+
         bpy.ops.transform.mirror(constraint_axis=(True, True, False), orient_type='GLOBAL')
 
         for obj in bpy.context.selected_objects:
@@ -1101,9 +1241,10 @@ def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, s
     if bbox is None or areas_gdf.empty:
         return set(), set(), None
 
-    west, south = bbox.bounds[0], bbox.bounds[1]
-    meters_per_lat_degree = 111320.0
-    meters_per_lon_degree = meters_per_lat_degree * cos(radians(south))
+    from utils.placement import wgs84_meters_per_degree
+
+    west, south, north = bbox.bounds[0], bbox.bounds[1], bbox.bounds[3]
+    meters_per_lat_degree, meters_per_lon_degree = wgs84_meters_per_degree((south + north) / 2.0)
     to_lon_lat = lambda y, x: (west - x / meters_per_lon_degree, south - y / meters_per_lat_degree)
 
     # the water areas in the coordinates of the tile, in meters

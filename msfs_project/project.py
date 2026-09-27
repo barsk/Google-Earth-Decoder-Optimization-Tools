@@ -68,6 +68,7 @@ from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
 from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, flatten_water_height_data, remove_not_water_natural_gdf
 from utils.octant import get_coords_from_file_name
+from utils.placement import fit_tiles_placement, save_tiles_placement
 from msfs_project.gltf import MsfsGltf
 from msfs_project.shape import MsfsShapes
 from utils import replace_in_file, is_octant, backup_file, ScriptError, print_title, \
@@ -251,6 +252,7 @@ class MsfsProject:
 
         # some tile lods are not optimized
         if self.__optimization_needed():
+            self.__fit_tiles_placement()
             self.__create_optimization_folders()
             self.__optimize_tile_lods(self.__retrieve_lods_to_optimize(settings.nb_parallel_blender_tasks))
 
@@ -883,6 +885,35 @@ class MsfsProject:
 
         return self.coords
 
+    def __fit_tiles_placement(self):
+        # the frames of the Earth2MSFS downloads of the tiles to optimize, found from their raw files (utils.placement): the
+        # tiles are then placed exactly at the south west corner of their octree cell, instead of by their bounding box
+        tile_model_files, tile_altitudes = {}, {}
+        for tile in self.tiles.values():
+            model_files = [os.path.join(lod.folder, lod.model_file) for lod in tile.lods if not lod.optimized and os.path.isfile(os.path.join(lod.folder, lod.model_file))]
+            if model_files:
+                tile_model_files[tile.name] = model_files
+                tile_altitudes[tile.name] = float(tile.pos.alt)
+
+        if not tile_model_files:
+            return
+
+        placement = fit_tiles_placement(tile_model_files, tile_altitudes)
+        # keep the frames of the tiles placed by a previous run
+        file_path = os.path.join(self.xmlfiles_folder, TILES_PLACEMENT_FILE)
+        if os.path.isfile(file_path):
+            with open(file_path, "r") as file:
+                previous = json.load(file)
+            offset = len(previous.get("frames", []))
+            placement = {"frames": previous.get("frames", []) + placement["frames"],
+                         "tiles": {**previous.get("tiles", {}), **{name: index + offset for name, index in placement["tiles"].items()}}}
+        save_tiles_placement(file_path, placement)
+
+        not_placed = [name for name in tile_model_files if name not in placement["tiles"]]
+        isolated_print("tiles placed in their octree cell:", len(tile_model_files) - len(not_placed), "of", len(tile_model_files))
+        if not_placed:
+            isolated_print("tiles placed by their bounding box (no Earth2MSFS node names):", ", ".join(not_placed))
+
     def __optimization_needed(self):
         for tile in self.tiles.values():
             for lod in tile.lods:
@@ -940,7 +971,9 @@ class MsfsProject:
                     continue
 
                 if lod.folder != self.model_lib_folder:
-                    data.append({"name": lod.name, "params": ["--folder", str(lod.folder), "--model_file", str(lod.model_file), "--output_texture_format", str(self.settings.output_texture_format)]})
+                    data.append({"name": lod.name, "params": ["--folder", str(lod.folder), "--model_file", str(lod.model_file), "--output_texture_format", str(self.settings.output_texture_format),
+                                                              "--placement_file_path", os.path.join(self.xmlfiles_folder, TILES_PLACEMENT_FILE), "--tile_name", tile.name,
+                                                              "--tile_position", "%.12f,%.12f,%.12f" % (float(tile.pos.lat), float(tile.pos.lon), float(tile.pos.alt))]})
 
         return chunks(data, nb_parallel_blender_tasks)
 

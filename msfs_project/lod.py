@@ -21,7 +21,7 @@ import re
 import shutil
 from pathlib import Path
 
-from blender import import_model_files, bake_texture_files, fix_object_bounding_box, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask, remove_overlapping_octant_faces
+from blender import import_model_files, bake_texture_files, fix_object_bounding_box, place_tile_objects, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask, remove_overlapping_octant_faces
 from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE, BEACH_SMOOTHING_RADIUS, BEACH_SMOOTHING_RAMP_DISTANCE, OVERLAPPING_OCTANTS_TOLERANCE
 from msfs_project.binary import MsfsBinary
 from msfs_project.texture import MsfsTexture
@@ -144,7 +144,9 @@ class MsfsLod:
 
         return False
 
-    def optimize(self, bake_textures_enabled, output_texture_format):
+    def optimize(self, bake_textures_enabled, output_texture_format, frame=None, tile_position=None):
+        # frame: the frame of the download of the tile (utils.placement), tile_position: (lat, lon, alt) of the tile.
+        # Without them, the tile is placed by its bounding box (older behaviour)
         model_files = [model_file for model_file in Path(self.folder).glob(GLTF_FILE_PATTERN) if not self.__is_optimized(model_file)]
         if not model_files:
             return
@@ -172,8 +174,12 @@ class MsfsLod:
             for texture in textures:
                 shutil.copyfile(os.path.join(self.folder, texture.file), os.path.join(os.path.dirname(self.folder), TEXTURE_FOLDER, texture.file))
 
-        isolated_print("fix bounding box for", self.name)
-        fix_object_bounding_box()
+        if frame is not None and tile_position is not None:
+            isolated_print("place", self.name, "in its msfs frame")
+            place_tile_objects(frame, *tile_position)
+        else:
+            isolated_print("fix bounding box for", self.name)
+            fix_object_bounding_box()
         export_to_optimized_gltf_files(new_gltf, TEXTURE_FOLDER)
 
         if os.path.isfile(new_gltf):

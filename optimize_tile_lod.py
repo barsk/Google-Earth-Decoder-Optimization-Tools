@@ -59,6 +59,7 @@ if cwd not in sys.path:
 from utils import *
 from blender import clean_scene
 from msfs_project import MsfsLod
+from utils.placement import load_tile_frame
 
 # clear and open the system console
 # open_console()
@@ -96,6 +97,21 @@ try:
         help="output texture format of the textures",
     )
 
+    parser.add_argument(
+        "-pf", "--placement_file_path", dest="placement_file_path", type=str, required=False,
+        help="path of the file of the frames of the downloads of the tiles (utils.placement)",
+    )
+
+    parser.add_argument(
+        "-tn", "--tile_name", dest="tile_name", type=str, required=False,
+        help="name of the tile",
+    )
+
+    parser.add_argument(
+        "-tp", "--tile_position", dest="tile_position", type=str, required=False,
+        help="latitude, longitude and altitude of the tile, separated by commas",
+    )
+
     args = parser.parse_args(argv)
 
     if not argv:
@@ -114,7 +130,12 @@ try:
 
     global_settings = GlobalSettings(get_global_path())
 
+    frame, tile_position = None, None
+    if args.placement_file_path and args.tile_name and args.tile_position:
+        frame = load_tile_frame(args.placement_file_path, args.tile_name)
+        tile_position = tuple(float(value) for value in args.tile_position.split(","))
+
     lod = MsfsLod(int(args.folder[-2:]), 0, args.folder, args.model_file)
-    lod.optimize(global_settings.bake_textures_enabled, args.output_texture_format)
+    lod.optimize(global_settings.bake_textures_enabled, args.output_texture_format, frame=frame, tile_position=tile_position)
 except:
     pass
