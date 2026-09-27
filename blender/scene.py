@@ -657,6 +657,72 @@ def reduce_number_of_vertices(model_file_path):
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
+def push_down_water_in_mask(depth=1.5, shore_distance=6.0, mask_name="Areas", positioning_name="Ways"):
+    # push the vertices of the tile inside the (aligned) water mask under the water level, instead of cutting them:
+    # the faces crossing the shore slope down into the water, without holes in the 3d data.
+    # The water level of the tile: its water surface (75th percentile), at least its waterline (5th percentile of the ground
+    # within shore_distance of the water), at most the median ground of the shore, as the water level of the height data
+    from shapely.ops import unary_union
+    from shapely.prepared import prep
+
+    mask = bpy.context.scene.objects.get(mask_name)
+    if mask is None:
+        return None
+
+    mask_matrix = mask.matrix_world
+    footprints = []
+    for polygon in mask.data.polygons:
+        if abs((mask_matrix.to_3x3() @ polygon.normal).z) < 0.5:
+            continue
+        points = [(mask_matrix @ mask.data.vertices[i].co).xy for i in polygon.vertices]
+        if len(points) >= 3:
+            footprint = geometry.Polygon(points).buffer(0)
+            if not footprint.is_empty:
+                footprints.append(footprint)
+
+    if not footprints:
+        return None
+
+    footprint = unary_union(footprints)
+    water_area = prep(footprint)
+    shore_area = prep(footprint.buffer(shore_distance))
+
+    objects_data = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != MESH_OBJECT_TYPE or obj.name in (mask_name, positioning_name) or BOUNDING_BOX_OSM_KEY in obj.name:
+            continue
+        coords = np.array([(obj.matrix_world @ v.co)[:] for v in obj.data.vertices]) if len(obj.data.vertices) else np.zeros((0, 3))
+        in_water = np.array([water_area.contains(geometry.Point(x, y)) for x, y in coords[:, :2]], dtype=bool)
+        on_shore = np.array([(not w) and shore_area.contains(geometry.Point(x, y)) for (x, y), w in zip(coords[:, :2], in_water)], dtype=bool)
+        objects_data.append((obj, coords, in_water, on_shore))
+
+    water_heights = np.concatenate([coords[in_water, 2] for _, coords, in_water, _ in objects_data]) if objects_data else np.zeros(0)
+    shore_heights = np.concatenate([coords[on_shore, 2] for _, coords, _, on_shore in objects_data]) if objects_data else np.zeros(0)
+
+    if len(water_heights) >= 20 and len(shore_heights) >= 20:
+        level = min(max(np.percentile(water_heights, 75), np.percentile(shore_heights, 5)), np.median(shore_heights))
+    elif len(water_heights):
+        level = np.median(water_heights)
+    elif len(shore_heights):
+        level = np.percentile(shore_heights, 5)
+    else:
+        return None
+
+    target = float(level) - depth
+    nb_pushed = 0
+    for obj, coords, in_water, _ in objects_data:
+        indexes = np.where(in_water & (coords[:, 2] > target))[0]
+        if not len(indexes):
+            continue
+        inverted_matrix = obj.matrix_world.inverted()
+        for i in indexes:
+            obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((coords[i, 0], coords[i, 1], target))
+        obj.data.update()
+        nb_pushed += len(indexes)
+
+    return float(level), nb_pushed
+
+
 def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False, keep_mask=False):
     if model_file_path is not None:
         import_model_files([model_file_path], clean=False)

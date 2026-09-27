@@ -21,8 +21,8 @@ import re
 import shutil
 from pathlib import Path
 
-from blender import import_model_files, bake_texture_files, fix_object_bounding_box, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices
-from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER
+from blender import import_model_files, bake_texture_files, fix_object_bounding_box, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask
+from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH
 from msfs_project.binary import MsfsBinary
 from msfs_project.texture import MsfsTexture
 from msfs_project.gltf import MsfsGltf
@@ -236,22 +236,48 @@ class MsfsLod:
         model_file.remove_texture_path(self.name)
         model_file.dump()
 
-    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False):
+    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None):
         # Import the gltf files located in the object folder
-        isolated_print("align", self.name, "model with mask")
         model_file = MsfsGltf(os.path.join(self.folder, self.model_file))
         model_file.remove_texture_path(self.name)
         model_file.add_texture_path()
         model_file.dump()
-        align_model_with_mask(os.path.join(self.folder, self.model_file), positioning_file_path, mask_file_path)
 
-        if process_type == PROCESS_TYPE.cleanup_3d_data:
-            process_3d_data(model_file_path=os.path.join(self.folder, self.model_file), intersect=False)
-
-        if process_type == PROCESS_TYPE.isolate_3d_data:
-            process_3d_data(model_file_path=os.path.join(self.folder, self.model_file), intersect=True)
-
+        has_mask = bool(mask_file_path) and os.path.isfile(mask_file_path)
+        has_water_mask = process_type == PROCESS_TYPE.cleanup_3d_data and bool(water_mask_file_path) and os.path.isfile(water_mask_file_path)
+        source_model_file_path = os.path.join(self.folder, self.model_file)
         output_model_file = output_name + self.LOD_SUFFIX + str(self.lod_level).zfill(2) + GLTF_FILE_EXT if output_name else self.model_file
+
+        if has_water_mask:
+            # the water is pushed down under the water level, instead of being cut
+            isolated_print("push down the water of", self.name)
+            align_model_with_mask(source_model_file_path, positioning_file_path, water_mask_file_path)
+            # the alignment keeps only the mask: import the model in the aligned scene
+            import_model_files([source_model_file_path], clean=False)
+            result = push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH)
+            if result is not None:
+                isolated_print("water level %.2f, %d vertices pushed down" % result)
+            self.__remove_mask_objects()
+
+            if has_mask:
+                # the other exclusions are cut from the model with the water pushed down
+                source_model_file_path = os.path.join(output_folder, output_model_file)
+                export_to_optimized_gltf_files(source_model_file_path, TEXTURE_FOLDER, use_selection=True, export_extras=False, apply_modifiers=True)
+                model_file = MsfsGltf(source_model_file_path)
+                model_file.remove_texture_path(self.name)
+                model_file.add_texture_path()
+                model_file.dump()
+
+        if has_mask:
+            isolated_print("align", self.name, "model with mask")
+            align_model_with_mask(source_model_file_path, positioning_file_path, mask_file_path)
+
+            if process_type == PROCESS_TYPE.cleanup_3d_data:
+                process_3d_data(model_file_path=source_model_file_path, intersect=False)
+
+            if process_type == PROCESS_TYPE.isolate_3d_data:
+                process_3d_data(model_file_path=source_model_file_path, intersect=True)
+
         export_to_optimized_gltf_files(os.path.join(output_folder, output_model_file), TEXTURE_FOLDER, use_selection=True, export_extras=False, apply_modifiers=True)
         model_file = MsfsGltf(os.path.join(output_folder, output_model_file))
         model_file.remove_texture_path(self.name)
@@ -261,6 +287,16 @@ class MsfsLod:
 
         if not debug:
             clean_scene()
+
+    @staticmethod
+    def __remove_mask_objects():
+        import bpy
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in bpy.context.scene.objects:
+            if obj.name in ("Areas", "Ways"):
+                obj.select_set(True)
+        bpy.ops.object.delete()
+        bpy.ops.object.select_all(action="SELECT")
 
     def get_subtiles(self):
         result = []

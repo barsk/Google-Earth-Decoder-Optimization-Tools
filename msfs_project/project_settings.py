@@ -75,6 +75,7 @@ class ProjectSettings(Settings):
     flat_water_level: str
     water_depth: float
     exclude_water: str
+    push_down_water: str
     exclude_forests: str
     exclude_woods: str
     exclude_nature_reserves: str
@@ -98,6 +99,8 @@ class ProjectSettings(Settings):
     BLEND_OUTER_EDGES_SETTING = "blend_outer_edges"
     FLAT_WATER_LEVEL_SETTING = "flat_water_level"
     WATER_DEPTH_SETTING = "water_depth"
+    OPENSTREETMAP_SECTION = "OPENSTREETMAP"
+    PUSH_DOWN_WATER_SETTING = "push_down_water"
     TARGET_MIN_SIZE_VALUES_SETTING = "target_min_size_values"
 
     def __init__(self, global_path, path, project_name):
@@ -136,6 +139,7 @@ class ProjectSettings(Settings):
         self.water_depth = DEFAULT_WATER_DEPTH
         self.exclude_ground = "False"
         self.exclude_water = "True"
+        self.push_down_water = "True"
         self.exclude_forests = "True"
         self.exclude_woods = "True"
         self.exclude_nature_reserves = "False"
@@ -205,6 +209,7 @@ class ProjectSettings(Settings):
         self.water_depth = "{:.1f}".format(float(str(self.water_depth))).rstrip("0").rstrip(".")
         self.exclude_ground = json.loads(self.exclude_ground.lower())
         self.exclude_water = json.loads(self.exclude_water.lower())
+        self.push_down_water = json.loads(str(self.push_down_water).lower())
         self.exclude_forests = json.loads(self.exclude_forests.lower())
         self.exclude_woods = json.loads(self.exclude_woods.lower())
         self.exclude_nature_reserves = json.loads(self.exclude_nature_reserves.lower())
@@ -245,6 +250,9 @@ class ProjectSettings(Settings):
         config.set(self.HEIGHT_MAPS_SECTION, self.BLEND_OUTER_EDGES_SETTING, str(self.blend_outer_edges))
         config.set(self.HEIGHT_MAPS_SECTION, self.FLAT_WATER_LEVEL_SETTING, str(self.flat_water_level))
         config.set(self.HEIGHT_MAPS_SECTION, self.WATER_DEPTH_SETTING, str(self.water_depth))
+        if not config.has_section(self.OPENSTREETMAP_SECTION):
+            config.add_section(self.OPENSTREETMAP_SECTION)
+        config.set(self.OPENSTREETMAP_SECTION, self.PUSH_DOWN_WATER_SETTING, str(self.push_down_water))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
             config.write(configfile)

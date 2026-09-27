@@ -1049,8 +1049,10 @@ class MsfsProject:
                 continue
 
             mask_file_path = os.path.join(self.osmfiles_folder, EXCLUSION_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT)
-            copy_lods = (not os.path.isfile(mask_file_path))
+            water_mask_file_path = os.path.join(self.osmfiles_folder, WATER_PUSH_DOWN_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT)
             has_mask_file = os.path.isfile(mask_file_path)
+            has_water_mask_file = os.path.isfile(water_mask_file_path)
+            copy_lods = not has_mask_file and not has_water_mask_file
 
             for lod in tile.lods:
                 if not os.path.isdir(lod.folder):
@@ -1090,6 +1092,11 @@ class MsfsProject:
 
                 if has_mask_file:
                     params.extend(["--mask_file_path", str(mask_file_path)])
+
+                if has_water_mask_file:
+                    params.extend(["--water_mask_file_path", str(water_mask_file_path)])
+
+                if has_mask_file or has_water_mask_file:
                     data.append({"name": lod.name, "params": params})
 
         return tiles, chunks(data, nb_parallel_blender_tasks)
@@ -1486,7 +1493,10 @@ class MsfsProject:
             if self.settings.isolate_3d_data:
                 self.__create_exclusion_masks_from_tiles(b, orig_bbox.assign(building=BOUNDING_BOX_OSM_KEY), building_mask=resize_gdf(building, float(self.settings.building_margin)), water_mask=water, construction_mask=construction if self.settings.keep_constructions else None, road_mask=roads if self.settings.keep_roads else None, bridges_mask=bridges if self.settings.keep_roads else None, hidden_roads=hidden_roads if self.settings.keep_roads else None, amenity_mask=amenity if self.settings.keep_roads else None, residential_mask=residential if self.settings.keep_residential else None, industrial_mask=industrial, airport_mask=airport, rocks_mask=resize_gdf(rocks, float(self.settings.building_margin)), file_prefix=EXCLUSION_OSM_FILE_PREFIX, title="CREATE EXCLUSION MASKS OSM FILES", process_all=process_all)
             else:
-                self.__create_exclusion_masks_from_tiles(b, exclusion, building_mask=building, road_mask=roads if self.settings.keep_roads else None, bridges_mask=bridges if self.settings.keep_roads else None, hidden_roads=hidden_roads if self.settings.keep_roads else None, airport_mask=airport, rocks_mask=rocks, file_prefix=EXCLUSION_OSM_FILE_PREFIX, title="CREATE EXCLUSION MASKS OSM FILES", process_all=process_all)
+                self.__create_exclusion_masks_from_tiles(b, difference_gdf(exclusion, water) if self.settings.push_down_water else exclusion, building_mask=building, road_mask=roads if self.settings.keep_roads else None, bridges_mask=bridges if self.settings.keep_roads else None, hidden_roads=hidden_roads if self.settings.keep_roads else None, airport_mask=airport, rocks_mask=rocks, file_prefix=EXCLUSION_OSM_FILE_PREFIX, title="CREATE EXCLUSION MASKS OSM FILES", process_all=process_all)
+                # the water is pushed down under the water level instead of being cut (no holes in the 3d data along the shores)
+                if self.settings.push_down_water and not water.empty:
+                    self.__create_exclusion_masks_from_tiles(b, water.assign(building=WATER_OSM_KEY), file_prefix=WATER_PUSH_DOWN_OSM_FILE_PREFIX, title="CREATE WATER PUSH DOWN MASKS OSM FILES", process_all=process_all)
 
         if generate_height_data:
             if self.settings.isolate_3d_data:

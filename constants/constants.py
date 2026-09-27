@@ -181,6 +181,9 @@ WATER_SHORE_DEPTH = 1.0
 WATER_EXCLUSION_INSET = 0
 # natural features downloaded with the natural water, which are land on the Google Earth tiles: not removed from the tiles, not leveled as water
 NOT_WATER_NATURAL_OSM_TAGS = ["beach", "wetland"]
+# the water is pushed down under the water level instead of being cut from the tiles (no holes in the 3d data along the shores)
+WATER_PUSH_DOWN_OSM_FILE_PREFIX = "water_push_down"
+WATER_PUSH_DOWN_DEPTH = 1.5
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

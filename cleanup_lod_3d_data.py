@@ -104,8 +104,13 @@ try:
     )
 
     parser.add_argument(
-        "-msk", "--mask_file_path", dest="mask_file_path", type=str, required=True,
+        "-msk", "--mask_file_path", dest="mask_file_path", type=str, required=False,
         help="path of the exclusion mask file",
+    )
+
+    parser.add_argument(
+        "-wmsk", "--water_mask_file_path", dest="water_mask_file_path", type=str, required=False,
+        help="path of the water mask file (the water is pushed down under the water level)",
     )
 
     parser.add_argument(
@@ -130,8 +135,8 @@ try:
     if not args.positioning_file_path:
         raise ScriptError("Error: --positioning_file_path=\"some string\" argument not given, aborting.")
 
-    if not args.mask_file_path:
-        raise ScriptError("Error: --mask_file_path=\"some string\" argument not given, aborting.")
+    if not args.mask_file_path and not args.water_mask_file_path:
+        raise ScriptError("Error: --mask_file_path=\"some string\" or --water_mask_file_path argument not given, aborting.")
 
     clean_scene()
 
@@ -141,6 +146,6 @@ try:
         debug = False
 
     lod = MsfsLod(os.path.splitext(args.model_file)[0][-2:], 0, args.folder, args.model_file)
-    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug)
+    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path)
 except:
     pass

@@ -174,6 +174,10 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.flat_water_level = self.flat_water_level
         context.scene.project_settings.save()
 
+    def push_down_water_updated(self, context):
+        context.scene.project_settings.push_down_water = self.push_down_water
+        context.scene.project_settings.save()
+
     def blend_outer_edges_updated(self, context):
         context.scene.project_settings.blend_outer_edges = self.blend_outer_edges
         context.scene.project_settings.save()
@@ -407,6 +411,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.project_settings.airport_city if bpy.types.Scene.project_settings is not None else str(),
         maxlen=256,
         update=airport_city_updated
+    )
+    push_down_water: BoolProperty(
+        name="Push down the water",
+        description="Push the water of the Google Earth tiles down under the water level, instead of cutting it (no holes in the 3d data along the shores)",
+        default=bpy.types.Scene.project_settings.push_down_water if bpy.types.Scene.project_settings is not None else True,
+        update=push_down_water_updated
     )
     exclude_water: BoolProperty(
         name="Exclude water 3d data",
