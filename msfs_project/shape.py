@@ -267,6 +267,14 @@ class MsfsShapes:
             else:
                 polygons = row.geometry
 
+            # MSFS ignores the polygons whose outline crosses itself: repair them
+            valid_polygons = []
+            for polygon in polygons:
+                if not polygon.is_valid:
+                    polygon = polygon.buffer(0)
+                valid_polygons.extend(polygon.geoms if isinstance(polygon, MultiPolygon) else [polygon])
+            polygons = [polygon for polygon in valid_polygons if isinstance(polygon, Polygon) and not polygon.is_empty]
+
             group_index = index[1]+1 if isinstance(index, list) or isinstance(index, tuple) else index+1
             for idx, polygon in enumerate(polygons):
                 self.polygons.append(MsfsShapePolygon(polygon=polygon, display_name=name_prefix + "_" + str(idx), tiles=tiles, parent_group_id=group_id, group_index=group_index, flatten=flatten, exclude_buildings=exclude_buildings, exclude_roads=exclude_roads, exclude_vegetation=exclude_vegetation, create_vegetation=create_vegetation))
