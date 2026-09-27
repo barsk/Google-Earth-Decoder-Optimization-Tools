@@ -21,8 +21,8 @@ import re
 import shutil
 from pathlib import Path
 
-from blender import import_model_files, bake_texture_files, fix_object_bounding_box, place_tile_objects, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask, remove_overlapping_octant_faces
-from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE, BEACH_SMOOTHING_RADIUS, BEACH_SMOOTHING_RAMP_DISTANCE, OVERLAPPING_OCTANTS_TOLERANCE
+from blender import import_model_files, bake_texture_files, fix_object_bounding_box, place_tile_objects, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask, remove_overlapping_octant_faces, clip_nodes_to_octree_cells, has_legacy_tile_scale
+from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE, BEACH_SMOOTHING_RADIUS, BEACH_SMOOTHING_RAMP_DISTANCE, OVERLAPPING_OCTANTS_TOLERANCE, NODE_CLIPPING_MARGIN
 from msfs_project.binary import MsfsBinary
 from msfs_project.texture import MsfsTexture
 from msfs_project.gltf import MsfsGltf
@@ -242,7 +242,7 @@ class MsfsLod:
         model_file.remove_texture_path(self.name)
         model_file.dump()
 
-    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None, beach_mask_file_path=None, remove_overlapping_octants=False):
+    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None, beach_mask_file_path=None, remove_overlapping_octants=False, clip_nodes_to_cells=False):
         # Import the gltf files located in the object folder
         model_file = MsfsGltf(os.path.join(self.folder, self.model_file))
         model_file.remove_texture_path(self.name)
@@ -254,6 +254,9 @@ class MsfsLod:
         cleanup = process_type == PROCESS_TYPE.cleanup_3d_data
         # the passes updating the vertices of the model (the alignment of each mask imports the model again)
         passes = []
+        # the tiles placed by their bounding box (older projects) are not exactly in their cell: they are not clipped
+        if clip_nodes_to_cells and is_file(positioning_file_path) and not has_legacy_tile_scale(os.path.join(self.folder, self.model_file)):
+            passes.append(("clip the nodes to their octree cells of", None, lambda: clip_nodes_to_octree_cells(positioning_file_path, margin=NODE_CLIPPING_MARGIN)))
         if remove_overlapping_octants:
             passes.append(("remove the overlapping octants of", None, lambda: remove_overlapping_octant_faces(tolerance=OVERLAPPING_OCTANTS_TOLERANCE)))
         if cleanup and is_file(water_mask_file_path):

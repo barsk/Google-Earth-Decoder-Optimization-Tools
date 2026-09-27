@@ -174,6 +174,10 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.flat_water_level = self.flat_water_level
         context.scene.project_settings.save()
 
+    def clip_nodes_to_cells_updated(self, context):
+        context.scene.project_settings.clip_nodes_to_cells = self.clip_nodes_to_cells
+        context.scene.project_settings.save()
+
     def remove_overlapping_octants_updated(self, context):
         context.scene.project_settings.remove_overlapping_octants = self.remove_overlapping_octants
         context.scene.project_settings.save()
@@ -419,6 +423,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.project_settings.airport_city if bpy.types.Scene.project_settings is not None else str(),
         maxlen=256,
         update=airport_city_updated
+    )
+    clip_nodes_to_cells: BoolProperty(
+        name="Clip the nodes to their octree cells",
+        description="The Google Earth nodes overlap their neighbours by 1 to 4 m with the same surface, which flickers on the tile seams and the node boundaries: cut each node at the edges of its cell (tiles placed in their octree cell only)",
+        default=bpy.types.Scene.project_settings.clip_nodes_to_cells if bpy.types.Scene.project_settings is not None else True,
+        update=clip_nodes_to_cells_updated
     )
     remove_overlapping_octants: BoolProperty(
         name="Remove the ground duplicated in the octants",

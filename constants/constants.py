@@ -199,6 +199,8 @@ BEACH_SMOOTHING_RAMP_DISTANCE = 2.0
 # the Google Earth octree splits each tile in a lower and an upper half: where the ground is near the split, both halves contain it,
 # and the two copies flicker. The faces of the upper copy closer than this distance (in meters) to the lower copy are removed
 OVERLAPPING_OCTANTS_TOLERANCE = 0.25
+# the nodes are clipped this distance (in meters) beyond the edges of their octree cell (no hairline cracks between neighbours)
+NODE_CLIPPING_MARGIN = 0.02
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

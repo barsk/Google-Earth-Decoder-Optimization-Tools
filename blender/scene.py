@@ -848,6 +848,75 @@ def get_mesh_objects(excluded_names=("Areas", "Ways")):
     return [obj for obj in bpy.context.scene.objects if obj.type == MESH_OBJECT_TYPE and obj.name not in excluded_names and BOUNDING_BOX_OSM_KEY not in obj.name]
 
 
+def clip_nodes_to_octree_cells(positioning_file_path, margin=0.02):
+    # the Google Earth nodes overlap their neighbours (about 1 m at lod 19, 2 m at lod 18, 4 m at lod 17) with the same surface,
+    # which flickers on the tile seams and on the node boundaries. Each node (named by its octant path) is cut exactly at the
+    # edges of its octree cell, for the tiles placed in their octree cell (place_tile_objects), whose origin is the south west
+    # corner of the tile outline (positioning file), margin (in meters) beyond the edges, so that the cut edges of neighbour nodes
+    # overlap slightly instead of leaving hairline cracks. The normals of the new faces corners are interpolated from the original faces
+    import numpy as np
+    from mathutils.interpolate import poly_3d_calc
+    from utils.octant import get_latlonbox_from_file_name
+    from utils.placement import wgs84_to_tile, OCTANT_PATH_PATTERN
+
+    outline = read_osm_polygons(positioning_file_path)
+    if outline is None:
+        return 0
+    tile_west, tile_south = outline.bounds[0], outline.bounds[1]
+    nb_clipped = 0
+
+    for obj in get_mesh_objects():
+        match = OCTANT_PATH_PATTERN.match(obj.name)
+        if not match or not len(obj.data.polygons):
+            continue
+        box = tuple(get_latlonbox_from_file_name(match.group(1)))
+        if box == (0, 0, 0, 0):
+            continue
+        n, s, w, e = box
+        east, north, _ = wgs84_to_tile(np.array([s, s, n, n]), np.array([w, e, e, w]), 0.0, tile_south, tile_west, 0.0)
+        inverse = obj.matrix_world.inverted()
+        corners = [inverse @ mathutils.Vector((-east[i], -north[i], 0.0)) for i in range(4)]
+        center = sum(corners, mathutils.Vector()) / 4.0
+
+        mesh = obj.data
+        vertices = mesh.vertices
+        if all(abs((v.co - center).x) < abs((corners[0] - center).x) and abs((v.co - center).y) < abs((corners[0] - center).y) for v in vertices):
+            continue
+
+        normals = get_loop_normals(obj)
+        faces = [([vertices[mesh.loops[i].vertex_index].co.copy() for i in p.loop_indices], [normals[i] for i in p.loop_indices]) for p in mesh.polygons]
+        bvh = BVHTree.FromPolygons([v.co for v in vertices], [tuple(p.vertices) for p in mesh.polygons])
+
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        for i in range(4):
+            a, b = corners[i], corners[(i + 1) % 4]
+            normal = mathutils.Vector((b.y - a.y, a.x - b.x, 0.0)).normalized()
+            if normal.dot((a + b) / 2.0 - center) < 0.0:
+                normal.negate()
+            bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=0.0001, plane_co=a + normal * margin, plane_no=normal, clear_outer=True)
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.update()
+
+        # each new face lies in an original face: its corners normals are interpolated in that face
+        new_normals = []
+        for polygon in mesh.polygons:
+            index = bvh.find_nearest(polygon.center)[2]
+            if index is None:
+                new_normals.extend(mathutils.Vector(polygon.normal) for _ in polygon.loop_indices)
+                continue
+            coords, corner_normals = faces[index]
+            for i in polygon.loop_indices:
+                weights = poly_3d_calc(coords, mesh.vertices[mesh.loops[i].vertex_index].co)
+                normal = sum((corner_normals[k] * weights[k] for k in range(len(weights))), mathutils.Vector())
+                new_normals.append(normal.normalized() if normal.length > 0.0 else mathutils.Vector(polygon.normal))
+        set_loop_normals(obj, new_normals)
+        nb_clipped += 1
+
+    return nb_clipped
+
+
 def remove_overlapping_octant_faces(tolerance=0.25):
     # the Google Earth tiles are octree nodes, whose children 0-3 are the lower half of the node, and 4-7 the upper half (same area).
     # Where the ground is near the split, both halves contain it: the faces of the upper part lying on the lower part (their center and

@@ -124,6 +124,11 @@ try:
     )
 
     parser.add_argument(
+        "-cnc", "--clip_nodes_to_cells", dest="clip_nodes_to_cells", type=str, required=False,
+        help="cut the nodes of the tile at the edges of their octree cell (true/false)",
+    )
+
+    parser.add_argument(
         "-dbg", "--debug", dest="debug", type=str, required=False,
         help="Debug the height data in blender",
     )
@@ -146,7 +151,8 @@ try:
         raise ScriptError("Error: --positioning_file_path=\"some string\" argument not given, aborting.")
 
     remove_overlapping_octants = bool(args.remove_overlapping_octants) and json.loads(args.remove_overlapping_octants.lower())
-    if not args.mask_file_path and not args.water_mask_file_path and not args.beach_mask_file_path and not remove_overlapping_octants:
+    clip_nodes_to_cells = bool(args.clip_nodes_to_cells) and json.loads(args.clip_nodes_to_cells.lower())
+    if not args.mask_file_path and not args.water_mask_file_path and not args.beach_mask_file_path and not remove_overlapping_octants and not clip_nodes_to_cells:
         raise ScriptError("Error: --mask_file_path=\"some string\", --water_mask_file_path, --beach_mask_file_path or --remove_overlapping_octants argument not given, aborting.")
 
     clean_scene()
@@ -157,6 +163,6 @@ try:
         debug = False
 
     lod = MsfsLod(os.path.splitext(args.model_file)[0][-2:], 0, args.folder, args.model_file)
-    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, beach_mask_file_path=args.beach_mask_file_path, remove_overlapping_octants=remove_overlapping_octants)
+    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, beach_mask_file_path=args.beach_mask_file_path, remove_overlapping_octants=remove_overlapping_octants, clip_nodes_to_cells=clip_nodes_to_cells)
 except:
     pass
