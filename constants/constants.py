@@ -169,7 +169,7 @@ WATER_LEVEL_SHORE_MARGIN = 3.0
 # the MSFS water), at least its waterline (a low percentile of the ground within this distance (in meters) of its shore), at most the median
 # ground of its shore (water surrounded by walls)
 WATERLINE_FILE_PREFIX = "waterline_"
-# frames of the Earth2MSFS downloads of the tiles (utils.placement), in the xml folder of the project
+# frames of the Earth2MSFS downloads of the tiles (utils.placement), in the project folder (step 5 clears the xml folder)
 TILES_PLACEMENT_FILE = "tiles_placement.json"
 # scale of the tiles placed by their bounding box (older behaviour, when the tiles have no placement)
 LEGACY_TILE_SCALE = 1.0045

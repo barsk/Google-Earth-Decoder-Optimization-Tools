@@ -900,7 +900,7 @@ class MsfsProject:
 
         placement = fit_tiles_placement(tile_model_files, tile_altitudes)
         # keep the frames of the tiles placed by a previous run
-        file_path = os.path.join(self.xmlfiles_folder, TILES_PLACEMENT_FILE)
+        file_path = os.path.join(self.project_folder, TILES_PLACEMENT_FILE)
         if os.path.isfile(file_path):
             with open(file_path, "r") as file:
                 previous = json.load(file)
@@ -972,7 +972,7 @@ class MsfsProject:
 
                 if lod.folder != self.model_lib_folder:
                     data.append({"name": lod.name, "params": ["--folder", str(lod.folder), "--model_file", str(lod.model_file), "--output_texture_format", str(self.settings.output_texture_format),
-                                                              "--placement_file_path", os.path.join(self.xmlfiles_folder, TILES_PLACEMENT_FILE), "--tile_name", tile.name,
+                                                              "--placement_file_path", os.path.join(self.project_folder, TILES_PLACEMENT_FILE), "--tile_name", tile.name,
                                                               "--tile_position", "%.12f,%.12f,%.12f" % (float(tile.pos.lat), float(tile.pos.lon), float(tile.pos.alt))]})
 
         return chunks(data, nb_parallel_blender_tasks)
