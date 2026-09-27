@@ -330,7 +330,7 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
     bounds_coords = result.bounds.iloc[0]
     result_coords = (bounds_coords["maxy"], bounds_coords["miny"], bounds_coords["maxx"], bounds_coords["minx"])
     result_bbox, b = create_bounding_box(result_coords)
-    result_bbox = resize_gdf(result_bbox, 200)
+    result_bbox = resize_gdf(result_bbox, 200, single_sided=False)
 
     orig_building = orig_building.clip(result_bbox, keep_geom_type=True)
     building_mask = difference_gdf(orig_building, result)
@@ -339,7 +339,8 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
         warnings.simplefilter("ignore", UserWarning, append=True)
         building_mask.to_file(os.path.join(shpfiles_folder, GEOCODE_OSM_FILE_PREFIX + "_" + BUILDING_OSM_KEY + SHP_FILE_EXT))
 
-    result = resize_gdf(result, float(geocode_margin))
+    # two sided: a single sided buffer only enlarges the clockwise outlines, the walls of the other buildings were cut along their outline
+    result = resize_gdf(result, float(geocode_margin), single_sided=False)
 
     if keep_data:
         return result
