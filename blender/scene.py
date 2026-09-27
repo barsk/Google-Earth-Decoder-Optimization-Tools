@@ -681,6 +681,29 @@ def get_mask_footprint(mask_name="Areas"):
     return unary_union(footprints) if footprints else None
 
 
+def get_loop_normals(obj):
+    # the normals of the faces corners (the custom normals imported from the glTF files), in object space
+    mesh = obj.data
+    if hasattr(mesh, "calc_normals_split"):
+        mesh.calc_normals_split()
+    return [loop.normal.copy() for loop in mesh.loops]
+
+
+def set_loop_normals(obj, normals, vertex_normals=None):
+    # set the normals of the faces corners, those of the vertices in vertex_normals ({vertex index: (normal, weight)}) blended to the given normal
+    mesh = obj.data
+    if vertex_normals:
+        normals = list(normals)
+        for i, loop in enumerate(mesh.loops):
+            if loop.vertex_index in vertex_normals:
+                normal, weight = vertex_normals[loop.vertex_index]
+                normals[i] = (normals[i] * (1.0 - weight) + normal * weight).normalized()
+    if hasattr(mesh, "use_auto_smooth"):
+        mesh.use_auto_smooth = True
+    mesh.normals_split_custom_set(normals)
+    mesh.update()
+
+
 def get_mesh_objects(excluded_names=("Areas", "Ways")):
     return [obj for obj in bpy.context.scene.objects if obj.type == MESH_OBJECT_TYPE and obj.name not in excluded_names and BOUNDING_BOX_OSM_KEY not in obj.name]
 
@@ -718,14 +741,19 @@ def smooth_in_mask(radius=4.0, ramp_distance=2.0, mask_name="Areas"):
     nb_smoothed = 0
     offset = 0
     for obj, coords, indexes in objects_data:
+        # the normals are kept (they turn with the faces when the vertices are moved), and set up on the smoothed surface
+        normals = get_loop_normals(obj)
         inverted_matrix = obj.matrix_world.inverted()
+        up = (inverted_matrix.to_3x3() @ mathutils.Vector((0.0, 0.0, 1.0))).normalized()
+        vertex_normals = {}
         for j, i in enumerate(indexes):
             x, y, z = coords[i]
             weight = 1.0
             if ramp_distance > 0.0 and not border.is_empty:
                 weight = min(1.0, border.distance(geometry.Point(x, y)) / ramp_distance)
             obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((x, y, z + weight * (smoothed[offset + j] - z)))
-        obj.data.update()
+            vertex_normals[int(i)] = (up, weight)
+        set_loop_normals(obj, normals, vertex_normals)
         offset += len(indexes)
         nb_smoothed += len(indexes)
 
@@ -782,6 +810,8 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
         indexes = np.where(in_water & (coords[:, 2] > target))[0]
         if not len(indexes):
             continue
+        # the normals are kept (they turn with the faces when the vertices are moved)
+        normals = get_loop_normals(obj)
         inverted_matrix = obj.matrix_world.inverted()
         for i in indexes:
             weight = 1.0
@@ -789,7 +819,7 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
                 weight = min(1.0, shore.distance(geometry.Point(coords[i, 0], coords[i, 1])) / ramp_distance)
             z = coords[i, 2] - weight * (coords[i, 2] - target)
             obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((coords[i, 0], coords[i, 1], z))
-        obj.data.update()
+        set_loop_normals(obj, normals)
         nb_pushed += len(indexes)
 
     return float(level), nb_pushed
