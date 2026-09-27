@@ -708,6 +708,70 @@ def get_mesh_objects(excluded_names=("Areas", "Ways")):
     return [obj for obj in bpy.context.scene.objects if obj.type == MESH_OBJECT_TYPE and obj.name not in excluded_names and BOUNDING_BOX_OSM_KEY not in obj.name]
 
 
+def remove_overlapping_octant_faces(tolerance=0.25):
+    # the Google Earth tiles are octree nodes, whose children 0-3 are the lower half of the node, and 4-7 the upper half (same area).
+    # Where the ground is near the split, both halves contain it: the faces of the upper part lying on the lower part (their center and
+    # all their vertices closer than tolerance) are removed. The faces only partly covered are kept (no holes)
+    from mathutils.bvhtree import BVHTree
+
+    parts = []
+    for obj in get_mesh_objects():
+        name = obj.name.split("_")[0]
+        if not name.isdigit() or not len(obj.data.vertices):
+            continue
+        matrix = obj.matrix_world
+        coords = [matrix @ v.co for v in obj.data.vertices]
+        xs, ys = [c.x for c in coords], [c.y for c in coords]
+        parts.append((obj, name, coords, (min(xs), min(ys), max(xs), max(ys))))
+
+    def is_upper_copy(upper, lower):
+        if len(upper) != len(lower):
+            return False
+        for a, b in zip(upper, lower):
+            if a != b:
+                return int(a) == int(b) + 4
+        return False
+
+    def overlap(b1, b2):
+        return b1[0] <= b2[2] and b2[0] <= b1[2] and b1[1] <= b2[3] and b2[1] <= b1[3]
+
+    trees = {}
+    nb_removed = 0
+    for obj, name, coords, bbox in parts:
+        lowers = [lower for lower in parts if lower[0] is not obj and is_upper_copy(name, lower[1]) and overlap(bbox, lower[3])]
+        if not lowers:
+            continue
+        for lower in lowers:
+            if lower[1] not in trees:
+                trees[lower[1]] = BVHTree.FromPolygons([tuple(c) for c in lower[2]], [tuple(p.vertices) for p in lower[0].data.polygons])
+        bvhs = [trees[lower[1]] for lower in lowers]
+
+        def covered(point):
+            for bvh in bvhs:
+                hit = bvh.find_nearest(point, tolerance)
+                if hit[0] is not None:
+                    return True
+            return False
+
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bm.verts.ensure_lookup_table()
+        matrix = obj.matrix_world
+        faces = []
+        for face in bm.faces:
+            points = [matrix @ face.calc_center_median()] + [coords[v.index] for v in face.verts]
+            if all(covered(p) for p in points):
+                faces.append(face)
+        if faces:
+            bmesh.ops.delete(bm, geom=faces, context="FACES")
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            nb_removed += len(faces)
+        bm.free()
+
+    return nb_removed
+
+
 def smooth_in_mask(radius=4.0, ramp_distance=2.0, mask_name="Areas"):
     # smooth the heights of the vertices inside the (aligned) mask: the mean of the local medians within radius (the spikes, then
     # the facets are removed), progressively from the border of the mask over ramp_distance, so that it joins its surroundings

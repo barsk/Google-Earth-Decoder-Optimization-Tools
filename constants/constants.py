@@ -192,6 +192,9 @@ BEACH_SMOOTHING_OSM_FILE_PREFIX = "beach_smoothing"
 BEACH_OSM_TAG_VALUE = "beach"
 BEACH_SMOOTHING_RADIUS = 4.0
 BEACH_SMOOTHING_RAMP_DISTANCE = 2.0
+# the Google Earth octree splits each tile in a lower and an upper half: where the ground is near the split, both halves contain it,
+# and the two copies flicker. The faces of the upper copy closer than this distance (in meters) to the lower copy are removed
+OVERLAPPING_OCTANTS_TOLERANCE = 0.25
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

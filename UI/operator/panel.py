@@ -193,6 +193,8 @@ class SettingsOperator(PanelOperator):
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "smooth_beaches", "Smooth the beaches")
                 col.separator()
+                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "remove_overlapping_octants", "Remove the ground duplicated in the octants")
+                col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_forests", "Exclude forests 3d data")
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_woods", "Exclude woods 3d data")

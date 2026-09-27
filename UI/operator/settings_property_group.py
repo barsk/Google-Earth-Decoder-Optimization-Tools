@@ -174,6 +174,10 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.flat_water_level = self.flat_water_level
         context.scene.project_settings.save()
 
+    def remove_overlapping_octants_updated(self, context):
+        context.scene.project_settings.remove_overlapping_octants = self.remove_overlapping_octants
+        context.scene.project_settings.save()
+
     def smooth_beaches_updated(self, context):
         context.scene.project_settings.smooth_beaches = self.smooth_beaches
         context.scene.project_settings.save()
@@ -415,6 +419,12 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.project_settings.airport_city if bpy.types.Scene.project_settings is not None else str(),
         maxlen=256,
         update=airport_city_updated
+    )
+    remove_overlapping_octants: BoolProperty(
+        name="Remove the ground duplicated in the octants",
+        description="The lower and upper halves (octants) of the Google Earth tiles both contain the ground near their split, and the two copies flicker: remove the upper copy",
+        default=bpy.types.Scene.project_settings.remove_overlapping_octants if bpy.types.Scene.project_settings is not None else True,
+        update=remove_overlapping_octants_updated
     )
     smooth_beaches: BoolProperty(
         name="Smooth the beaches",

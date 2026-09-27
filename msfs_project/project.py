@@ -1073,7 +1073,8 @@ class MsfsProject:
             has_mask_file = os.path.isfile(mask_file_path)
             has_water_mask_file = os.path.isfile(water_mask_file_path)
             has_beach_mask_file = os.path.isfile(beach_mask_file_path)
-            copy_lods = not has_mask_file and not has_water_mask_file and not has_beach_mask_file
+            remove_overlapping_octants = bool(self.settings.remove_overlapping_octants)
+            copy_lods = not has_mask_file and not has_water_mask_file and not has_beach_mask_file and not remove_overlapping_octants
 
             for lod in tile.lods:
                 if not os.path.isdir(lod.folder):
@@ -1120,7 +1121,10 @@ class MsfsProject:
                 if has_beach_mask_file:
                     params.extend(["--beach_mask_file_path", str(beach_mask_file_path)])
 
-                if has_mask_file or has_water_mask_file or has_beach_mask_file:
+                if remove_overlapping_octants:
+                    params.extend(["--remove_overlapping_octants", "True"])
+
+                if has_mask_file or has_water_mask_file or has_beach_mask_file or remove_overlapping_octants:
                     data.append({"name": lod.name, "params": params})
 
         return tiles, chunks(data, nb_parallel_blender_tasks)
