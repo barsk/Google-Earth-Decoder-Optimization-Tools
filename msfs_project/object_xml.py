@@ -60,6 +60,19 @@ class MsfsObjectXml(Xml):
             })
         self.save()
 
+    def insert_lod(self, file_name, min_size, index=0):
+        for lods_tag in self.root.findall(self.SCENERY_OBJECT_LODS_SEARCH_PATTERN):
+            lods_tag.insert(index, Et.Element(self.LOD_TAG, attrib={
+                self.MODEL_FILE_ATTR: file_name,
+                self.MIN_SIZE_ATTR: str(min_size)
+            }))
+        self.save()
+
+    def rename_lod(self, file_name, new_file_name):
+        for lod in self.find_scenery_lod_models(file_name):
+            lod.set(self.MODEL_FILE_ATTR, new_file_name)
+        self.save()
+
     def update_lod_min_size(self, file_name, min_size):
         for lod in self.find_scenery_lod_models(file_name):
             lod.set(self.MIN_SIZE_ATTR, str(min_size))

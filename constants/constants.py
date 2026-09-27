@@ -201,6 +201,12 @@ BEACH_SMOOTHING_RAMP_DISTANCE = 2.0
 OVERLAPPING_OCTANTS_TOLERANCE = 0.25
 # the nodes are clipped this distance (in meters) beyond the edges of their octree cell (no hairline cracks between neighbours)
 NODE_CLIPPING_MARGIN = 0.02
+# the landmarks tool downloads the more detailed level of the landmarks only in this folder of the project (TileDownloader)
+LANDMARKS_DOWNLOAD_FOLDER = "landmarks_download"
+# frame of that download (utils.placement), in the project folder
+LANDMARKS_PLACEMENT_FILE = "landmarks_placement.json"
+# margin (in meters) of the downloaded rectangles around the landmarks
+LANDMARKS_DOWNLOAD_MARGIN = 2.0
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

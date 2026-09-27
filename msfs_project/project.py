@@ -68,7 +68,7 @@ from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
 from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, flatten_water_height_data, remove_not_water_natural_gdf
 from utils.octant import get_coords_from_file_name
-from utils.placement import fit_tiles_placement, save_tiles_placement
+from utils.placement import fit_tiles_placement, save_tiles_placement, DownloadFrame, wgs84_meters_per_degree
 from msfs_project.gltf import MsfsGltf
 from msfs_project.shape import MsfsShapes
 from utils import replace_in_file, is_octant, backup_file, ScriptError, print_title, \
@@ -433,11 +433,11 @@ class MsfsProject:
         ox.config(overpass_endpoint=settings.overpass_api_uri, log_console=False, use_cache=False, log_level=lg.ERROR)
         b = bbox_to_poly(self.coords[1], self.coords[0], self.coords[2], self.coords[3])
 
-        # isolate all the landmarks first, while the tiles are still complete
+        # the landmark areas (OSM outlines enlarged by the margin)
         masks = {}
         isolated_area = create_empty_gdf()
         for osm_id in landmarks:
-            print_title("ISOLATE LANDMARK " + osm_id)
+            print_title("RETRIEVE LANDMARK " + osm_id)
             geocode_gdf = load_gdf_from_osm_id(osm_id, float(self.settings.geocode_margin))
             if geocode_gdf.empty:
                 pr_bg_orange("Landmark " + osm_id + " not found in OSM data" + EOL + CEND)
@@ -449,8 +449,17 @@ class MsfsProject:
                 continue
             geocode_gdf = geocode_gdf[[GEOMETRY_OSM_COLUMN]].dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
             isolated_area = union_gdf(isolated_area, geocode_gdf[[GEOMETRY_OSM_COLUMN]])
-            self.__create_geocode_mask_file(geocode_gdf, b)
             masks[osm_id] = geocode_gdf
+
+        # a project downloaded up to the tiles max lod level has no more detailed data: download it for the landmarks only
+        if masks and self.__download_landmarks_level(masks, max_level, settings):
+            self.__retrieve_scene_objects()
+            self.__create_tiles_bounding_boxes()
+
+        # isolate all the landmarks first, while the tiles are still complete
+        for osm_id, geocode_gdf in masks.items():
+            print_title("ISOLATE LANDMARK " + osm_id)
+            self.__create_geocode_mask_file(geocode_gdf, b)
             self.__isolate_lods_3d_data_from_geocode(osm_id, geocode_gdf, settings, name_prefix=LANDMARK_OBJECT_PREFIX + osm_id)
 
         # then remove them from the tiles
@@ -463,6 +472,203 @@ class MsfsProject:
         self.__repack_landmarks_textures(settings)
         self.__remove_unused_textures()
         return True
+
+    def __tile_lod_numbers(self, tile):
+        # {lod model file: lod number}, the least detailed lod (highest number) being the tile level, each lower number one level more
+        xml = MsfsObjectXml(self.model_lib_folder, tile.definition_file)
+        model_files = [lod.get(xml.MODEL_FILE_ATTR) for lod in xml.find_scenery_lods()]
+        numbers = {model_file: int(model_file[-7:-5]) for model_file in model_files if re.search(r"_LOD\d\d\.gltf$", model_file)}
+        return numbers if len(numbers) == len(model_files) else {}
+
+    def __download_landmarks_level(self, masks, max_level, settings):
+        # The tiles of a project downloaded up to their max lod level (e.g. lod 17-19) have no more detailed data for the landmarks:
+        # only the nodes of the next level touching the landmarks are downloaded (Earth2MSFS TileDownloader, one run for all), placed
+        # in their tile and added to it as its most detailed lod, in the project and in the backup of the original tiles (the
+        # landmarks are isolated from it). The rest of the tool is the same as with a project downloaded up to that level
+        from UI.prefs import get_prefs
+        from blender import has_legacy_tile_scale
+
+        tile_numbers = {tile.name: self.__tile_lod_numbers(tile) for tile in self.tiles.values()}
+        levels = [len(name) + max(numbers.values()) - min(numbers.values()) for name, numbers in tile_numbers.items() if numbers]
+        if not levels or max(levels) > max_level:
+            return False
+        if max(levels) < max_level:
+            pr_bg_orange("The tiles do not reach the max lod level %d: the landmarks keep the levels of the tiles" % max_level + EOL + CEND)
+            return False
+        level = max_level + 1
+
+        for tile in self.tiles.values():
+            numbers = tile_numbers.get(tile.name)
+            if numbers and has_legacy_tile_scale(os.path.join(self.model_lib_folder, min(numbers, key=numbers.get))):
+                pr_bg_orange("The tiles were placed by an older version (bounding box): create the project again from its download to add the level %d of the landmarks" % level + EOL + CEND)
+                return False
+
+        prefs = get_prefs()
+        exe = prefs.tile_downloader_exe_path if prefs is not None else str()
+        if not exe or not os.path.isfile(bpy.path.abspath(exe)):
+            pr_bg_orange("Set the path of the Earth2MSFS TileDownloader.exe in the addon preferences to download the level %d of the landmarks" % level + EOL + CEND)
+            return False
+        exe = bpy.path.abspath(exe)
+
+        placement_file_path = os.path.join(self.project_folder, TILES_PLACEMENT_FILE)
+        if os.path.isfile(placement_file_path):
+            with open(placement_file_path, "r") as file:
+                frames = json.load(file).get("frames", [])
+            if any(frame["matrix"][1][1] < 0.999 for frame in frames):
+                pr_bg_orange("The tiles come from an older Earth2MSFS download (heights 0.3% too low): download the area again for the landmarks to match the tiles" + EOL + CEND)
+
+        # the rectangles around the landmarks
+        print_title("DOWNLOAD THE LEVEL %d OF THE LANDMARKS" % level)
+        folder = os.path.join(self.project_folder, LANDMARKS_DOWNLOAD_FOLDER)
+        shutil.rmtree(folder, ignore_errors=True)
+        os.makedirs(folder, exist_ok=True)
+        rects_file_path = os.path.join(folder, "rects.txt")
+        with open(rects_file_path, "w") as file:
+            for osm_id, geocode_gdf in masks.items():
+                west, south, east, north = geocode_gdf.to_crs(EPSG_WGS84).total_bounds
+                meters_per_lat_degree, meters_per_lon_degree = wgs84_meters_per_degree((south + north) / 2.0)
+                file.write("%.9f,%.9f,%.1f,%.1f # %s\n" % ((south + north) / 2.0, (west + east) / 2.0, (east - west) * meters_per_lon_degree + 2 * LANDMARKS_DOWNLOAD_MARGIN,
+                                                          (north - south) * meters_per_lat_degree + 2 * LANDMARKS_DOWNLOAD_MARGIN, osm_id))
+
+        tile_level = min(len(name) for name in tile_numbers)
+        command = [exe, "--rects", rects_file_path, "--min-lod", str(level), "--max-lod", str(level), "--group-level", str(tile_level), "--out", folder]
+        isolated_print(" ".join(command))
+        result = subprocess.run(command, capture_output=True, text=True)
+        for line in (result.stdout + result.stderr).splitlines():
+            isolated_print(line)
+        download_folder = os.path.join(folder, self.MODEL_LIB_FOLDER)
+        objects_file_path = os.path.join(folder, self.SCENE_FOLDER, self.SCENE_OBJECTS_FILE)
+        if result.returncode != 0 or not os.path.isfile(objects_file_path):
+            pr_bg_orange("The level %d of the landmarks could not be downloaded: the landmarks keep the levels of the tiles" % level + EOL + CEND)
+            return False
+
+        # the frame of the download: the reference of Earth2MSFS, whose models are in exact meters of Google's globe
+        import xml.etree.ElementTree as ET
+        reference = next(ET.parse(objects_file_path).getroot().iter("SceneryObject"))
+        frame = DownloadFrame(float(reference.get("lat")), float(reference.get("lon")), float(reference.get("alt")), [[1.0, 0.0], [0.0, 1.0]], [0.0, 0.0])
+        placement = {"frames": [frame.to_dict()], "tiles": {}}
+
+        backup_path = self.__find_backup_path(CLEANUP_3D_DATA_BACKUP_FOLDER)
+        tiles_by_name = {tile.name: tile for tile in self.tiles.values()}
+        data, added = [], []
+        for model_file_path in sorted(Path(download_folder).glob("*" + MsfsLod.LOD_SUFFIX + "00" + GLTF_FILE_EXT)):
+            tile = tiles_by_name.get(model_file_path.stem[:-len(MsfsLod.LOD_SUFFIX + "00")])
+            numbers = tile_numbers.get(tile.name) if tile is not None else None
+            if not numbers:
+                continue
+            # the new lod takes the number before the most detailed lod of the tile (after a previous run of the tool, the lod 00 was
+            # removed): if it is the lod 00, every lod of the tile first goes one number up, in the project and in the backup
+            new_number = min(numbers.values()) - 1
+            if new_number < 0:
+                new_number = 0
+                for model_file, number in sorted(numbers.items(), key=lambda item: -item[1]):
+                    new_model_file = model_file[:-7] + str(number + 1).zfill(2) + GLTF_FILE_EXT
+                    for lod_folder in (self.model_lib_folder, backup_path):
+                        if os.path.isfile(os.path.join(lod_folder, model_file)):
+                            self.__rename_lod_files(lod_folder, model_file, new_model_file)
+                        if os.path.isfile(os.path.join(lod_folder, tile.definition_file)):
+                            MsfsObjectXml(lod_folder, tile.definition_file).rename_lod(model_file, new_model_file)
+            new_model_file = tile.name + MsfsLod.LOD_SUFFIX + str(new_number).zfill(2) + GLTF_FILE_EXT
+            if new_model_file != model_file_path.name:
+                self.__rename_lod_files(download_folder, model_file_path.name, new_model_file)
+            for lod_folder in (self.model_lib_folder, backup_path):
+                # a lod left by a previous run in the backup is replaced
+                if os.path.isfile(os.path.join(lod_folder, tile.definition_file)):
+                    MsfsObjectXml(lod_folder, tile.definition_file).remove_lod(new_model_file)
+            # optimize the downloaded lod (packed texture, placed in the frame of the tile) in its optimization folder, like step 2
+            lod = MsfsLod(0, 0, download_folder, new_model_file)
+            os.makedirs(os.path.join(self.model_lib_folder, lod.name), exist_ok=True)
+            lod.move_resources(os.path.join(self.model_lib_folder, lod.name))
+            placement["tiles"][tile.name] = 0
+            data.append({"name": lod.name, "params": ["--folder", str(lod.folder), "--model_file", str(lod.model_file), "--output_texture_format", str(self.settings.output_texture_format),
+                                                    "--placement_file_path", os.path.join(self.project_folder, LANDMARKS_PLACEMENT_FILE), "--tile_name", tile.name,
+                                                    "--tile_position", "%.12f,%.12f,%.12f" % (float(tile.pos.lat), float(tile.pos.lon), float(tile.pos.alt))]})
+            added.append((tile, lod.name + GLTF_FILE_EXT))
+
+        if not data:
+            pr_bg_orange("No level %d data around the landmarks" % level + EOL + CEND)
+            return False
+
+        save_tiles_placement(os.path.join(self.project_folder, LANDMARKS_PLACEMENT_FILE), placement)
+        self.__multithread_blender_process_data(chunks(data, settings.nb_parallel_blender_tasks), "optimize_tile_lod.py", "OPTIMIZE THE LEVEL %d OF THE LANDMARKS" % level, "optimized")
+
+        for tile, model_file in added:
+            model_file_path = os.path.join(self.model_lib_folder, model_file)
+            if not os.path.isfile(model_file_path):
+                pr_bg_orange(model_file + " was not optimized" + EOL + CEND)
+                continue
+            MsfsObjectXml(self.model_lib_folder, tile.definition_file).insert_lod(model_file, 0)
+            self.__set_texture_folder_in_uris(model_file_path, False)
+            # the backup of the original tiles (the landmarks are isolated from it) gets the new lod too
+            if os.path.isdir(backup_path):
+                self.__copy_lod_files(self.model_lib_folder, backup_path, model_file)
+                self.__set_texture_folder_in_uris(os.path.join(backup_path, model_file), True)
+                if os.path.isfile(os.path.join(backup_path, tile.definition_file)):
+                    MsfsObjectXml(backup_path, tile.definition_file).insert_lod(model_file, 0)
+
+        # the lod min sizes of the tiles with the new lod
+        self.__retrieve_scene_objects()
+        names = {tile.name for tile, _ in added}
+        for tile in self.tiles.values():
+            if tile.name in names:
+                tile.update_min_size_values(self.settings.target_min_size_values)
+
+        shutil.rmtree(folder, ignore_errors=True)
+        return True
+
+    @staticmethod
+    def __rename_lod_files(folder, model_file, new_model_file):
+        # renames a lod model file, its binaries and its textures (named after the model file), in the folder and its texture folder
+        stem, new_stem = Path(model_file).stem, Path(new_model_file).stem
+        rename = lambda name: new_stem + name[len(stem):] if name == stem or name.startswith(stem + ".") or name.startswith(stem + "_") else name
+        with open(os.path.join(folder, model_file), "r") as file:
+            gltf = json.load(file)
+        for buffer in gltf.get("buffers", []):
+            name = buffer.get("uri", str())
+            if rename(name) != name:
+                if os.path.isfile(os.path.join(folder, name)):
+                    os.replace(os.path.join(folder, name), os.path.join(folder, rename(name)))
+                buffer["uri"] = rename(name)
+        for image in gltf.get("images", []):
+            uri = image.get("uri", str())
+            name = os.path.basename(uri)
+            if rename(name) != name:
+                for texture_folder in (os.path.join(folder, TEXTURE_FOLDER), folder):
+                    for suffix in (str(), XML_FILE_EXT):
+                        if os.path.isfile(os.path.join(texture_folder, name + suffix)):
+                            os.replace(os.path.join(texture_folder, name + suffix), os.path.join(texture_folder, rename(name) + suffix))
+                image["uri"] = uri[:len(uri) - len(name)] + rename(name)
+                if "name" in image:
+                    image["name"] = rename(image["name"])
+        with open(os.path.join(folder, new_model_file), "w") as file:
+            json.dump(gltf, file)
+        os.remove(os.path.join(folder, model_file))
+
+    @staticmethod
+    def __copy_lod_files(folder, dest_folder, model_file):
+        # copies a lod model file, its binaries and its textures to another folder (and its texture folder)
+        with open(os.path.join(folder, model_file), "r") as file:
+            gltf = json.load(file)
+        shutil.copyfile(os.path.join(folder, model_file), os.path.join(dest_folder, model_file))
+        for buffer in gltf.get("buffers", []):
+            if os.path.isfile(os.path.join(folder, buffer.get("uri", str()))):
+                shutil.copyfile(os.path.join(folder, buffer["uri"]), os.path.join(dest_folder, buffer["uri"]))
+        os.makedirs(os.path.join(dest_folder, TEXTURE_FOLDER), exist_ok=True)
+        for image in gltf.get("images", []):
+            name = os.path.basename(image.get("uri", str()))
+            if os.path.isfile(os.path.join(folder, TEXTURE_FOLDER, name)):
+                shutil.copyfile(os.path.join(folder, TEXTURE_FOLDER, name), os.path.join(dest_folder, TEXTURE_FOLDER, name))
+
+    @staticmethod
+    def __set_texture_folder_in_uris(model_file_path, with_texture_folder):
+        # the project models reference their textures by name, the backup models by texture/name
+        with open(model_file_path, "r") as file:
+            gltf = json.load(file)
+        for image in gltf.get("images", []):
+            name = os.path.basename(image.get("uri", str()))
+            image["uri"] = TEXTURE_FOLDER + "/" + name if with_texture_folder else name
+        with open(model_file_path, "w") as file:
+            json.dump(gltf, file)
 
     def __landmark_exists(self, osm_id):
         return len(list(Path(self.model_lib_folder).glob(LANDMARK_OBJECT_PREFIX + osm_id + "_*" + XML_FILE_EXT))) > 0

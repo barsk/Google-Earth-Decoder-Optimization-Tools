@@ -93,6 +93,17 @@ class GEDOT_PREFS(AddonPreferences):
     )
 
     ########################################################################
+    # Earth2MSFS TileDownloader
+    ########################################################################
+
+    tile_downloader_exe_path: StringProperty(
+        subtype="FILE_PATH",
+        name="Path to TileDownloader.exe",
+        description="Earth2MSFS command line downloader, used by the landmarks tool to download the more detailed level of the landmarks only",
+        maxlen=1024,
+    )
+
+    ########################################################################
     # Overpass API
     ########################################################################
 
@@ -168,6 +179,11 @@ class GEDOT_PREFS(AddonPreferences):
         box = layout.box()
         box.label(text="Overpass API")
         box.prop(self, "overpass_api_uri")
+        row = box.row()
+
+        box = layout.box()
+        box.label(text="Earth2MSFS TileDownloader")
+        box.prop(self, "tile_downloader_exe_path")
         row = box.row()
 
         box = layout.box()
