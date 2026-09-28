@@ -844,6 +844,38 @@ def set_loop_normals(obj, normals, vertex_normals=None):
     mesh.update()
 
 
+NORMAL_ATTRIBUTES = ("normal_x", "normal_y", "normal_z")
+
+
+def store_loop_normals(obj):
+    # The custom normals are stored relative to the faces around each vertex: cutting or removing faces would turn them. They are
+    # kept as faces corners attributes, which bmesh keeps with the remaining corners and interpolates on the new ones (like the
+    # uvs), then restored with restore_loop_normals. Call it before creating the bmesh of the object
+    mesh = obj.data
+    normals = get_loop_normals(obj)
+    for k, name in enumerate(NORMAL_ATTRIBUTES):
+        if name in mesh.attributes:
+            mesh.attributes.remove(mesh.attributes[name])
+        mesh.attributes.new(name, "FLOAT", "CORNER").data.foreach_set("value", [normal[k] for normal in normals])
+
+
+def restore_loop_normals(obj):
+    mesh = obj.data
+    if not all(name in mesh.attributes for name in NORMAL_ATTRIBUTES):
+        return
+    values = []
+    for name in NORMAL_ATTRIBUTES:
+        data = [0.0] * len(mesh.loops)
+        mesh.attributes[name].data.foreach_get("value", data)
+        values.append(data)
+        mesh.attributes.remove(mesh.attributes[name])
+    normals = []
+    for i, loop in enumerate(mesh.loops):
+        normal = mathutils.Vector((values[0][i], values[1][i], values[2][i]))
+        normals.append(normal.normalized() if normal.length > 1e-6 else mathutils.Vector(mesh.polygons[0].normal))
+    set_loop_normals(obj, normals)
+
+
 def get_mesh_objects(excluded_names=("Areas", "Ways")):
     return [obj for obj in bpy.context.scene.objects if obj.type == MESH_OBJECT_TYPE and obj.name not in excluded_names and BOUNDING_BOX_OSM_KEY not in obj.name]
 
@@ -853,9 +885,8 @@ def clip_nodes_to_octree_cells(positioning_file_path, margin=0.02):
     # which flickers on the tile seams and on the node boundaries. Each node (named by its octant path) is cut exactly at the
     # edges of its octree cell, for the tiles placed in their octree cell (place_tile_objects), whose origin is the south west
     # corner of the tile outline (positioning file), margin (in meters) beyond the edges, so that the cut edges of neighbour nodes
-    # overlap slightly instead of leaving hairline cracks. The normals of the new faces corners are interpolated from the original faces
+    # overlap slightly instead of leaving hairline cracks. The normals are kept (store_loop_normals)
     import numpy as np
-    from mathutils.interpolate import poly_3d_calc
     from utils.octant import get_latlonbox_from_file_name
     from utils.placement import wgs84_to_tile, OCTANT_PATH_PATTERN
 
@@ -883,10 +914,7 @@ def clip_nodes_to_octree_cells(positioning_file_path, margin=0.02):
         if all(abs((v.co - center).x) < abs((corners[0] - center).x) and abs((v.co - center).y) < abs((corners[0] - center).y) for v in vertices):
             continue
 
-        normals = get_loop_normals(obj)
-        faces = [([vertices[mesh.loops[i].vertex_index].co.copy() for i in p.loop_indices], [normals[i] for i in p.loop_indices]) for p in mesh.polygons]
-        bvh = BVHTree.FromPolygons([v.co for v in vertices], [tuple(p.vertices) for p in mesh.polygons])
-
+        store_loop_normals(obj)
         bm = bmesh.new()
         bm.from_mesh(mesh)
         for i in range(4):
@@ -898,20 +926,7 @@ def clip_nodes_to_octree_cells(positioning_file_path, margin=0.02):
         bm.to_mesh(mesh)
         bm.free()
         mesh.update()
-
-        # each new face lies in an original face: its corners normals are interpolated in that face
-        new_normals = []
-        for polygon in mesh.polygons:
-            index = bvh.find_nearest(polygon.center)[2]
-            if index is None:
-                new_normals.extend(mathutils.Vector(polygon.normal) for _ in polygon.loop_indices)
-                continue
-            coords, corner_normals = faces[index]
-            for i in polygon.loop_indices:
-                weights = poly_3d_calc(coords, mesh.vertices[mesh.loops[i].vertex_index].co)
-                normal = sum((corner_normals[k] * weights[k] for k in range(len(weights))), mathutils.Vector())
-                new_normals.append(normal.normalized() if normal.length > 0.0 else mathutils.Vector(polygon.normal))
-        set_loop_normals(obj, new_normals)
+        restore_loop_normals(obj)
         nb_clipped += 1
 
     return nb_clipped
@@ -972,9 +987,17 @@ def remove_overlapping_octant_faces(tolerance=0.25):
             if all(covered(p) for p in points):
                 faces.append(face)
         if faces:
-            bmesh.ops.delete(bm, geom=faces, context="FACES")
+            # the normals attributes have to be in the mesh before creating the bmesh
+            face_indices = [face.index for face in faces]
+            bm.free()
+            store_loop_normals(obj)
+            bm = bmesh.new()
+            bm.from_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+            bmesh.ops.delete(bm, geom=[bm.faces[i] for i in face_indices], context="FACES")
             bm.to_mesh(obj.data)
             obj.data.update()
+            restore_loop_normals(obj)
             nb_removed += len(faces)
         bm.free()
 
