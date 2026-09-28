@@ -18,6 +18,8 @@
 
 import os
 import shutil
+import sys
+from contextlib import contextmanager
 from math import floor, cos, radians
 import json
 
@@ -176,6 +178,23 @@ def clean_scene(objects_to_keep=[], keep_materials=False):
 ##################################################################
 # Import the gltf files located in a specific folder
 ##################################################################
+@contextmanager
+def msfs_import_hooks_disabled():
+    # The MSFS glTF addon converts every imported material into an MSFS shader tree: most of the import time of the tiles (4 s of
+    # 4.5 s for a tile of 157 nodes). The tiles do not need them: their MSFS extensions are written by prepare_for_msfs
+    hidden = []
+    for name in list(bpy.context.preferences.addons.keys()):
+        module = sys.modules.get(name)
+        if module is not None and "msfs" in name.lower() and hasattr(module, "glTF2ImportUserExtension"):
+            hidden.append((module, module.glTF2ImportUserExtension))
+            delattr(module, "glTF2ImportUserExtension")
+    try:
+        yield
+    finally:
+        for module, extension in hidden:
+            module.glTF2ImportUserExtension = extension
+
+
 def import_model_files(model_files, clean=True, objects_to_keep=[]):
     if clean:
         clean_scene(objects_to_keep=objects_to_keep)
@@ -183,7 +202,8 @@ def import_model_files(model_files, clean=True, objects_to_keep=[]):
     for model_file in model_files:
         try:
             print("import ", model_file)
-            bpy.ops.import_scene.gltf(filepath=str(model_file))
+            with msfs_import_hooks_disabled():
+                bpy.ops.import_scene.gltf(filepath=str(model_file))
         except:
             continue
 
