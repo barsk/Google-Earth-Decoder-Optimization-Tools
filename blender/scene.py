@@ -1141,6 +1141,42 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
     return float(level), nb_pushed
 
 
+def get_mask_footprint(mask):
+    # the areas of the mask (vertical extrusions) seen from above, as a prepared shapely geometry, or None
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    from shapely.prepared import prep
+
+    matrix = mask.matrix_world
+    rotation = matrix.to_3x3()
+    polygons = []
+    for polygon in mask.data.polygons:
+        normal = rotation @ polygon.normal
+        if normal.length == 0.0 or abs(normal.normalized().z) < 0.5:
+            continue
+        shape = Polygon([tuple((matrix @ mask.data.vertices[i].co).to_2d()) for i in polygon.vertices])
+        if not shape.is_valid:
+            shape = shape.buffer(0)
+        if not shape.is_empty:
+            polygons.append(shape)
+
+    return prep(unary_union(polygons)) if polygons else None
+
+
+def get_world_bounds(obj):
+    corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
+    return mathutils.Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners))), \
+        mathutils.Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
+
+
+def create_box_from_bounds(bounds_min, bounds_max, name):
+    bpy.ops.mesh.primitive_cube_add(location=(bounds_min + bounds_max) / 2.0)
+    box = bpy.context.object
+    box.name = name
+    box.dimensions = bounds_max - bounds_min
+    return box
+
+
 def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False, keep_mask=False):
     if model_file_path is not None:
         import_model_files([model_file_path], clean=False)
@@ -1160,17 +1196,38 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
 
     updated_objects = []
 
+    # The footprint of the mask (vertical extrusions) finds the objects touching it, and the bounds of the objects give the
+    # bounding box of the tile, instead of a box and a boolean per object: each operator call updates the whole scene, which was
+    # most of the time of the steps 4 and 5. The objects whose bounds do not touch the mask are not intersected with it: they
+    # are emptied (intersect) or kept (difference) directly
+    footprint = get_mask_footprint(mask) if mask else None
+    bounds_min, bounds_max, last_name = None, None, None
+
     if mask:
-        for obj in objects:
+        for obj in list(objects):
             if obj == mask or obj == grid or obj == height_grid or BOUNDING_BOX_OSM_KEY in obj.name:
                 continue
 
-            bboxes.append(create_bounding_box(obj, "bbox_"))
+            if footprint is None:
+                bboxes.append(create_bounding_box(obj, "bbox_"))
+                touches = object_touches_mask(obj, mask)
+            else:
+                obj_min, obj_max = get_world_bounds(obj)
+                bounds_min = obj_min if bounds_min is None else mathutils.Vector(map(min, bounds_min, obj_min))
+                bounds_max = obj_max if bounds_max is None else mathutils.Vector(map(max, bounds_max, obj_max))
+                last_name = obj.name
+                touches = footprint.intersects(geometry.box(obj_min.x, obj_min.y, obj_max.x, obj_max.y))
 
             # only cleanup objects contained in the mask, or touched by the mask
-            if object_touches_mask(obj, mask) or intersect:
+            if touches or intersect:
                 bpy.context.view_layer.objects.active = obj
                 add_new_obj_material(obj, OSM_MATERIAL_NAME)
+
+                if not touches and obj.type == MESH_OBJECT_TYPE:
+                    # the intersection with a mask that does not touch the object is empty
+                    obj.data.clear_geometry()
+                    updated_objects.append(obj)
+                    continue
 
                 if not add_boolean_modifier(obj, mask, BOOLEAN_MODIFIER_OPERATION.INTERSECT if intersect else BOOLEAN_MODIFIER_OPERATION.DIFFERENCE):
                     continue
@@ -1193,18 +1250,24 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
 
     bpy.ops.object.select_all(action=DESELECT_ACTION)
 
-    for bbox in bboxes:
-        bbox.select_set(True)
-        bpy.context.view_layer.objects.active = bbox
+    if bounds_min is not None:
+        # the box that the join of the boxes of the objects had (same name)
+        bbox = None
+        final_bbox = create_box_from_bounds(bounds_min, bounds_max, "final_bbox_" + last_name)
+    else:
+        for bbox in bboxes:
+            bbox.select_set(True)
+            bpy.context.view_layer.objects.active = bbox
 
-    bpy.ops.object.join()
-    bbox = bpy.context.active_object
-    final_bbox = create_bounding_box(bbox, "final_")
+        bpy.ops.object.join()
+        bbox = bpy.context.active_object
+        final_bbox = create_bounding_box(bbox, "final_")
     add_new_obj_material(final_bbox, OSM_MATERIAL_NAME)
 
     bpy.ops.object.select_all(action=DESELECT_ACTION)
-    bbox.select_set(True)
-    if not keep_mask:
+    if bbox is not None:
+        bbox.select_set(True)
+    if not keep_mask and mask:
         mask.select_set(True)
     if no_bounding_box:
         final_bbox.select_set(True)
@@ -1215,19 +1278,6 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
     cleanup_cutted_faces(updated_objects)
 
     clean_scene(objects_to_keep=bpy.context.scene.objects)
-    bpy.ops.object.select_all(action=SELECT_ACTION)
-
-    # Fix 3d normals
-    for obj in updated_objects:
-        if BOUNDING_BOX_OSM_KEY not in obj.name and obj.type == MESH_OBJECT_TYPE:
-            bpy.context.view_layer.objects.active = obj
-
-            if not add_weighted_normal_modifier(obj):
-                continue
-
-            for modifier in obj.modifiers:
-                bpy.ops.object.modifier_apply(modifier=modifier.name)
-
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
