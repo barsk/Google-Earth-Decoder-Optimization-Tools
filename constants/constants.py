@@ -207,6 +207,8 @@ LANDMARKS_DOWNLOAD_FOLDER = "landmarks_download"
 LANDMARKS_PLACEMENT_FILE = "landmarks_placement.json"
 # margin (in meters) of the downloaded rectangles around the landmarks
 LANDMARKS_DOWNLOAD_MARGIN = 2.0
+# script running several scripts in one Blender process (e.g. all the lods of a tile)
+TASKS_RUNNER_SCRIPT = "run_tasks.py"
 WATER_DEPTH_SLOPE = 0.15
 DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"

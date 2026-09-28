@@ -1550,7 +1550,7 @@ class MsfsProject:
         return chunks(data, settings.nb_parallel_blender_tasks)
 
     def __optimize_tile_lods(self, lods_data):
-        self.__multithread_blender_process_data(lods_data, "optimize_tile_lod.py", "OPTIMIZE THE TILES", "optimized")
+        self.__multithread_blender_process_data(lods_data, "optimize_tile_lod.py", "OPTIMIZE THE TILES", "optimized", group_by_tile=True)
 
     def __merge_tiles(self, tiles, project_to_merge_name, tiles_to_merge, objects_xml_to_merge, project_to_merge):
         pbar = ProgressBar(tiles_to_merge.items(), title="MERGE THE TILES")
@@ -2098,7 +2098,7 @@ class MsfsProject:
 
     def __process_lods_3d_data(self, nb_parallel_blender_tasks, process_all=False):
         tiles_with_collider, lods_data = self.__retrieve_lods_to_process(nb_parallel_blender_tasks, force_cleanup=process_all)
-        self.__multithread_blender_process_data(lods_data, "cleanup_lod_3d_data.py", "CLEAN LODS 3D DATA TILES", "cleaned")
+        self.__multithread_blender_process_data(lods_data, "cleanup_lod_3d_data.py", "CLEAN LODS 3D DATA TILES", "cleaned", group_by_tile=True)
         for tile in tiles_with_collider:
             for lod in tile.lods:
                 lod.remove_road_and_collision_tags()
@@ -2267,9 +2267,34 @@ class MsfsProject:
         backup_subfolder = os.path.join(self.PACKAGE_SOURCES_FOLDER, os.path.basename(self.model_lib_folder))
         return os.path.join(os.path.join(self.backup_folder, backup_root_folder), backup_subfolder)
 
-    def __multithread_blender_process_data(self, processed_data, script_name, title, update_msg):
+    def __multithread_blender_process_data(self, processed_data, script_name, title, update_msg, group_by_tile=False):
+        # group_by_tile: the tasks of the lods of a tile run in one Blender process (run_tasks.py), which starts Blender and loads
+        # the modules once instead of once per lod, when there are enough tiles to keep all the parallel processes busy
+        tasks_folder = None
+        if group_by_tile:
+            chunks_list = [list(chunk) for chunk in processed_data]
+            nb_parallel_tasks = max((len(chunk) for chunk in chunks_list), default=1)
+            groups = {}
+            for obj in (obj for chunk in chunks_list for obj in chunk):
+                groups.setdefault(re.sub(r"_LOD\d+$", "", obj["name"]), []).append(obj)
+            if len(groups) >= nb_parallel_tasks:
+                import tempfile
+                tasks_folder = tempfile.mkdtemp(prefix="gedot_tasks_")
+                data = []
+                for name, objs in groups.items():
+                    tasks_file_path = os.path.join(tasks_folder, name + JSON_FILE_EXT)
+                    with open(tasks_file_path, "w") as file:
+                        json.dump([{"script": script_name, "params": obj["params"]} for obj in objs], file)
+                    data.append({"name": name, "params": ["--tasks_file", tasks_file_path]})
+                processed_data = chunks(data, nb_parallel_tasks)
+                script_name = TASKS_RUNNER_SCRIPT
+            else:
+                processed_data = iter(chunks_list)
+
         params = [str(bpy.app.binary_path), "--background", "--python", os.path.join(os.path.dirname(os.path.dirname(__file__)), script_name), "--"]
         self.__multithread_process_data(processed_data, params, script_name, title, update_msg)
+        if tasks_folder is not None:
+            shutil.rmtree(tasks_folder, ignore_errors=True)
 
 
     def __prepare_geodataframes(self, orig_road, orig_railway, orig_sea, orig_bbox, orig_land_mass, orig_boundary, orig_landuse, orig_natural, orig_natural_water,
