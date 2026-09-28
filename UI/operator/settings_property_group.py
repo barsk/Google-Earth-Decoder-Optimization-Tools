@@ -336,9 +336,11 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     nb_parallel_blender_tasks: IntProperty(
         name="Number of parallel Blender tasks",
-        description="Set the number of parallel Blender tasks to run concurrently",
+        description="Set the number of parallel Blender tasks to run concurrently (up to the number of logical processors is useful)",
+        min=1,
+        max=64,
         soft_min=1,
-        soft_max=10,
+        soft_max=max(10, os.cpu_count() or 10),
         step=1,
         default=int(bpy.types.Scene.global_settings.nb_parallel_blender_tasks),
         update=nb_parallel_blender_tasks_updated

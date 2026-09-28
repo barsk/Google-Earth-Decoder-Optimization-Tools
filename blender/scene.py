@@ -1141,28 +1141,6 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
     return float(level), nb_pushed
 
 
-def get_mask_footprint(mask):
-    # the areas of the mask (vertical extrusions) seen from above, as a prepared shapely geometry, or None
-    from shapely.geometry import Polygon
-    from shapely.ops import unary_union
-    from shapely.prepared import prep
-
-    matrix = mask.matrix_world
-    rotation = matrix.to_3x3()
-    polygons = []
-    for polygon in mask.data.polygons:
-        normal = rotation @ polygon.normal
-        if normal.length == 0.0 or abs(normal.normalized().z) < 0.5:
-            continue
-        shape = Polygon([tuple((matrix @ mask.data.vertices[i].co).to_2d()) for i in polygon.vertices])
-        if not shape.is_valid:
-            shape = shape.buffer(0)
-        if not shape.is_empty:
-            polygons.append(shape)
-
-    return prep(unary_union(polygons)) if polygons else None
-
-
 def get_world_bounds(obj):
     corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
     return mathutils.Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners))), \
@@ -1200,7 +1178,10 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
     # bounding box of the tile, instead of a box and a boolean per object: each operator call updates the whole scene, which was
     # most of the time of the steps 4 and 5. The objects whose bounds do not touch the mask are not intersected with it: they
     # are emptied (intersect) or kept (difference) directly
-    footprint = get_mask_footprint(mask) if mask else None
+    from shapely.prepared import prep
+
+    footprint = get_mask_footprint(mask.name) if mask else None
+    footprint = prep(footprint) if footprint is not None else None
     bounds_min, bounds_max, last_name = None, None, None
 
     if mask:
