@@ -2448,37 +2448,52 @@ class MsfsProject:
 
     @staticmethod
     def __multithread_process_data(processed_data, params, script_name, title, update_msg):
+        # a pool of processes (as many as the size of the chunks): a new task starts as soon as one ends, instead of waiting for
+        # the slowest task of each chunk. The outputs of the processes are printed as soon as they are available
+        import threading
+        import time
+
         ON_POSIX = 'posix' in sys.builtin_module_names
 
-        processed_data, data = itertools.tee(processed_data)
-        pbar = ProgressBar(list(data), title=title)
+        chunks_list = [list(chunk) for chunk in processed_data]
+        tasks = [obj for chunk in chunks_list for obj in chunk]
+        pbar = ProgressBar(list(tasks), title=title)
+        if not tasks:
+            return
+        nb_parallel_tasks = max(len(chunk) for chunk in chunks_list)
 
         try:
-            for chunck in processed_data:
-                # create a pipe to get data
-                input_fd, output_fd = os.pipe()
+            # create a pipe to get data
+            input_fd, output_fd = os.pipe()
 
-                for obj in chunck:
-                    print("-------------------------------------------------------------------------------")
-                    print("\"" + str(bpy.app.binary_path) + "\" --background --python \"" + os.path.join(os.path.dirname(os.path.dirname(__file__)), script_name) + "\" -- " + str(" ").join(obj["params"]))
-
-                si = subprocess.STARTUPINFO()
-                si.dwFlags = subprocess.STARTF_USESTDHANDLES | subprocess.HIGH_PRIORITY_CLASS
-
-                processes = [subprocess.Popen(params + obj["params"],
-                                              stdout=output_fd, stderr=subprocess.DEVNULL, close_fds=ON_POSIX, startupinfo=si, encoding=ENCODING) for obj in chunck]
-
-                os.close(output_fd)  # close unused end of the pipe
-
-                # read output line by line as soon as it is available
+            def print_output():
                 with io.open(input_fd, "r", buffering=1) as file:
                     for line in file:
                         print(line, end=str())
 
-                for p in processes:
-                    p.wait()
+            reader = threading.Thread(target=print_output, daemon=True)
+            reader.start()
 
-                pbar.update("%s %s" % (obj["name"], update_msg))
+            si = subprocess.STARTUPINFO()
+            si.dwFlags = subprocess.STARTF_USESTDHANDLES | subprocess.HIGH_PRIORITY_CLASS
+
+            pending, running = list(tasks), []
+            while pending or running:
+                while pending and len(running) < nb_parallel_tasks:
+                    obj = pending.pop(0)
+                    print("-------------------------------------------------------------------------------")
+                    print("\"" + str(bpy.app.binary_path) + "\" --background --python \"" + os.path.join(os.path.dirname(os.path.dirname(__file__)), script_name) + "\" -- " + str(" ").join(obj["params"]))
+                    running.append((subprocess.Popen(params + obj["params"], stdout=output_fd, stderr=subprocess.DEVNULL, close_fds=ON_POSIX, startupinfo=si, encoding=ENCODING), obj))
+
+                finished = [(process, obj) for process, obj in running if process.poll() is not None]
+                for process, obj in finished:
+                    running.remove((process, obj))
+                    pbar.update("%s %s" % (obj["name"], update_msg))
+                if not finished:
+                    time.sleep(0.2)
+
+            os.close(output_fd)  # end of the output when all the processes are done
+            reader.join()
         except:
             pass
 

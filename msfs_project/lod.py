@@ -267,20 +267,25 @@ class MsfsLod:
         source_model_file_path = os.path.join(self.folder, self.model_file)
         output_model_file = output_name + self.LOD_SUFFIX + str(self.lod_level).zfill(2) + GLTF_FILE_EXT if output_name else self.model_file
 
+        imported = False
         for idx, (title, pass_mask_file_path, update_vertices) in enumerate(passes):
             isolated_print(title, self.name)
-            clean_scene()
-            if pass_mask_file_path:
-                align_model_with_mask(source_model_file_path, positioning_file_path, pass_mask_file_path)
-            # the alignment keeps only the mask: import the model in the aligned scene
-            import_model_files([source_model_file_path], clean=False)
+            # the passes without mask continue on the model already in the scene
+            if pass_mask_file_path or not imported:
+                clean_scene()
+                if pass_mask_file_path:
+                    align_model_with_mask(source_model_file_path, positioning_file_path, pass_mask_file_path)
+                # the alignment keeps only the mask: import the model in the aligned scene
+                import_model_files([source_model_file_path], clean=False)
+                imported = True
             result = update_vertices()
             if result is not None:
                 isolated_print(str(result))
             self.__remove_mask_objects()
 
-            if idx < len(passes) - 1 or has_mask:
-                # the next pass starts from the updated model
+            # the next pass with a mask, or the final mask, needs a clean scene: they start from the updated model
+            if (idx < len(passes) - 1 and passes[idx + 1][1]) or (idx == len(passes) - 1 and has_mask):
+                imported = False
                 source_model_file_path = os.path.join(output_folder, output_model_file)
                 export_to_optimized_gltf_files(source_model_file_path, TEXTURE_FOLDER, use_selection=True, export_extras=False, apply_modifiers=True)
                 model_file = MsfsGltf(source_model_file_path)
