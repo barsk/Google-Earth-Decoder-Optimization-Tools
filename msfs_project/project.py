@@ -532,6 +532,11 @@ class MsfsProject:
 
         tile_level = min(len(name) for name in tile_numbers)
         command = [exe, "--rects", rects_file_path, "--min-lod", str(level), "--max-lod", str(level), "--group-level", str(tile_level), "--out", folder]
+        # the colors of the tiles download (TEXTURES section), so that the landmarks match the tiles
+        for setting, option, neutral in TILE_DOWNLOADER_COLOR_OPTIONS:
+            value = float(getattr(self.settings, setting, neutral))
+            if value != neutral:
+                command.extend([option, "%g" % value])
         isolated_print(" ".join(command))
         result = subprocess.run(command, capture_output=True, text=True)
         for line in (result.stdout + result.stderr).splitlines():

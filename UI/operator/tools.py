@@ -21,7 +21,7 @@ import bpy
 from bpy.props import IntProperty
 from msfs_project.project import MsfsProject
 from . import SettingsPropertyGroup
-from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, MAX_PHOTOGRAMMETRY_LOD
+from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, MAX_PHOTOGRAMMETRY_LOD, TILE_DOWNLOADER_COLOR_OPTIONS
 from utils import GlobalSettings
 
 
@@ -299,6 +299,12 @@ def reload_resize_ratio(context):
         context.scene.setting_props.resize_ratio = float(context.scene.project_settings.resize_ratio)
 
 
+def reload_texture_colors(context):
+    if context.scene.project_settings is not None:
+        for setting, option, neutral in TILE_DOWNLOADER_COLOR_OPTIONS:
+            setattr(context.scene.setting_props, setting, float(getattr(context.scene.project_settings, setting, neutral)))
+
+
 def reload_build_package_enabled(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.build_package_enabled = context.scene.project_settings.build_package_enabled
@@ -413,6 +419,8 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_altitude_adjustment(context)
     reload_create_forests_vegetation(context)
     reload_create_woods_vegetation(context)
+    reload_resize_ratio(context)
+    reload_texture_colors(context)
     reload_build_package_enabled(context)
     reload_python_reload_modules(context)
     reload_project_settings(context)

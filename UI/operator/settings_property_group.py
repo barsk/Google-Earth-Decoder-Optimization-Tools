@@ -258,6 +258,31 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.resize_ratio = "{:.2f}".format(float(str(self.resize_ratio))).rstrip("0").rstrip(".")
         context.scene.project_settings.save()
 
+    def texture_color_updated(self, context, name):
+        setattr(context.scene.project_settings, name, "{:.2f}".format(float(str(getattr(self, name)))).rstrip("0").rstrip("."))
+        context.scene.project_settings.save()
+
+    def brightness_updated(self, context):
+        self.texture_color_updated(context, "brightness")
+
+    def contrast_updated(self, context):
+        self.texture_color_updated(context, "contrast")
+
+    def saturation_updated(self, context):
+        self.texture_color_updated(context, "saturation")
+
+    def hue_updated(self, context):
+        self.texture_color_updated(context, "hue")
+
+    def red_level_updated(self, context):
+        self.texture_color_updated(context, "red_level")
+
+    def green_level_updated(self, context):
+        self.texture_color_updated(context, "green_level")
+
+    def blue_level_updated(self, context):
+        self.texture_color_updated(context, "blue_level")
+
     def build_package_enabled_updated(self, context):
         context.scene.project_settings.build_package_enabled = self.build_package_enabled
         context.scene.project_settings.save()
@@ -717,6 +742,74 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         precision=2,
         default=float(bpy.types.Scene.project_settings.resize_ratio) if bpy.types.Scene.project_settings is not None else 0.5,
         update=resize_ratio_updated
+    )
+    brightness: FloatProperty(
+        name="Brightness",
+        description="Brightness of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        soft_min=0.0,
+        soft_max=2.0,
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.brightness) if bpy.types.Scene.project_settings is not None else 1.0,
+        update=brightness_updated
+    )
+    contrast: FloatProperty(
+        name="Contrast",
+        description="Contrast of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        soft_min=0.0,
+        soft_max=2.0,
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.contrast) if bpy.types.Scene.project_settings is not None else 1.0,
+        update=contrast_updated
+    )
+    saturation: FloatProperty(
+        name="Saturation",
+        description="Saturation of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        soft_min=0.0,
+        soft_max=2.0,
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.saturation) if bpy.types.Scene.project_settings is not None else 1.0,
+        update=saturation_updated
+    )
+    hue: FloatProperty(
+        name="Hue",
+        description="Hue of the textures downloaded with TileDownloader (0 = unchanged): use the value of the tiles download",
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.hue) if bpy.types.Scene.project_settings is not None else 0.0,
+        update=hue_updated
+    )
+    red_level: FloatProperty(
+        name="Red level",
+        description="Red level of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        soft_min=0.0,
+        soft_max=2.0,
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.red_level) if bpy.types.Scene.project_settings is not None else 1.0,
+        update=red_level_updated
+    )
+    green_level: FloatProperty(
+        name="Green level",
+        description="Green level of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        soft_min=0.0,
+        soft_max=2.0,
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.green_level) if bpy.types.Scene.project_settings is not None else 1.0,
+        update=green_level_updated
+    )
+    blue_level: FloatProperty(
+        name="Blue level",
+        description="Blue level of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        soft_min=0.0,
+        soft_max=2.0,
+        step=1,
+        precision=2,
+        default=float(bpy.types.Scene.project_settings.blue_level) if bpy.types.Scene.project_settings is not None else 1.0,
+        update=blue_level_updated
     )
     msfs_build_exe_path_readonly: StringProperty(
         name="Path to the MSFS bin exe that builds the MSFS packages",

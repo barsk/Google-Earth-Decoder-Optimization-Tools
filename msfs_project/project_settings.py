@@ -137,7 +137,7 @@ class ProjectSettings(Settings):
         self.brightness = 1.0
         self.contrast = 1.0
         self.saturation = 1.0
-        self.hue = 1.0
+        self.hue = 0.0
         self.high_precision = "False"
         self.ground_filter_size = DEFAULT_GROUND_FILTER_SIZE
         self.blend_outer_edges = "True"

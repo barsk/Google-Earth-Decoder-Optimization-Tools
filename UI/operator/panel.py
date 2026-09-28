@@ -286,7 +286,13 @@ class SettingsOperator(PanelOperator):
         split = self.draw_setting_sections_panel(context)
         col = self.draw_header(split, display_save=False)
         col.separator()
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "resize_ratio", "Ratio used to resize the textures of the tiles")
+        if self.operator_name == "wm.upgrade_landmarks":
+            col.label(text="Colors of the landmarks downloaded with TileDownloader: use the values of the tiles download (1 = unchanged, hue 0 = unchanged)", icon=INFO_ICON)
+            col.separator()
+            for name, label in (("brightness", "Brightness"), ("contrast", "Contrast"), ("saturation", "Saturation"), ("hue", "Hue"), ("red_level", "Red level"), ("green_level", "Green level"), ("blue_level", "Blue level")):
+                draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label)
+        else:
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "resize_ratio", "Ratio used to resize the textures of the tiles")
         col.separator()
         self.draw_footer(context, self.layout, self.operator_name)
 
@@ -734,11 +740,13 @@ class OT_UpgradeLandmarksPanel(SettingsOperator):
         Then the tile lods more detailed than the tiles_max_lod_level value ([LANDMARKS] section of the project ini file, 19 by default) are removed,
         and the textures of the landmarks are repacked to keep only the parts they use.
         The buildings already upgraded are skipped: define all the landmarks before the first run, as the removed tile lods can't be used anymore.
-        In the GEOCODE section, set the geocode margin (as OSM and Google Earth can have a slight difference between building positions)."""
+        In the GEOCODE section, set the geocode margin (as OSM and Google Earth can have a slight difference between building positions).
+        In the TEXTURES section, set the colors of the tiles download (e.g. brightness 0.85), so that the downloaded landmarks match the tiles."""
     starting_section = GEOCODE_INI_SECTION
     displayed_sections = [
         PROJECT_INI_SECTION,
         GEOCODE_INI_SECTION,
+        TEXTURES_INI_SECTION,
         BUILD_INI_SECTION,
         BACKUP_INI_SECTION,
     ]
