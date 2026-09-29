@@ -1394,6 +1394,10 @@ def create_exclusion_vegetation_polygons_gdf(exclusion):
 
 def clip_gdf(gdf, clip):
     result = gdf.copy()
+    # an exploded geodataframe repeats the index of the multi part geometries: the clipped geometries (fewer rows) could not be set
+    # back ("cannot reindex on an axis with duplicate labels"). The index doesn't matter, the result is dissolved
+    if not result.index.is_unique:
+        result = result.reset_index(drop=True)
 
     if clip.empty:
         return result
