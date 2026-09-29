@@ -980,6 +980,56 @@ def prepare_water_exclusion_gdf(gdf, building, bridges):
     return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
 
 
+def select_bridge_ways(road, railway, piers=False):
+    # the ways of the roads and railways that are bridges (bridge tag, seamark bridges), and piers
+    ways = [gdf for gdf in (road, railway) if not gdf.empty]
+    if not ways:
+        return create_empty_gdf()
+
+    ways = pd.concat(ways)
+    ways = ways[~ways[GEOMETRY_OSM_COLUMN].isna()]
+    if TUNNEL_OSM_TAG in ways:
+        ways = ways[ways[TUNNEL_OSM_TAG].isna()]
+    selected = pd.Series(False, index=ways.index)
+    if BRIDGE_OSM_TAG in ways:
+        selected |= ways[BRIDGE_OSM_TAG].notna()
+    if SEAMARK_TYPE_OSM_TAG in ways:
+        selected |= ways[SEAMARK_TYPE_OSM_TAG] == BRIDGE_OSM_TAG
+    if piers and MAN_MADE_OSM_KEY in ways:
+        selected |= ways[MAN_MADE_OSM_KEY] == PIER_OSM_TAG
+
+    return ways[selected] if selected.any() else create_empty_gdf()
+
+
+def create_water_structures_gdf(water, road, railway, man_made, building, bridge_distance, margin):
+    # the water near the structures standing in it, where only the low parts of the tiles are pushed under the water level (step 4):
+    # within bridge_distance meters of the bridge axes, and within the margin (meters) of the bridge outlines and of the buildings
+    if water.empty:
+        return water
+
+    metric_crs = water.estimate_utm_crs()
+    zones = []
+    ways = select_bridge_ways(road, railway)
+    if not ways.empty:
+        zones.append(ways.to_crs(metric_crs).buffer(bridge_distance).unary_union)
+    if not man_made.empty and MAN_MADE_OSM_KEY in man_made:
+        bridges = man_made[(man_made[MAN_MADE_OSM_KEY] == BRIDGE_OSM_TAG) & man_made.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]
+        if not bridges.empty:
+            zones.append(bridges.to_crs(metric_crs).buffer(margin).unary_union)
+    if not building.empty:
+        buildings = building[building.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]
+        if not buildings.empty:
+            zones.append(buildings.to_crs(metric_crs).buffer(margin).unary_union)
+    if not zones:
+        return create_empty_gdf()
+
+    area = unary_union(zones).intersection(water.to_crs(metric_crs).unary_union)
+    if area.is_empty:
+        return create_empty_gdf()
+
+    return gpd.GeoDataFrame(geometry=[area], crs=metric_crs).to_crs(EPSG.key + str(EPSG.WGS84_degree_unit))
+
+
 def create_water_push_down_gdf(water, road, railway, man_made, band_width):
     # the water where the tiles are pushed under the water level (step 4): the whole water, minus narrow bands (band_width meters on each
     # side) around the axis of the bridges, seamark bridges and piers (their decks can be low) and the pier areas. What stands higher above
@@ -991,21 +1041,9 @@ def create_water_push_down_gdf(water, road, railway, man_made, band_width):
     metric_crs = result.estimate_utm_crs()
     spared = []
 
-    ways = [gdf for gdf in (road, railway) if not gdf.empty]
-    if ways:
-        ways = pd.concat(ways)
-        ways = ways[~ways[GEOMETRY_OSM_COLUMN].isna()]
-        if TUNNEL_OSM_TAG in ways:
-            ways = ways[ways[TUNNEL_OSM_TAG].isna()]
-        selected = pd.Series(False, index=ways.index)
-        if BRIDGE_OSM_TAG in ways:
-            selected |= ways[BRIDGE_OSM_TAG].notna()
-        if SEAMARK_TYPE_OSM_TAG in ways:
-            selected |= ways[SEAMARK_TYPE_OSM_TAG] == BRIDGE_OSM_TAG
-        if MAN_MADE_OSM_KEY in ways:
-            selected |= ways[MAN_MADE_OSM_KEY] == PIER_OSM_TAG
-        if selected.any():
-            spared.append(ways[selected].to_crs(metric_crs).buffer(band_width).unary_union)
+    ways = select_bridge_ways(road, railway, piers=True)
+    if not ways.empty:
+        spared.append(ways.to_crs(metric_crs).buffer(band_width).unary_union)
 
     if not man_made.empty and MAN_MADE_OSM_KEY in man_made:
         piers = man_made[(man_made[MAN_MADE_OSM_KEY] == PIER_OSM_TAG) & man_made.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]

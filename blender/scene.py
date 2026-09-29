@@ -1076,7 +1076,7 @@ def smooth_in_mask(radius=4.0, ramp_distance=2.0, mask_name="Areas"):
     return nb_smoothed
 
 
-def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, max_height=None, mask_name="Areas", positioning_name="Ways"):
+def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, max_height=None, positioning_file_path=None, structures_file_path=None, mask_name="Areas", positioning_name="Ways"):
     # push the vertices of the tile inside the (aligned) water mask under the water level, instead of cutting them:
     # the faces crossing the shore slope down into the water, without holes in the 3d data.
     # The water level of the tile: its water surface (75th percentile), at least its waterline (5th percentile of the ground
@@ -1084,7 +1084,8 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
     # The level of the height data is calculated for whole water bodies and can be lower (large rivers): the vertices are pushed
     # under the lower quarter of the water surface too, and progressively over ramp_distance from the shore.
     # max_height: only the vertices lower than this height above the water level are pushed down (the water surface, the boats...),
-    # what stands higher in the water (bridge decks, walls of buildings) is kept
+    # what stands higher in the water (bridge decks, walls of buildings) is kept. With the structures file (GeoJSON, the water near the
+    # bridges and buildings), the maximum height only applies there: elsewhere, everything is pushed down
     from shapely.ops import unary_union
     from shapely.prepared import prep
 
@@ -1120,13 +1121,22 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
         level = min(level, np.percentile(water_heights, 25))
     target = float(level) - depth
     top = float(level) + max_height if max_height is not None else np.inf
+    structures = None
+    if max_height is not None and structures_file_path and os.path.isfile(structures_file_path) and positioning_file_path and os.path.isfile(positioning_file_path):
+        structures, _ = read_areas_in_tile(positioning_file_path, structures_file_path, clip_margin=0.001)
+        structures = prep(structures) if structures is not None and not structures.is_empty else None
+        if structures is None:
+            top = np.inf
 
     # the shore: the outline of the mask, without its borders clipped by the tile
     minx, miny, maxx, maxy = footprint.bounds
     shore = footprint.boundary.difference(geometry.box(minx, miny, maxx, maxy).boundary.buffer(0.5))
     nb_pushed = 0
     for obj, coords, in_water, _ in objects_data:
-        indexes = np.where(in_water & (coords[:, 2] > target) & (coords[:, 2] < top))[0]
+        below_top = coords[:, 2] < top
+        if structures is not None:
+            below_top |= ~np.array([structures.contains(geometry.Point(x, y)) for x, y in coords[:, :2]], dtype=bool)
+        indexes = np.where(in_water & (coords[:, 2] > target) & below_top)[0]
         if not len(indexes):
             continue
         # the normals are kept (they turn with the faces when the vertices are moved)

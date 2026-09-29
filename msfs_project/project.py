@@ -66,7 +66,7 @@ from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
 from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
-from utils.geo_pandas import load_gdf_from_osm_id, create_water_push_down_gdf, write_water_areas_file, write_building_footprints_file, flatten_water_height_data, remove_not_water_natural_gdf
+from utils.geo_pandas import load_gdf_from_osm_id, create_water_push_down_gdf, create_water_structures_gdf, write_water_areas_file, write_building_footprints_file, flatten_water_height_data, remove_not_water_natural_gdf
 from utils.octant import get_coords_from_file_name
 from utils.placement import fit_tiles_placement, save_tiles_placement, DownloadFrame, wgs84_meters_per_degree
 from msfs_project.gltf import MsfsGltf
@@ -1369,6 +1369,9 @@ class MsfsProject:
 
                 if has_water_mask_file:
                     params.extend(["--water_mask_file_path", str(water_mask_file_path)])
+                    water_structures_file_path = os.path.join(self.osmfiles_folder, WATER_STRUCTURES_FILE)
+                    if os.path.isfile(water_structures_file_path):
+                        params.extend(["--water_structures_file_path", str(water_structures_file_path)])
 
                 if has_beach_mask_file:
                     params.extend(["--beach_mask_file_path", str(beach_mask_file_path)])
@@ -1771,7 +1774,7 @@ class MsfsProject:
 
         # retrieve_osm_data
         orig_water, orig_natural_water, bbox, roads, bridges, hidden_roads, sea, pitch, construction, airport, building, \
-        water_without_bridges, water, exclusion, rocks, amenity, residential, industrial, forests, woods, water_push_down = self.__retrieve_osm_data(b, orig_bbox, settings, self.__osm_data_to_retrieve(create_polygons))
+        water_without_bridges, water, exclusion, rocks, amenity, residential, industrial, forests, woods, water_push_down, water_structures = self.__retrieve_osm_data(b, orig_bbox, settings, self.__osm_data_to_retrieve(create_polygons))
 
         if create_polygons:
             self.__create_scenery_polygons(b, orig_bbox, orig_water, orig_natural_water, bbox, sea, pitch, amenity, construction, industrial, forests, woods, airport, exclusion, disable_terraform=self.settings.disable_terraform)
@@ -1782,6 +1785,11 @@ class MsfsProject:
             else:
                 self.__create_exclusion_masks_from_tiles(b, difference_gdf(exclusion, water) if self.settings.push_down_water else exclusion, building_mask=building, road_mask=roads if self.settings.keep_roads else None, bridges_mask=bridges if self.settings.keep_roads else None, hidden_roads=hidden_roads if self.settings.keep_roads else None, airport_mask=airport, rocks_mask=rocks, file_prefix=EXCLUSION_OSM_FILE_PREFIX, title="CREATE EXCLUSION MASKS OSM FILES", process_all=process_all)
                 # the water is pushed down under the water level instead of being cut (no holes in the 3d data along the shores)
+                water_structures_file_path = os.path.join(self.osmfiles_folder, WATER_STRUCTURES_FILE)
+                if os.path.isfile(water_structures_file_path):
+                    os.remove(water_structures_file_path)
+                if self.settings.push_down_water and not water_structures.empty:
+                    water_structures.to_file(water_structures_file_path, driver="GeoJSON")
                 if self.settings.push_down_water and not water_push_down.empty:
                     self.__create_exclusion_masks_from_tiles(b, water_push_down.assign(building=WATER_OSM_KEY), file_prefix=WATER_PUSH_DOWN_OSM_FILE_PREFIX, title="CREATE WATER PUSH DOWN MASKS OSM FILES", process_all=process_all)
                 # the beaches are smoothed (the photogrammetry of the sand is spiky)
@@ -1833,7 +1841,7 @@ class MsfsProject:
         orig_wall, orig_man_made, orig_rocks, orig_amenity, orig_residential, orig_industrial, orig_airport = self.__load_geodataframes(settings, orig_bbox, b, osm_data)
 
         bbox, roads, bridges, hidden_roads, sea, pitches, construction, airport, buildings, \
-        water_without_bridges, water, exclusion, rocks, amenities, residentials, industrials, forests, woods, water_push_down = self.__prepare_geodataframes(orig_road, orig_railway, orig_sea, orig_bbox, orig_land_mass, orig_boundary,
+        water_without_bridges, water, exclusion, rocks, amenities, residentials, industrials, forests, woods, water_push_down, water_structures = self.__prepare_geodataframes(orig_road, orig_railway, orig_sea, orig_bbox, orig_land_mass, orig_boundary,
                                                                                                orig_landuse, orig_natural, orig_natural_water, orig_water, orig_waterway, orig_aeroway,
                                                                                                orig_pitch, orig_construction, orig_airport, orig_building, orig_wall, orig_man_made,
                                                                                                orig_park, orig_nature_reserve, orig_rocks, orig_amenity, orig_residential, orig_industrial, settings, osm_data)
@@ -1857,7 +1865,7 @@ class MsfsProject:
             osm_xml.create_from_geodataframes([preserve_holes(exclusion.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore'))], b, extrude=True, additional_tags=[(HEIGHT_OSM_TAG, 1000)])
 
         return orig_water, orig_natural_water, bbox, roads, bridges, hidden_roads, sea, pitches, construction, airport, buildings, \
-               water_without_bridges, water, exclusion, rocks, amenities, residentials, industrials, forests, woods, water_push_down
+               water_without_bridges, water, exclusion, rocks, amenities, residentials, industrials, forests, woods, water_push_down, water_structures
 
     def __create_scenery_polygons(self, b, orig_bbox, orig_water, orig_natural_water, bbox, sea, pitch, amenity, construction, industrial, forests, woods, airport, exclusion, disable_terraform=False):
         forests_vegetation_polygons = create_empty_gdf()
@@ -2424,9 +2432,12 @@ class MsfsProject:
         # the water where the tiles are pushed down (the bridges, buildings, breakwaters are kept by their height, see push_down_water_in_mask)
         water_push_down = create_water_push_down_gdf(whole_water, orig_road, orig_railway, orig_man_made, WATER_PUSH_DOWN_BRIDGE_BAND) \
             if self.settings.push_down_water else create_empty_gdf()
+        # the water near the bridges and buildings, where only the low parts of the tiles are pushed down
+        water_structures = create_water_structures_gdf(whole_water, orig_road, orig_railway, orig_man_made, orig_building, WATER_STRUCTURES_BRIDGE_DISTANCE,
+                                                       WATER_STRUCTURES_MARGIN) if self.settings.push_down_water else create_empty_gdf()
 
         return bbox, roads, bridges, hidden_roads, sea, pitches, constructions, airport, buildings, \
-               whole_water, water_exclusion, exclusion, rocks, amenities, residentials, industrials, forests, woods, water_push_down
+               whole_water, water_exclusion, exclusion, rocks, amenities, residentials, industrials, forests, woods, water_push_down, water_structures
 
     @staticmethod
     def __backup_objects(objects: dict, backup_path, pbar_title="backup files"):

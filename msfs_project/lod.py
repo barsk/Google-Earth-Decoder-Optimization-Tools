@@ -242,7 +242,7 @@ class MsfsLod:
         model_file.remove_texture_path(self.name)
         model_file.dump()
 
-    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None, beach_mask_file_path=None, remove_overlapping_octants=False, clip_nodes_to_cells=False):
+    def process_3d_data(self, positioning_file_path, mask_file_path, output_folder, output_name=None, process_type=PROCESS_TYPE.cleanup_3d_data, debug=False, water_mask_file_path=None, water_structures_file_path=None, beach_mask_file_path=None, remove_overlapping_octants=False, clip_nodes_to_cells=False):
         # Import the gltf files located in the object folder
         model_file = MsfsGltf(os.path.join(self.folder, self.model_file))
         model_file.remove_texture_path(self.name)
@@ -260,7 +260,9 @@ class MsfsLod:
         if remove_overlapping_octants:
             passes.append(("remove the overlapping octants of", None, lambda: remove_overlapping_octant_faces(tolerance=OVERLAPPING_OCTANTS_TOLERANCE)))
         if cleanup and is_file(water_mask_file_path):
-            passes.append(("push down the water of", water_mask_file_path, lambda: push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH, ramp_distance=WATER_PUSH_DOWN_RAMP_DISTANCE, max_height=WATER_PUSH_DOWN_MAX_HEIGHT)))
+            passes.append(("push down the water of", water_mask_file_path, lambda: push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH, ramp_distance=WATER_PUSH_DOWN_RAMP_DISTANCE,
+                                                                                                    max_height=WATER_PUSH_DOWN_MAX_HEIGHT if is_file(water_structures_file_path) else None,
+                                                                                                    positioning_file_path=positioning_file_path, structures_file_path=water_structures_file_path)))
         if cleanup and is_file(beach_mask_file_path):
             passes.append(("smooth the beaches of", beach_mask_file_path, lambda: smooth_in_mask(radius=BEACH_SMOOTHING_RADIUS, ramp_distance=BEACH_SMOOTHING_RAMP_DISTANCE)))
 

@@ -198,10 +198,16 @@ WATER_PUSH_DOWN_OSM_FILE_PREFIX = "water_push_down"
 WATER_PUSH_DOWN_DEPTH = 1.5
 # the vertices are pushed down progressively over this distance (in meters) from the shore, so that the shore slopes into the water
 WATER_PUSH_DOWN_RAMP_DISTANCE = 3.0
-# only what is lower than this height (in meters) above the water level of the push down (the lower quarter of the water) is pushed down:
-# the Google Earth water surface (up to 2.2 m above it where it is noisy), the boats... The bridge decks (3.3 m and more above the water in
-# Karlstad) and what stands higher in the water (walls of buildings, quays) are kept
+# near the structures standing in the water (bridges, buildings), only what is lower than this height (in meters) above the water level of
+# the push down (the lower quarter of the water) is pushed down: the Google Earth water surface (up to 2.2 m above it where it is noisy),
+# the boats... The bridge decks (3.3 m and more above the water in Karlstad) and the walls are kept. Elsewhere, everything is pushed down
+# (the Google Earth water of a pond can be 6 m high)
 WATER_PUSH_DOWN_MAX_HEIGHT = 3.0
+# the water near the structures (GeoJSON of the project), where the maximum height applies: within this distance (meters) of the bridge axes,
+# and within the margin of the bridge outlines and of the footprints of the buildings
+WATER_STRUCTURES_FILE = "water_structures.geojson"
+WATER_STRUCTURES_BRIDGE_DISTANCE = 20.0
+WATER_STRUCTURES_MARGIN = 5.0
 # the axis of the bridges and piers is spared on this distance (in meters) on each side: their decks can be lower than the maximum height
 WATER_PUSH_DOWN_BRIDGE_BAND = 3.0
 # the beaches (osm natural=beach) of the Google Earth tiles are smoothed (the photogrammetry of the sand is spiky): the height of their vertices

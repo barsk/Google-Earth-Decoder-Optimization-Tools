@@ -109,6 +109,11 @@ try:
     )
 
     parser.add_argument(
+        "-wst", "--water_structures_file_path", dest="water_structures_file_path", type=str, required=False,
+        help="path of the GeoJSON file of the water near the structures (bridges, buildings), where only the low parts of the tile are pushed down",
+    )
+
+    parser.add_argument(
         "-wmsk", "--water_mask_file_path", dest="water_mask_file_path", type=str, required=False,
         help="path of the water mask file (the water is pushed down under the water level)",
     )
@@ -163,6 +168,6 @@ try:
         debug = False
 
     lod = MsfsLod(os.path.splitext(args.model_file)[0][-2:], 0, args.folder, args.model_file)
-    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, beach_mask_file_path=args.beach_mask_file_path, remove_overlapping_octants=remove_overlapping_octants, clip_nodes_to_cells=clip_nodes_to_cells)
+    lod.process_3d_data(args.positioning_file_path, args.mask_file_path, args.output_folder, process_type=PROCESS_TYPE.cleanup_3d_data, debug=debug, water_mask_file_path=args.water_mask_file_path, water_structures_file_path=args.water_structures_file_path, beach_mask_file_path=args.beach_mask_file_path, remove_overlapping_octants=remove_overlapping_octants, clip_nodes_to_cells=clip_nodes_to_cells)
 except:
     pass
