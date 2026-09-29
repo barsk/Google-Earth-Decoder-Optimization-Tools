@@ -161,6 +161,9 @@ HIGH_PRECISION_HEIGHT_OFFSET = 1.0
 WATER_AREAS_FILE = "water_areas.geojson"
 # footprints of the buildings of the project (GeoJSON), under which the height data is interpolated from the ground around them
 BUILDING_FOOTPRINTS_FILE = "building_footprints.geojson"
+# the tiles of a scenery made of several projects (e.g. the cells of a city), one tile name per line, in the folder of the projects:
+# the sides of the tiles shared with the tiles of the other projects are not outer edges of the scenery (no edge blending there)
+SCENERY_TILES_FILE = "scenery_tiles.txt"
 # margin (meters) around the footprints of the buildings: the height data next to their walls can still be on their roofs
 BUILDING_FOOTPRINT_MARGIN = 3.0
 # open areas (square meters) enclosed by buildings, smaller than this, are interpolated like the buildings (passages, courtyards)

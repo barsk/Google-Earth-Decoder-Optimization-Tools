@@ -1211,11 +1211,27 @@ class MsfsProject:
         beaches = beaches.to_crs(bbox.crs)[[GEOMETRY_OSM_COLUMN]]
         return clip_gdf(beaches, bbox)
 
+    def __scenery_tiles_coords(self):
+        # the tiles of the whole scenery, when it is made of several projects (SCENERY_TILES_FILE in the folder of the projects)
+        if getattr(self, "_scenery_tiles_coords", None) is None:
+            self._scenery_tiles_coords = []
+            file_path = os.path.join(self.parent_path, SCENERY_TILES_FILE)
+            if os.path.isfile(file_path):
+                with open(file_path, encoding=ENCODING) as file:
+                    for line in file:
+                        name = line.split("#")[0].strip()
+                        coords = get_coords_from_file_name(name) if name else None
+                        if coords:
+                            self._scenery_tiles_coords.append((name, coords))
+        return self._scenery_tiles_coords
+
     def __find_tile_outer_edges(self, tile):
-        # sides of the tile which are on the border of the scenery (no neighbour tile)
+        # sides of the tile which are on the border of the scenery (no neighbour tile, in the project or in the other projects of the
+        # scenery)
         eps = 1e-7
         n, s, w, e = tile.coords
         others = [other.coords for other in self.tiles.values() if other is not tile and other.valid and other.coords]
+        others += [coords for name, coords in self.__scenery_tiles_coords() if name != tile.name]
         lat_overlap = lambda o: o[1] < n - eps and o[0] > s + eps
         lon_overlap = lambda o: o[2] < e - eps and o[3] > w + eps
         edges = []
