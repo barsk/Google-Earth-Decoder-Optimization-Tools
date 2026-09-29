@@ -99,6 +99,7 @@ from osmnx.utils_geo import bbox_to_poly
 
 from shapely.geometry import Polygon, JOIN_STYLE, CAP_STYLE, MultiPolygon, LineString, MultiPoint, Point
 from shapely.ops import linemerge, unary_union, polygonize, nearest_points
+from shapely.validation import make_valid
 from utils.progress_bar import ProgressBar
 from utils.geometry import close_holes, extend_line
 
@@ -204,6 +205,15 @@ def resize_gdf(gdf, resize_distance, single_sided=True, keep_points=False):
             # center): its parts are buffered separately, which gives the same result
             gdf[GEOMETRY_OSM_COLUMN] = gdf[GEOMETRY_OSM_COLUMN].apply(lambda geometry: buffer_parts(geometry, resize_distance, **options))
     return gdf.to_crs(EPSG.key + str(EPSG.WGS84_degree_unit))
+
+
+def polygonal_part(geometry):
+    # the polygons of a geometry (make_valid can return a collection with lines or points)
+    if geometry is None or geometry.is_empty or geometry.geom_type in (SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon):
+        return geometry
+    if hasattr(geometry, "geoms"):
+        return unary_union([polygonal_part(part) for part in geometry.geoms if part.geom_type in (SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon)])
+    return Polygon()
 
 
 def buffer_parts(geometry, distance, **options):
@@ -1428,7 +1438,12 @@ def preserve_holes(gdf, split_method=PRESERVE_HOLES_METHOD.centroid_split):
     result = resize_gdf(result, 1)
     result = result[(result.geom_type == SHAPELY_TYPE.polygon) | (result.geom_type == SHAPELY_TYPE.multiPolygon)]
 
-    result_p = result.geometry.unary_union
+    try:
+        result_p = result.geometry.unary_union
+    except GEOSException:
+        # an invalid geometry (e.g. a hole outside its shell: "unable to assign free hole to a shell") is repaired, then only its
+        # polygons are kept
+        result_p = unary_union([polygonal_part(make_valid(geometry)) for geometry in result.geometry if geometry is not None])
 
     if result_p is None:
         return result
