@@ -66,7 +66,7 @@ from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
 from msfs_project.lod import MsfsLod
 from utils.landmarks import read_landmarks, write_landmark_candidates
-from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, flatten_water_height_data, remove_not_water_natural_gdf
+from utils.geo_pandas import load_gdf_from_osm_id, write_water_areas_file, write_building_footprints_file, flatten_water_height_data, remove_not_water_natural_gdf
 from utils.octant import get_coords_from_file_name
 from utils.placement import fit_tiles_placement, save_tiles_placement, DownloadFrame, wgs84_meters_per_degree
 from msfs_project.gltf import MsfsGltf
@@ -1231,7 +1231,7 @@ class MsfsProject:
 
         return ",".join(edges)
 
-    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0, blend_outer_edges=True, water_areas_file_path=str()):
+    def __retrieve_tiles_to_calculate_height_map(self, nb_parallel_blender_tasks, new_group_id=-1, parallel=True, height_adjustment=0.0, high_precision=False, ground_filter_size=0.0, blend_outer_edges=True, water_areas_file_path=str(), building_footprints_file_path=str()):
         data = []
 
         for guid, tile in self.tiles.items():
@@ -1260,11 +1260,14 @@ class MsfsProject:
             params = ["--folder", str(tile_folder), "--name", str(tile.name), "--definition_file", str(tile.definition_file),
                       "--height_map_xml_folder", str(self.xmlfiles_folder), "--group_id", str(new_group_id), "--altitude", str(tile.pos.alt), "--height_adjustment", str(height_adjustment)]
 
-            if has_mask_file or water_areas_file_path:
+            if has_mask_file or water_areas_file_path or building_footprints_file_path:
                 params.extend(["--positioning_file_path", str(os.path.join(self.osmfiles_folder, BOUNDING_BOX_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT))])
 
             if water_areas_file_path:
                 params.extend(["--water_areas_file_path", str(water_areas_file_path)])
+
+            if building_footprints_file_path:
+                params.extend(["--building_footprints_file_path", str(building_footprints_file_path)])
 
             if os.path.isfile(ground_mask_file_path):
                 params.extend(["--ground_mask_file_path", str(ground_mask_file_path)])
@@ -1674,7 +1677,11 @@ class MsfsProject:
         if not write_water_areas_file(water_shp_file_paths, water_areas_file_path):
             water_areas_file_path = str()
 
-        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size), blend_outer_edges=self.settings.blend_outer_edges, water_areas_file_path=water_areas_file_path)
+        building_footprints_file_path = os.path.join(self.osmfiles_folder, BUILDING_FOOTPRINTS_FILE)
+        if not write_building_footprints_file(os.path.join(self.shpfiles_folder, BUILDING_OSM_KEY + SHP_FILE_EXT), building_footprints_file_path):
+            building_footprints_file_path = str()
+
+        tiles_data = self.__retrieve_tiles_to_calculate_height_map(settings.nb_parallel_blender_tasks, new_group_id=new_group_id, parallel=True, height_adjustment=float(self.settings.height_adjustment), high_precision=self.settings.high_precision, ground_filter_size=float(self.settings.ground_filter_size), blend_outer_edges=self.settings.blend_outer_edges, water_areas_file_path=water_areas_file_path, building_footprints_file_path=building_footprints_file_path)
         self.__multithread_blender_process_data(tiles_data, "calculate_tile_height_data.py", "CALCULATE HEIGHT MAPS FOR EACH TILE", "height map calculated")
         if water_areas_file_path and self.settings.flat_water_level:
             self.__flatten_water_levels(water_areas_file_path)

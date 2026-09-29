@@ -159,6 +159,14 @@ HEIGHT_MAP_EDGE_CLEARANCE = 0.2
 HIGH_PRECISION_HEIGHT_OFFSET = 1.0
 # water areas of the project (osm water, natural water and sea), used by the height data calculation to keep the water level
 WATER_AREAS_FILE = "water_areas.geojson"
+# footprints of the buildings of the project (GeoJSON), under which the height data is interpolated from the ground around them
+BUILDING_FOOTPRINTS_FILE = "building_footprints.geojson"
+# margin (meters) around the footprints of the buildings: the height data next to their walls can still be on their roofs
+BUILDING_FOOTPRINT_MARGIN = 3.0
+# open areas (square meters) enclosed by buildings, smaller than this, are interpolated like the buildings (passages, courtyards)
+BUILDING_ENCLOSED_OPEN_AREA = 2500.0
+# window (meters) of the morphological opening that finds the ground around the buildings (at least the ground filter size)
+BUILDING_GROUND_FILTER_SIZE = 100.0
 # the height data grid covers this part of the tile, centered, and is stretched on the whole tile by MSFS
 HEIGHT_MAP_GRID_COVERAGE = 0.95
 # the MSFS water surface follows the terrain: each water body gets a flat level at the Google Earth water surface, plus this offset (in meters)

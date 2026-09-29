@@ -81,7 +81,7 @@ from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
 from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material, get_material_output
-from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
+from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, BUILDING_FOOTPRINT_MARGIN, BUILDING_ENCLOSED_OPEN_AREA, BUILDING_GROUND_FILTER_SIZE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -1262,7 +1262,7 @@ def process_3d_data(model_file_path=None, intersect=False, no_bounding_box=False
     bpy.ops.object.select_all(action=SELECT_ACTION)
 
 
-def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), water_areas_file_path=str(), waterline_file_path=str(), debug=False):
+def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjustment, positioning_file_path=str(), water_mask_file_path=str(), ground_mask_file_path=str(), rocks_mask_file_path=str(), building_mask_file_path=str(), high_precision=False, ground_filter_size=0.0, outer_edges=str(), water_areas_file_path=str(), waterline_file_path=str(), building_footprints_file_path=str(), debug=False):
     if not bpy.context.scene:
         return False
 
@@ -1307,6 +1307,11 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
         process_3d_data(model_file_path=model_file_path, intersect=True, no_bounding_box=True)
         tile = get_tile_for_ray_cast(model_file_path, imported=False, objects_to_keep=[grid, height_grid])
         hmatrix = fix_bridge_height_data_on_water(tile, depsgraph, lat, lon, altitude, hmatrix)
+
+    # the ground under the buildings, before the water samples and the ground filter (which only removes the narrow buildings,
+    # and raises the ground up to the tiles along the shores: up to the roofs of the buildings by the water)
+    if os.path.exists(positioning_file_path) and building_footprints_file_path and os.path.exists(building_footprints_file_path):
+        hmatrix = fill_height_data_under_buildings(hmatrix, positioning_file_path, building_footprints_file_path, BUILDING_FOOTPRINT_MARGIN, ground_filter_size)
 
     # the water keeps its height data, the ground filter would lower it, and the shores with it
     water_keys = set()
@@ -1371,18 +1376,17 @@ def read_osm_polygons(osm_file_path):
     return unary_union(polygons) if polygons else None
 
 
-def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, shore_distance):
-    # height data points (y, x) inside the water areas of a GeoJSON file, and on their shore (closer than shore_distance meters).
+def read_areas_in_tile(positioning_file_path, areas_file_path, clip_margin=None):
+    # the areas of a GeoJSON file in the coordinates of the tile, in meters, and a (y, x) -> (lon, lat) function.
     # The tiles are imported with their south west corner (the minimum of the positioning bounding box) at the origin,
-    # the north is -Y and the east is -X. Returns the water points, the shore points and a (y, x) -> (lon, lat) function
+    # the north is -Y and the east is -X. clip_margin (degrees): only the areas near the tile
     import geopandas as gpd
     from shapely import affinity
-    from shapely.prepared import prep
 
     bbox = read_osm_polygons(positioning_file_path)
     areas_gdf = gpd.read_file(areas_file_path)
     if bbox is None or areas_gdf.empty:
-        return set(), set(), None
+        return None, None
 
     from utils.placement import wgs84_meters_per_degree
 
@@ -1390,8 +1394,91 @@ def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, s
     meters_per_lat_degree, meters_per_lon_degree = wgs84_meters_per_degree((south + north) / 2.0)
     to_lon_lat = lambda y, x: (west - x / meters_per_lon_degree, south - y / meters_per_lat_degree)
 
-    # the water areas in the coordinates of the tile, in meters
-    areas = affinity.affine_transform(areas_gdf.to_crs("EPSG:4326").unary_union, [-meters_per_lon_degree, 0.0, 0.0, -meters_per_lat_degree, meters_per_lon_degree * west, meters_per_lat_degree * south])
+    areas_gdf = areas_gdf.to_crs("EPSG:4326")
+    if clip_margin is not None:
+        areas_gdf = areas_gdf[areas_gdf.intersects(bbox.buffer(clip_margin))]
+        if areas_gdf.empty:
+            return None, to_lon_lat
+
+    areas = affinity.affine_transform(areas_gdf.unary_union, [-meters_per_lon_degree, 0.0, 0.0, -meters_per_lat_degree, meters_per_lon_degree * west, meters_per_lat_degree * south])
+    return areas, to_lon_lat
+
+
+def fill_height_data_under_buildings(hmatrix, positioning_file_path, footprints_file_path, margin, filter_size=0.0, min_open_area=BUILDING_ENCLOSED_OPEN_AREA):
+    # the tiles have no ground under the buildings: the height data follows their roofs. Inside the footprints of the buildings
+    # (enlarged by the margin, in meters), the height data is interpolated from the ground around them: the height data outside
+    # the footprints, without what is narrower than filter_size (meters, e.g. trees, courtyards, streets seen through the roofs)
+    from shapely.prepared import prep
+
+    footprints, _ = read_areas_in_tile(positioning_file_path, footprints_file_path, clip_margin=0.001)
+    if footprints is None or footprints.is_empty:
+        return hmatrix
+
+    ys = sorted(hmatrix.keys())
+    xs = sorted({x for heights in hmatrix.values() for x in heights})
+    if len(xs) < 3 or len(ys) < 3:
+        return hmatrix
+
+    inside = prep(footprints.buffer(margin))
+    heights = np.full((len(ys), len(xs)), np.nan)
+    in_buildings = np.zeros(heights.shape, dtype=bool)
+    x_index = {x: i for i, x in enumerate(xs)}
+    for j, y in enumerate(ys):
+        for x, h in hmatrix[y].items():
+            heights[j, x_index[x]] = h
+            in_buildings[j, x_index[x]] = inside.contains(geometry.Point(x, y))
+
+    # the small open areas enclosed by the buildings (passages, covered courtyards, gaps between footprints) are not ground either:
+    # the height data is interpolated from the open areas larger than min_open_area (square meters) or on the border of the tile
+    cell_area = float(np.median(np.diff(xs))) * float(np.median(np.abs(np.diff(ys))))
+    open_areas, nb_open_areas = ndimage.label(~in_buildings)
+    for label in range(1, nb_open_areas + 1):
+        area = open_areas == label
+        touches_border = area[0, :].any() or area[-1, :].any() or area[:, 0].any() or area[:, -1].any()
+        if not touches_border and area.sum() * cell_area < min_open_area:
+            in_buildings |= area
+
+    sources_mask = ~in_buildings & ~np.isnan(heights)
+    if not in_buildings.any() or sources_mask.sum() < 3:
+        return hmatrix
+
+    # the ground outside the footprints: a morphological opening in which the footprints don't count (highest value), over a window
+    # wider than the ground filter (e.g. rows of trees in the streets between the buildings). The ground under the buildings is
+    # rather too low than too high: it stays hidden inside the tiles
+    ground = heights.copy()
+    filter_size = max(filter_size, BUILDING_GROUND_FILTER_SIZE)
+    if filter_size > 0.0:
+        window = max(3, int(round(filter_size / float(np.median(np.diff(xs))))) | 1)
+        filled = np.where(sources_mask, heights, np.nanmax(heights))
+        ground = np.minimum(ndimage.grey_opening(filled, size=(window, window), mode="nearest"), heights)
+
+    grid_y, grid_x = np.meshgrid(np.array(ys), np.array(xs), indexing="ij")
+    sources = np.column_stack((grid_x[sources_mask], grid_y[sources_mask]))
+    source_heights = ground[sources_mask]
+    target_points = np.column_stack((grid_x[in_buildings], grid_y[in_buildings]))
+    targets = [(float(y), float(x)) for y, x in zip(grid_y[in_buildings], grid_x[in_buildings])]
+    values = griddata(sources, source_heights, target_points, method="linear")
+    missing = np.isnan(values)
+    if missing.any():
+        values[missing] = griddata(sources, source_heights, target_points[missing], method="nearest")
+
+    # never above the tiles surface
+    results = defaultdict(dict, {y: dict(heights) for y, heights in hmatrix.items()})
+    for (y, x), value in zip(targets, values):
+        results[y][x] = min(float(value), results[y][x])
+
+    return results
+
+
+def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, shore_distance):
+    # height data points (y, x) inside the water areas of a GeoJSON file, and on their shore (closer than shore_distance meters).
+    # Returns the water points, the shore points and a (y, x) -> (lon, lat) function
+    from shapely.prepared import prep
+
+    areas, to_lon_lat = read_areas_in_tile(positioning_file_path, areas_file_path)
+    if areas is None:
+        return set(), set(), None
+
     prepared_areas = prep(areas)
     prepared_shores = prep(areas.buffer(shore_distance))
     water_keys, shore_keys = set(), set()

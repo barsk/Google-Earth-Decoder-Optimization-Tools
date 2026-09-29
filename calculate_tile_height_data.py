@@ -163,6 +163,11 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "-bf", "--building_footprints_file_path", dest="building_footprints_file_path", type=str, required=False,
+    help="path of the GeoJSON file of the building footprints of the project, where the height data is interpolated from the ground around them",
+)
+
+parser.add_argument(
     "-dbg", "--debug", dest="debug", type=str, required=False,
     help="Debug the height data in blender",
 )
@@ -212,6 +217,6 @@ rocks_mask_file_path = args.rocks_mask_file_path if args.rocks_mask_file_path el
 water_mask_file_path = args.water_mask_file_path if args.water_mask_file_path else str()
 
 tile = MsfsTile(args.folder, args.name, args.definition_file)
-tile.generate_height_data(HeightMapXml(args.height_map_xml_folder, HEIGHT_MAP_PREFIX + args.name + XML_FILE_EXT), args.group_id, float(args.altitude), float(args.height_adjustment), high_precision=high_precision, positioning_file_path=positioning_file_path, water_mask_file_path=water_mask_file_path, ground_mask_file_path=ground_mask_file_path, rocks_mask_file_path=rocks_mask_file_path, building_mask_file_path=building_mask_file_path, ground_filter_size=float(args.ground_filter_size) if args.ground_filter_size else 0.0, outer_edges=args.outer_edges if args.outer_edges else str(), water_areas_file_path=args.water_areas_file_path if args.water_areas_file_path else str(), waterline_file_path=os.path.join(args.height_map_xml_folder, WATERLINE_FILE_PREFIX + args.name + JSON_FILE_EXT), debug=debug)
+tile.generate_height_data(HeightMapXml(args.height_map_xml_folder, HEIGHT_MAP_PREFIX + args.name + XML_FILE_EXT), args.group_id, float(args.altitude), float(args.height_adjustment), high_precision=high_precision, positioning_file_path=positioning_file_path, water_mask_file_path=water_mask_file_path, ground_mask_file_path=ground_mask_file_path, rocks_mask_file_path=rocks_mask_file_path, building_mask_file_path=building_mask_file_path, ground_filter_size=float(args.ground_filter_size) if args.ground_filter_size else 0.0, outer_edges=args.outer_edges if args.outer_edges else str(), water_areas_file_path=args.water_areas_file_path if args.water_areas_file_path else str(), building_footprints_file_path=args.building_footprints_file_path if args.building_footprints_file_path else str(), waterline_file_path=os.path.join(args.height_map_xml_folder, WATERLINE_FILE_PREFIX + args.name + JSON_FILE_EXT), debug=debug)
 # except:
 #     pass

@@ -1072,6 +1072,23 @@ def write_water_areas_file(shp_file_paths, file_path):
     return True
 
 
+def write_building_footprints_file(shp_file_path, file_path):
+    # the footprints of the buildings of the project, in a GeoJSON file read by the height data calculation
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+
+    if not os.path.isfile(shp_file_path) or os.path.getsize(shp_file_path) == 0:
+        return False
+
+    gdf = gpd.read_file(shp_file_path)
+    gdf = gdf[gdf.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]
+    if gdf.empty:
+        return False
+
+    gdf[[GEOMETRY_OSM_COLUMN]].to_crs(EPSG.key + str(EPSG.WGS84_degree_unit)).to_file(file_path, driver="GeoJSON")
+    return True
+
+
 def flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=0.0, shore_margin=3.0, grid_coverage=0.95, max_depth=0.0, shore_depth=1.0, depth_slope=0.15):
     # height_maps: list of dicts with the "values" (rows from south to north, columns from west to east), the "width" (values per row)
     # and the "bounds" (north, south, west, east) of the tiles. samples: list of dicts with the "water" and "shore" samples
