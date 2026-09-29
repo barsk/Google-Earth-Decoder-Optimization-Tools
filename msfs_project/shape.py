@@ -32,6 +32,7 @@ from shapely.geometry import Polygon, MultiPolygon
 
 from constants import PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME
 from utils import SHAPELY_TYPE
+from utils.msfs_sdk import is_msfs_2024_target
 
 
 class MsfsShapeAttribute:
@@ -120,6 +121,9 @@ class MsfsShapePolygon:
         self.land_class_remap = MsfsShapeAttribute(name="LandClassRemap", guid="{0A685EB0-0E01-44FE-B9EF-BFFFBC968ADE}", type=self.SHAPE_ATTRIBUTE_TYPE.uint8, value="0")
         self.airport_size = MsfsShapeAttribute(name="AirportSize", guid="{86A147E9-ACF2-4780-9D3C-416373ECB451}", type=self.SHAPE_ATTRIBUTE_TYPE.uint8, value="0")
         self.layer = MsfsShapeAttribute(name="Layer", guid="{9E2B4C3E-7D84-453F-9DCC-B6498FF46703}", type=self.SHAPE_ATTRIBUTE_TYPE.uint32, value="1")
+        # MSFS 2024: the vegetation exclusions also exclude the rocks
+        self.affect_rocks = MsfsShapeAttribute(name="AffectRocks", guid="{F60DBBC7-DE6F-4FEA-BE7E-AFB1D73D57E7}", type=self.SHAPE_ATTRIBUTE_TYPE.uint8, value="1")
+        self.exclude_rocks = MsfsShapeAttribute(name="ExcludeRocks", guid="{F104723A-D6D1-4B2E-9B44-ACCD8AB372DC}", type=self.SHAPE_ATTRIBUTE_TYPE.uint8, value="1")
 
         if polygon is not None:
             self.__init_from_polygon(polygon, tiles=tiles, flatten=flatten, exclude_buildings=exclude_buildings, exclude_roads=exclude_roads, exclude_vegetation=exclude_vegetation, create_vegetation=create_vegetation)
@@ -164,6 +168,14 @@ class MsfsShapePolygon:
             self.vegetation_scale.value = "0"
             self.vegetation_density.value = "0"
             self.attributes.extend([self.vegetation_scale, self.vegetation_density])
+            if is_msfs_2024_target():
+                self.attributes.extend([self.affect_rocks, self.exclude_rocks])
+
+        # MSFS 2024 converts the polygons with an old terraforming: it drops the flatten mode and the road exclusion flags
+        # when they are off (the new form of a flattening polygon is not known yet: those keep the old attributes)
+        if is_msfs_2024_target():
+            self.attributes = [attribute for attribute in self.attributes
+                               if not (attribute in (self.flatten_mode, self.exclusion_flags) and attribute.value == "0")]
 
         for point in polygon.exterior.coords:
             self.vertices.append(MsfsShapeVertex(point))

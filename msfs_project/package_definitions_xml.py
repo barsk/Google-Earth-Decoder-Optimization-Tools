@@ -28,6 +28,14 @@ class MsfsPackageDefinitionsXml(Xml):
     OUTPUT_DIR_TAG = "OutputDir"
     FLAGS_TAG = "Flags"
     PACKAGE_ORDER_HINT_TAG = "PackageOrderHint"
+    TYPE_TAG = "Type"
+    NAME_ATTR = "Name"
+    VERSION_ATTR = "Version"
+    # MSFS 2020 type of the model libraries in the GEDOT template, upgraded by MSFS 2024 to ModelLib version 1
+    ART_PROJ_TYPE = "ArtProj"
+    MODEL_LIB_TYPE = "ModelLib"
+    MODEL_LIB_VERSION = "1"
+    DEFAULT_TYPE_VERSION = "0"
 
     ASSETS_GROUP_SEARCH_PATTERN = "./ASSETS_GROUP"
     SCENERY_OBJECT_LOD_MODEL_FILE_SEARCH_PATTERN = "./" + ASSETS_GROUP_TAG + "/" + ASSET_GROUP_TAG
@@ -42,6 +50,20 @@ class MsfsPackageDefinitionsXml(Xml):
                 return asset_group.find(self.OUTPUT_DIR_TAG).text.replace("/", "\\")
 
         return str()
+
+    def convert_to_msfs_2024(self):
+        # the asset groups as upgraded by the MSFS 2024 project editor, which otherwise asks to upgrade them
+        self.root.attrib.pop(self.NAME_ATTR, None)
+        for asset_group in self.root.findall(self.SCENERY_OBJECT_LOD_MODEL_FILE_SEARCH_PATTERN):
+            type_element = asset_group.find(self.TYPE_TAG)
+            if type_element is None:
+                continue
+            if type_element.text == self.ART_PROJ_TYPE:
+                type_element.text = self.MODEL_LIB_TYPE
+                type_element.set(self.VERSION_ATTR, self.MODEL_LIB_VERSION)
+            elif type_element.get(self.VERSION_ATTR) is None:
+                type_element.set(self.VERSION_ATTR, self.MODEL_LIB_VERSION if type_element.text == self.MODEL_LIB_TYPE else self.DEFAULT_TYPE_VERSION)
+        self.save()
 
     def set_package_order_hint(self, package_order_hint):
         # add the package order hint after the flags, if the definition doesn't have one yet

@@ -16,6 +16,8 @@
 #
 #  <pep8 compliant>
 
+import xml.etree.ElementTree as Et
+
 from utils import Xml
 
 
@@ -24,6 +26,9 @@ class MsfsProjectXml(Xml):
     OUTPUT_DIRECTORY_TAG = "OutputDirectory"
     PACKAGES_TAG = "Packages"
     PACKAGE_TAG = "Package"
+    PUBLISHING_GROUPS_TAG = "PublishingGroups"
+    METADATA_FOLDER_NAME_ATTR = "MetadataFolderName"
+    METADATA_FOLDER_NAME = "PackagesMetadata"
 
     PACKAGES_SEARCH_PATTERN = "./" + PACKAGES_TAG + "/" + PACKAGE_TAG
     
@@ -35,5 +40,12 @@ class MsfsProjectXml(Xml):
 
     def find_project_packages(self):
         return self.root.findall(self.PACKAGES_SEARCH_PATTERN)
+
+    def convert_to_msfs_2024(self):
+        # like the projects created by the MSFS 2024 project editor, which otherwise reports an old project version
+        self.root.set(self.METADATA_FOLDER_NAME_ATTR, self.METADATA_FOLDER_NAME)
+        if self.root.find(self.PUBLISHING_GROUPS_TAG) is None:
+            Et.SubElement(self.root, self.PUBLISHING_GROUPS_TAG)
+        self.save()
 
 

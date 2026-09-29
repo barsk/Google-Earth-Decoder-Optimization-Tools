@@ -26,6 +26,8 @@ from utils import Xml
 from utils.string import remove_accents
 import xml.etree.ElementTree as Et
 
+from utils.msfs_sdk import is_msfs_2024_target
+
 
 class ObjectsXml(Xml):
     FS_DATA_TAG = "FSData"
@@ -68,6 +70,9 @@ class ObjectsXml(Xml):
     FALLOFF_ATTR = "falloff"
     SURFACE_ATTR = "surface"
     PRIORITY_ATTR = "priority"
+    MSFS_2024_POLYGON_VERSION = "0.5.0"
+    # the new (precise) terraforming of MSFS 2024, as converted by its Scenery Editor
+    MSFS_2024_TERRAFORMING_ATTRS = {"precision": "TRUE", "forceElevation": "TRUE"}
     DATA_ATTR = "data"
     INSTANCE_ID_ATTR = "instanceId"
     OFFSET_ATTR = "offset"
@@ -430,6 +435,8 @@ class ObjectsXml(Xml):
 
     def __add_shape_polygon(self, polygon):
         attrib = {
+            # the polygons that flatten keep the old form (their new form is not known), MSFS 2024 converts them
+            **({self.VERSION_ATTR: self.MSFS_2024_POLYGON_VERSION} if is_msfs_2024_target() and not any(attribute.name == "FlattenMode" for attribute in polygon.attributes) else {}),
             self.DISPLAY_NAME_ATTR: polygon.display_name,
             self.PARENT_GROUP_ID_ATTR: str(polygon.parent_group_id),
             self.ALTITUDE_ATTR: str(polygon.altitude)
@@ -462,6 +469,7 @@ class ObjectsXml(Xml):
             self.FALLOFF_ATTR: str(height_map.falloff),
             self.SURFACE_ATTR: height_map.surface,
             self.PRIORITY_ATTR: str(height_map.priority),
+            **(self.MSFS_2024_TERRAFORMING_ATTRS if is_msfs_2024_target() else {}),
             self.LATITUDE_ATTR: str(height_map.pos.lat),
             self.LONGITUDE_ATTR: str(height_map.mid.lon),
             self.ALTITUDE_ATTR: str(height_map.altitude),

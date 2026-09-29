@@ -19,6 +19,8 @@
 from utils import Xml
 import xml.etree.ElementTree as Et
 
+from utils.msfs_sdk import is_msfs_2024_target
+
 
 class HeightMapXml(Xml):
     RECTANGLE_TAG = "Rectangle"
@@ -39,6 +41,8 @@ class HeightMapXml(Xml):
     FALLOFF_ATTR = "falloff"
     SURFACE_ATTR = "surface"
     PRIORITY_ATTR = "priority"
+    # the new (precise) terraforming of MSFS 2024, as converted by its Scenery Editor
+    MSFS_2024_TERRAFORMING_ATTRS = {"precision": "TRUE", "forceElevation": "TRUE"}
     DATA_ATTR = "data"
 
     RECTANGLE_SEARCH_PATTERN = "./" + RECTANGLE_TAG
@@ -66,6 +70,7 @@ class HeightMapXml(Xml):
             self.FALLOFF_ATTR: str(height_map.falloff),
             self.SURFACE_ATTR: height_map.surface,
             self.PRIORITY_ATTR: str(height_map.priority),
+            **(self.MSFS_2024_TERRAFORMING_ATTRS if is_msfs_2024_target() else {}),
             self.LATITUDE_ATTR: str(height_map.pos.lat),
             self.LONGITUDE_ATTR: str(height_map.mid.lon),
             self.ALTITUDE_ATTR: str(height_map.altitude),

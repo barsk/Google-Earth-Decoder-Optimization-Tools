@@ -835,14 +835,18 @@ class MsfsProject:
             os.rename(old_project_definition_xml_path, self.project_definition_xml_path)
         if init_structure:
             self.__create_project_file(sources_path, PROJECT_DEFINITION_TEMPLATE_PATH, self.project_definition_xml_path, True)
+            if is_msfs_2024_target():
+                MsfsProjectXml(self.project_folder, self.project_definition_xml).convert_to_msfs_2024()
 
         # create package xml definition file if it does not exist
         self.package_definitions_xml_path = os.path.join(self.package_definitions_folder, self.package_definitions_xml)
         if init_structure:
             self.__create_project_file(sources_path, PACKAGE_DEFINITIONS_TEMPLATE_PATH, self.package_definitions_xml_path, True)
-            # the package order hint is only known by MSFS 2024
+            # the package order hint is only known by MSFS 2024, which upgrades the asset groups of the MSFS 2020 template
             if is_msfs_2024_target():
-                MsfsPackageDefinitionsXml(self.package_definitions_folder, self.package_definitions_xml).set_package_order_hint(PACKAGE_ORDER_HINT)
+                package_definitions_xml = MsfsPackageDefinitionsXml(self.package_definitions_folder, self.package_definitions_xml)
+                package_definitions_xml.convert_to_msfs_2024()
+                package_definitions_xml.set_package_order_hint(PACKAGE_ORDER_HINT)
 
         # create business.json file if it does not exist
         self.business_json_path = os.path.join(self.business_json_folder, BUSINESS_JSON_TEMPLATE)
