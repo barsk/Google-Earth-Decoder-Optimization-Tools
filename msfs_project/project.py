@@ -33,7 +33,7 @@ from shapely.errors import ShapelyDeprecationWarning
 
 from utils.install_lib import install_python_lib
 from utils.string import remove_accents
-from utils.geo_pandas import prepare_wall_gdf, create_exclusion_water_gdf, prepare_water_gdf, prepare_amenity_gdf, prepare_hidden_roads_gdf, prepare_water_exclusion_gdf, prepare_residential_gdf, create_point_gdf, prepare_forest_gdf, prepare_wood_gdf, prepare_natural_gdf, prepare_landuse_gdf, create_vegetation_polygons_gdf, create_exclusion_vegetation_water_gdf, prefetch_osm_data, release_prefetched_osm_data
+from utils.geo_pandas import prepare_wall_gdf, create_exclusion_water_gdf, prepare_water_gdf, prepare_amenity_gdf, prepare_hidden_roads_gdf, prepare_water_exclusion_gdf, prepare_residential_gdf, create_point_gdf, prepare_forest_gdf, prepare_wood_gdf, prepare_natural_gdf, prepare_landuse_gdf, create_vegetation_polygons_gdf, create_exclusion_vegetation_water_gdf, prefetch_osm_data, release_prefetched_osm_data, BRIDGE_OSM_DATA
 from constants import *
 
 try:
@@ -1764,7 +1764,7 @@ class MsfsProject:
 
         # retrieve_osm_data
         orig_water, orig_natural_water, bbox, roads, bridges, hidden_roads, sea, pitch, construction, airport, building, \
-        water_without_bridges, water, exclusion, rocks, amenity, residential, industrial, forests, woods = self.__retrieve_osm_data(b, orig_bbox, settings)
+        water_without_bridges, water, exclusion, rocks, amenity, residential, industrial, forests, woods = self.__retrieve_osm_data(b, orig_bbox, settings, self.__osm_data_to_retrieve(create_polygons))
 
         if create_polygons:
             self.__create_scenery_polygons(b, orig_bbox, orig_water, orig_natural_water, bbox, sea, pitch, amenity, construction, industrial, forests, woods, airport, exclusion, disable_terraform=self.settings.disable_terraform)
@@ -1792,7 +1792,28 @@ class MsfsProject:
         # remove tiles that are completely in the water
         self.__remove_full_water_tiles(water)
 
-    def __retrieve_osm_data(self, b, orig_bbox, settings):
+    def __osm_data_to_retrieve(self, create_polygons):
+        # the optional OSM data, only retrieved (downloaded, loaded and prepared) when an enabled option uses it
+        settings = self.settings
+        return {
+            # all the roads and railways, otherwise only their bridges (and piers), used by the water masks and the bridges height fix
+            "roads": settings.keep_roads,
+            "hidden_roads": settings.keep_roads,
+            "landuse": settings.exclude_ground or settings.exclude_forests or settings.create_forests_vegetation or settings.keep_roads,
+            "natural": settings.exclude_ground or settings.exclude_forests or settings.create_forests_vegetation or settings.exclude_woods or
+                       settings.create_woods_vegetation or settings.keep_residential or settings.keep_roads,
+            "aeroway": settings.exclude_ground,
+            "park": settings.exclude_parks,
+            "nature_reserve": settings.exclude_nature_reserves,
+            "residential": settings.keep_residential,
+            "industrial": settings.keep_residential,
+            "construction": settings.keep_constructions,
+            # pitches and amenities: the terraform polygons, which only flatten the ground when the terraforming is enabled
+            "terraform": create_polygons and not settings.disable_terraform,
+            "airport": bool(settings.airport_city.strip())
+        }
+
+    def __retrieve_osm_data(self, b, orig_bbox, settings, osm_data):
         print_title("RETRIEVE OSM DATA")
 
         if not orig_bbox.empty:
@@ -1800,15 +1821,15 @@ class MsfsProject:
             osm_xml = OsmXml(self.osmfiles_folder, BOUNDING_BOX_OSM_FILE_PREFIX + "_" + EXCLUSION_OSM_FILE_PREFIX + OSM_FILE_EXT)
             osm_xml.create_from_geodataframes([preserve_holes(orig_bbox.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore'))], b)
 
-        orig_land_mass, orig_boundary, orig_road, orig_railway, orig_sea, orig_landuse, orig_grass, orig_nature_reserve, \
+        orig_land_mass, orig_boundary, orig_road, orig_railway, orig_sea, orig_landuse, orig_nature_reserve, \
         orig_natural, orig_natural_water, orig_water, orig_waterway, orig_aeroway, orig_pitch, orig_construction, orig_park, orig_building, \
-        orig_wall, orig_man_made, orig_rocks, orig_amenity, orig_residential, orig_industrial, orig_airport = self.__load_geodataframes(settings, orig_bbox, b)
+        orig_wall, orig_man_made, orig_rocks, orig_amenity, orig_residential, orig_industrial, orig_airport = self.__load_geodataframes(settings, orig_bbox, b, osm_data)
 
         bbox, roads, bridges, hidden_roads, sea, pitches, construction, airport, buildings, \
         water_without_bridges, water, exclusion, rocks, amenities, residentials, industrials, forests, woods = self.__prepare_geodataframes(orig_road, orig_railway, orig_sea, orig_bbox, orig_land_mass, orig_boundary,
                                                                                                orig_landuse, orig_natural, orig_natural_water, orig_water, orig_waterway, orig_aeroway,
                                                                                                orig_pitch, orig_construction, orig_airport, orig_building, orig_wall, orig_man_made,
-                                                                                               orig_park, orig_nature_reserve, orig_rocks, orig_amenity, orig_residential, orig_industrial, settings)
+                                                                                               orig_park, orig_nature_reserve, orig_rocks, orig_amenity, orig_residential, orig_industrial, settings, osm_data)
 
         if not residentials.empty:
             print_title("CREATE RESIDENTIAL OSM FILE")
@@ -1835,29 +1856,21 @@ class MsfsProject:
         forests_vegetation_polygons = create_empty_gdf()
         woods_vegetation_polygons = create_empty_gdf()
 
-        print_title("CREATE PITCH TERRAFORM POLYGONS GEO DATAFRAMES...")
-        pitch_terraform_polygons = create_terraform_polygons_gdf(pitch, exclusion)
-        # for debugging purpose
-        osm_xml = OsmXml(self.osmfiles_folder, "pitch_terraform_polygons" + OSM_FILE_EXT)
-        osm_xml.create_from_geodataframes([pitch_terraform_polygons.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
+        # the terraform polygons only matter when they flatten the ground: the pitch and amenity ones when the terraforming is enabled
+        # (the construction and industrial ones never flatten, they are not created)
+        pitch_terraform_polygons = amenity_terraform_polygons = create_empty_gdf()
+        if not disable_terraform:
+            print_title("CREATE PITCH TERRAFORM POLYGONS GEO DATAFRAMES...")
+            pitch_terraform_polygons = create_terraform_polygons_gdf(pitch, exclusion)
+            # for debugging purpose
+            osm_xml = OsmXml(self.osmfiles_folder, "pitch_terraform_polygons" + OSM_FILE_EXT)
+            osm_xml.create_from_geodataframes([pitch_terraform_polygons.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
 
-        print_title("CREATE AMENITY TERRAFORM POLYGONS GEO DATAFRAMES...")
-        amenity_terraform_polygons = create_terraform_polygons_gdf(amenity, exclusion)
-        # for debugging purpose
-        osm_xml = OsmXml(self.osmfiles_folder, "amenity_terraform_polygons" + OSM_FILE_EXT)
-        osm_xml.create_from_geodataframes([amenity_terraform_polygons.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
-
-        print_title("CREATE CONSTRUCTION TERRAFORM POLYGONS GEO DATAFRAMES...")
-        construction_terraform_polygons = create_terraform_polygons_gdf(construction, exclusion)
-        # for debugging purpose
-        osm_xml = OsmXml(self.osmfiles_folder, "construction_terraform_polygons" + OSM_FILE_EXT)
-        osm_xml.create_from_geodataframes([construction_terraform_polygons.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
-
-        print_title("CREATE INDUSTRIAL TERRAFORM POLYGONS GEO DATAFRAMES...")
-        industrial_terraform_polygons = create_terraform_polygons_gdf(industrial, exclusion)
-        # for debugging purpose
-        osm_xml = OsmXml(self.osmfiles_folder, "industrial_terraform_polygons" + OSM_FILE_EXT)
-        osm_xml.create_from_geodataframes([industrial_terraform_polygons.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
+            print_title("CREATE AMENITY TERRAFORM POLYGONS GEO DATAFRAMES...")
+            amenity_terraform_polygons = create_terraform_polygons_gdf(amenity, exclusion)
+            # for debugging purpose
+            osm_xml = OsmXml(self.osmfiles_folder, "amenity_terraform_polygons" + OSM_FILE_EXT)
+            osm_xml.create_from_geodataframes([amenity_terraform_polygons.drop(labels=BOUNDARY_OSM_KEY, axis=1, errors='ignore')], b)
 
         print_title("CREATE EXCLUSION BUILDINGS POLYGONS GEO DATAFRAMES...")
         exclusion_water = create_exclusion_water_gdf(orig_water, orig_natural_water, sea, bbox)
@@ -1898,14 +1911,19 @@ class MsfsProject:
             self.shapes[PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=pitch_terraform_polygons, group_display_name=PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 2, name_prefix=PITCH_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=not disable_terraform)
         if not amenity_terraform_polygons.empty:
             self.shapes[AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=amenity_terraform_polygons, group_display_name=AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 3, name_prefix=AMENITY_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=not disable_terraform)
-        if not construction_terraform_polygons.empty:
-            self.shapes[CONSTRUCTION_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=construction_terraform_polygons, group_display_name=CONSTRUCTION_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 4, name_prefix=CONSTRUCTION_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=False)
-        if not industrial_terraform_polygons.empty:
-            self.shapes[INDUSTRIAL_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=industrial_terraform_polygons, group_display_name=INDUSTRIAL_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 5, name_prefix=INDUSTRIAL_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=False)
         if not forests_vegetation_polygons.empty:
             self.shapes[FORESTS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=forests_vegetation_polygons, group_display_name=FORESTS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 6, name_prefix=FORESTS_VEGETATION_POLYGON_NAME_PREFIX, tiles=self.tiles, create_vegetation=True)
         if not woods_vegetation_polygons.empty:
             self.shapes[WOODS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=woods_vegetation_polygons, group_display_name=WOODS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 7, name_prefix=WOODS_VEGETATION_POLYGON_NAME_PREFIX, tiles=self.tiles, create_vegetation=True)
+
+        # the terraform polygons not created (e.g. from a previous run, or read from the scene) are removed
+        for group_name in (PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME,
+                           CONSTRUCTION_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, INDUSTRIAL_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME):
+            if group_name == PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME and not pitch_terraform_polygons.empty or \
+                    group_name == AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME and not amenity_terraform_polygons.empty:
+                continue
+            self.shapes.pop(group_name, None)
+            MsfsShapes.remove_from_xml(self.objects_xml, group_name)
 
         # reload the xml file to retrieve the last updates
         self.objects_xml = ObjectsXml(self.scene_folder, self.SCENE_OBJECTS_FILE)
@@ -1958,113 +1976,71 @@ class MsfsProject:
             tile.create_exclusion_mask_osm_file(self.osmfiles_folder, b, exclusion, building_mask, water_mask, construction_mask, road_mask, bridges_mask, hidden_roads, amenity_mask, residential_mask, industrial_mask, airport_mask, rocks_mask, keep_holes, file_prefix)
             pbar.update("exclusion mask created for %s tile" % tile.name)
 
-    def __load_geodataframes(self, settings, orig_bbox, b):
-        # retrieve the OSM data loaded below in a single Overpass query (the sea is computed from the land mass)
+    def __load_geodataframes(self, settings, orig_bbox, b, osm_data):
         shp_file_path = lambda name: os.path.join(self.shpfiles_folder, name + SHP_FILE_EXT)
-        prefetched_entry = prefetch_osm_data(self.coords, [
-            (BOUNDARY_OSM_KEY, True, shp_file_path(BOUNDARY_OSM_KEY)),
-            (ROAD_OSM_KEY, True, shp_file_path(ROAD_OSM_KEY)),
-            (RAILWAY_OSM_KEY, True, shp_file_path(RAILWAY_OSM_KEY)),
-            (LANDUSE_OSM_KEY, OSM_TAGS[LANDUSE_OSM_KEY], shp_file_path(LANDUSE_OSM_KEY)),
-            (LANDUSE_OSM_KEY, OSM_TAGS[GRASS_OSM_KEY], shp_file_path(GRASS_OSM_KEY)),
-            (LEISURE_OSM_KEY, OSM_TAGS[LEISURE_OSM_KEY], shp_file_path(NATURE_RESERVE_OSM_TAG)),
-            (NATURAL_OSM_KEY, OSM_TAGS[NATURAL_OSM_KEY], shp_file_path(NATURAL_OSM_KEY)),
-            (NATURAL_OSM_KEY, OSM_TAGS[NATURAL_WATER_OSM_KEY], shp_file_path(NATURAL_WATER_OSM_KEY)),
-            (WATER_OSM_KEY, OSM_TAGS[WATER_OSM_KEY], shp_file_path(WATER_OSM_KEY)),
-            (WATERWAY_OSM_KEY, OSM_TAGS[WATERWAY_OSM_KEY], shp_file_path(WATERWAY_OSM_KEY)),
-            (AEROWAY_OSM_KEY, True, shp_file_path(AEROWAY_OSM_KEY)),
-            (LEISURE_OSM_KEY, OSM_TAGS[PITCH_OSM_KEY], shp_file_path(PITCH_OSM_KEY)),
-            (LANDUSE_OSM_KEY, OSM_TAGS[CONSTRUCTION_OSM_KEY], shp_file_path(CONSTRUCTION_OSM_KEY)),
-            (LEISURE_OSM_KEY, OSM_TAGS[PARK_OSM_KEY], shp_file_path(PARK_OSM_KEY)),
-            (BUILDING_OSM_KEY, True, shp_file_path(BUILDING_OSM_KEY)),
-            (BARRIER_OSM_KEY, OSM_TAGS[BARRIER_OSM_KEY], shp_file_path(WALL_OSM_TAG)),
-            (MAN_MADE_OSM_KEY, OSM_TAGS[MAN_MADE_OSM_KEY], shp_file_path(MAN_MADE_OSM_KEY)),
-            (NATURAL_OSM_KEY, OSM_TAGS[ROCKS_OSM_KEY], shp_file_path(ROCKS_OSM_KEY)),
-            (AMENITY_OSM_KEY, True, shp_file_path(AMENITY_OSM_KEY)),
-            (LANDUSE_OSM_KEY, OSM_TAGS[RESIDENTIAL_OSM_KEY], shp_file_path(RESIDENTIAL_OSM_KEY)),
-            (LANDUSE_OSM_KEY, OSM_TAGS[INDUSTRIAL_OSM_KEY], shp_file_path(INDUSTRIAL_OSM_KEY))
-        ])
+        # the roads and railways: only their bridges (and piers), in their own shapefiles, unless all the roads are used
+        bridges_only = not osm_data["roads"]
+        roads_shp_suffix = BRIDGES_SHP_SUFFIX if bridges_only else str()
+        # (description, OSM key, tags, shapefile name, load_gdf options, retrieved)
+        layers = [
+            ("boundary", BOUNDARY_OSM_KEY, True, BOUNDARY_OSM_KEY, {}, True),
+            ("roads", ROAD_OSM_KEY, True, ROAD_OSM_KEY + roads_shp_suffix, {"is_roads": True, "bridges_only": bridges_only}, True),
+            ("railways", RAILWAY_OSM_KEY, True, RAILWAY_OSM_KEY + roads_shp_suffix, {"is_roads": True, "bridges_only": bridges_only}, True),
+            ("landuses", LANDUSE_OSM_KEY, OSM_TAGS[LANDUSE_OSM_KEY], LANDUSE_OSM_KEY, {}, osm_data["landuse"]),
+            ("nature reserves", LEISURE_OSM_KEY, OSM_TAGS[LEISURE_OSM_KEY], NATURE_RESERVE_OSM_TAG, {}, osm_data["nature_reserve"]),
+            ("other naturals", NATURAL_OSM_KEY, OSM_TAGS[NATURAL_OSM_KEY], NATURAL_OSM_KEY, {}, osm_data["natural"]),
+            ("natural waters", NATURAL_OSM_KEY, OSM_TAGS[NATURAL_WATER_OSM_KEY], NATURAL_WATER_OSM_KEY, {}, True),
+            ("other waters", WATER_OSM_KEY, OSM_TAGS[WATER_OSM_KEY], WATER_OSM_KEY, {}, True),
+            ("waterways", WATERWAY_OSM_KEY, OSM_TAGS[WATERWAY_OSM_KEY], WATERWAY_OSM_KEY, {"is_waterway": True}, True),
+            ("aeroways", AEROWAY_OSM_KEY, True, AEROWAY_OSM_KEY, {}, osm_data["aeroway"]),
+            ("pitches", LEISURE_OSM_KEY, OSM_TAGS[PITCH_OSM_KEY], PITCH_OSM_KEY, {}, osm_data["terraform"]),
+            ("constructions", LANDUSE_OSM_KEY, OSM_TAGS[CONSTRUCTION_OSM_KEY], CONSTRUCTION_OSM_KEY, {}, osm_data["construction"]),
+            ("parks", LEISURE_OSM_KEY, OSM_TAGS[PARK_OSM_KEY], PARK_OSM_KEY, {}, osm_data["park"]),
+            ("buildings", BUILDING_OSM_KEY, True, BUILDING_OSM_KEY, {}, True),
+            ("walls", BARRIER_OSM_KEY, OSM_TAGS[BARRIER_OSM_KEY], WALL_OSM_TAG, {"is_wall": True}, True),
+            ("man mades", MAN_MADE_OSM_KEY, OSM_TAGS[MAN_MADE_OSM_KEY], MAN_MADE_OSM_KEY, {}, True),
+            ("rocks", NATURAL_OSM_KEY, OSM_TAGS[ROCKS_OSM_KEY], ROCKS_OSM_KEY, {}, True),
+            ("amenities", AMENITY_OSM_KEY, True, AMENITY_OSM_KEY, {}, osm_data["terraform"]),
+            ("residentials", LANDUSE_OSM_KEY, OSM_TAGS[RESIDENTIAL_OSM_KEY], RESIDENTIAL_OSM_KEY, {}, osm_data["residential"]),
+            ("industrials", LANDUSE_OSM_KEY, OSM_TAGS[INDUSTRIAL_OSM_KEY], INDUSTRIAL_OSM_KEY, {}, osm_data["industrial"])
+        ]
+
+        # retrieve the OSM data loaded below in a single Overpass query (the sea is computed from the land mass)
+        requested_data = []
+        for description, key, tags, shp_name, options, retrieved in layers:
+            if retrieved:
+                requested_data += [(bridge_key, bridge_tags, shp_file_path(shp_name)) for bridge_key, bridge_tags in BRIDGE_OSM_DATA] \
+                    if options.get("bridges_only") else [(key, tags, shp_file_path(shp_name))]
+        prefetched_entry = prefetch_osm_data(self.coords, requested_data)
 
         # load all necessary GeoPandas Dataframes
-        load_gdf_list = [None] * 24
+        load_gdf_list = [None] * (len(layers) + 3)
         pbar = ProgressBar(load_gdf_list, title="RETRIEVE GEODATAFRAMES (THE FIRST TIME, MAY TAKE SOME TIME TO COMPLETE, BE PATIENT...)", sleep=0.0)
         pbar.update("retrieving land mass geodataframe...", stall=True)
         orig_land_mass = create_land_mass_gdf(self.sources_folder, orig_bbox, b)
         pbar.update("land mass geodataframe retrieved")
-        pbar.update("retrieving boundary geodataframe...", stall=True)
-        orig_boundary = load_gdf(self.coords, BOUNDARY_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, BOUNDARY_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("boundary geodataframe retrieved")
-        pbar.update("retrieving roads geodataframe...", stall=True)
-        orig_road = load_gdf(self.coords, ROAD_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, ROAD_OSM_KEY + SHP_FILE_EXT), is_roads=True)
-        pbar.update("roads geodataframe retrieved")
-        pbar.update("retrieving railways geodataframe...", stall=True)
-        orig_railway = load_gdf(self.coords, RAILWAY_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, RAILWAY_OSM_KEY + SHP_FILE_EXT), is_roads=True)
-        pbar.update("railways geodataframe retrieved")
+        gdfs = {}
+        for description, key, tags, shp_name, options, retrieved in layers:
+            if not retrieved:
+                gdfs[description] = create_empty_gdf()
+                pbar.update("%s geodataframe not used" % description)
+                continue
+            pbar.update("retrieving %s geodataframe..." % description, stall=True)
+            gdfs[description] = load_gdf(self.coords, key, tags, shp_file_path=shp_file_path(shp_name), **options)
+            pbar.update("%s geodataframe retrieved" % description)
         pbar.update("retrieving sea geodataframe...", stall=True)
-        orig_sea = load_gdf(self.coords, BOUNDARY_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, SEA_OSM_TAG + SHP_FILE_EXT), is_sea=True, land_mass=orig_land_mass, bbox=orig_bbox)
+        orig_sea = load_gdf(self.coords, BOUNDARY_OSM_KEY, True, shp_file_path=shp_file_path(SEA_OSM_TAG), is_sea=True, land_mass=orig_land_mass, bbox=orig_bbox)
         pbar.update("sea geodataframe retrieved")
-        pbar.update("retrieving landuses geodataframe...", stall=True)
-        orig_landuse = load_gdf(self.coords, LANDUSE_OSM_KEY, OSM_TAGS[LANDUSE_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, LANDUSE_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("landuses geodataframe retrieved")
-        pbar.update("retrieving grass geodataframe...", stall=True)
-        orig_grass = load_gdf(self.coords, LANDUSE_OSM_KEY, OSM_TAGS[GRASS_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, GRASS_OSM_KEY + SHP_FILE_EXT), is_grass=True)
-        pbar.update("grass geodataframe retrieved")
-        pbar.update("retrieving nature reserves geodataframe...", stall=True)
-        orig_nature_reserve = load_gdf(self.coords, LEISURE_OSM_KEY, OSM_TAGS[LEISURE_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, NATURE_RESERVE_OSM_TAG + SHP_FILE_EXT))
-        pbar.update("nature reserves geodataframe retrieved")
-        pbar.update("retrieving other naturals geodataframe...", stall=True)
-        orig_natural = load_gdf(self.coords, NATURAL_OSM_KEY, OSM_TAGS[NATURAL_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, NATURAL_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("other naturals geodataframe retrieved")
-        pbar.update("retrieving waters geodataframe...", stall=True)
-        orig_natural_water = load_gdf(self.coords, NATURAL_OSM_KEY, OSM_TAGS[NATURAL_WATER_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, NATURAL_WATER_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("natural waters geodataframe retrieved")
-        pbar.update("retrieving other waters geodataframe...", stall=True)
-        orig_water = load_gdf(self.coords, WATER_OSM_KEY, OSM_TAGS[WATER_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, WATER_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("other waters geodataframe retrieved")
-        pbar.update("retrieving waterways geodataframe...", stall=True)
-        orig_waterway = load_gdf(self.coords, WATERWAY_OSM_KEY, OSM_TAGS[WATERWAY_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, WATERWAY_OSM_KEY + SHP_FILE_EXT), is_waterway=True)
-        pbar.update("waterways geodataframe retrieved")
-        pbar.update("retrieving aeroways geodataframe...", stall=True)
-        orig_aeroway = load_gdf(self.coords, AEROWAY_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, AEROWAY_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("aeroways geodataframe retrieved")
-        pbar.update("retrieving pitches geodataframe...", stall=True)
-        orig_pitch = load_gdf(self.coords, LEISURE_OSM_KEY, OSM_TAGS[PITCH_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, PITCH_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("pitches geodataframe retrieved")
-        pbar.update("retrieving constructions geodataframe...", stall=True)
-        orig_construction = load_gdf(self.coords, LANDUSE_OSM_KEY, OSM_TAGS[CONSTRUCTION_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, CONSTRUCTION_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("constructions geodataframe retrieved")
-        pbar.update("retrieving parks geodataframe...", stall=True)
-        orig_park = load_gdf(self.coords, LEISURE_OSM_KEY, OSM_TAGS[PARK_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, PARK_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("parks geodataframe retrieved")
-        pbar.update("retrieving buildings geodataframe...", stall=True)
-        orig_building = load_gdf(self.coords, BUILDING_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, BUILDING_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("buildings geodataframe retrieved")
-        pbar.update("retrieving walls geodataframe...", stall=True)
-        orig_wall = load_gdf(self.coords, BARRIER_OSM_KEY, OSM_TAGS[BARRIER_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, WALL_OSM_TAG + SHP_FILE_EXT), is_wall=True)
-        pbar.update("walls geodataframe retrieved")
-        pbar.update("retrieving man mades geodataframe...", stall=True)
-        orig_man_made = load_gdf(self.coords, MAN_MADE_OSM_KEY, OSM_TAGS[MAN_MADE_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, MAN_MADE_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("man mades geodataframe retrieved")
-        pbar.update("retrieving rocks geodataframe...", stall=True)
-        orig_rocks = load_gdf(self.coords, NATURAL_OSM_KEY, OSM_TAGS[ROCKS_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, ROCKS_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("rocks geodataframe retrieved")
-        pbar.update("retrieving amenity geodataframe...", stall=True)
-        orig_amenity = load_gdf(self.coords, AMENITY_OSM_KEY, True, shp_file_path=os.path.join(self.shpfiles_folder, AMENITY_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("amenity geodataframe retrieved")
-        pbar.update("retrieving residential geodataframe...", stall=True)
-        orig_residential = load_gdf(self.coords, LANDUSE_OSM_KEY, OSM_TAGS[RESIDENTIAL_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, RESIDENTIAL_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("residential geodataframe retrieved")
-        pbar.update("retrieving industrial geodataframe...", stall=True)
-        orig_industrial = load_gdf(self.coords, LANDUSE_OSM_KEY, OSM_TAGS[INDUSTRIAL_OSM_KEY], shp_file_path=os.path.join(self.shpfiles_folder, INDUSTRIAL_OSM_KEY + SHP_FILE_EXT))
-        pbar.update("industrial geodataframe retrieved")
         pbar.update("retrieving airports geodataframe...", stall=True)
-        orig_airport = load_gdf_from_geocode(AIRPORT_GEOCODE + ", " + self.settings.airport_city.lower(), settings.overpass_api_uri, shpfiles_folder=self.shpfiles_folder, coords=self.coords, keep_data=True, display_warnings=False)
+        # the airport of the airport city (AIRPORT section), if set
+        orig_airport = load_gdf_from_geocode(AIRPORT_GEOCODE + ", " + self.settings.airport_city.lower(), settings.overpass_api_uri, shpfiles_folder=self.shpfiles_folder, coords=self.coords, keep_data=True, display_warnings=False) \
+            if osm_data["airport"] else create_empty_gdf()
         pbar.update("airports geodataframe retrieved")
         release_prefetched_osm_data(prefetched_entry)
 
-        return orig_land_mass, orig_boundary, orig_road, orig_railway, orig_sea, orig_landuse, orig_grass, orig_nature_reserve, \
-               orig_natural, orig_natural_water, orig_water, orig_waterway, orig_aeroway, orig_pitch, orig_construction, orig_park, orig_building, \
-               orig_wall, orig_man_made, orig_rocks, orig_amenity, orig_residential, orig_industrial, orig_airport
+        return orig_land_mass, gdfs["boundary"], gdfs["roads"], gdfs["railways"], orig_sea, gdfs["landuses"], gdfs["nature reserves"], \
+               gdfs["other naturals"], gdfs["natural waters"], gdfs["other waters"], gdfs["waterways"], gdfs["aeroways"], gdfs["pitches"], gdfs["constructions"], gdfs["parks"], gdfs["buildings"], \
+               gdfs["walls"], gdfs["man mades"], gdfs["rocks"], gdfs["amenities"], gdfs["residentials"], gdfs["industrials"], orig_airport
 
     def __create_geocode_osm_exclusion_files(self, geocode, settings, b, geocode_margin, preserve_roads, preserve_buildings, coords, shpfiles_folder, by_osmid=False):
         print_title("RETRIEVE GEOCODE OSM FILES")
@@ -2308,7 +2284,7 @@ class MsfsProject:
 
     def __prepare_geodataframes(self, orig_road, orig_railway, orig_sea, orig_bbox, orig_land_mass, orig_boundary, orig_landuse, orig_natural, orig_natural_water,
                                 orig_water, orig_waterway, orig_aeroway, orig_pitch, orig_construction, orig_airport, orig_building, orig_wall, orig_man_made,
-                                orig_park, orig_nature_reserve, orig_rocks, orig_amenity, orig_residential, orig_industrial, settings):
+                                orig_park, orig_nature_reserve, orig_rocks, orig_amenity, orig_residential, orig_industrial, settings, osm_data):
         # prepare all the necessary GeoPandas Dataframes
         itasks = 23
 
@@ -2337,13 +2313,13 @@ class MsfsProject:
         bbox = prepare_bbox_gdf(orig_bbox, orig_land_mass, orig_boundary)
         pbar.update("bounding box geodataframe prepared")
         pbar.update("preparing landuse geodataframe...", stall=True)
-        landuse = clip_gdf(prepare_landuse_gdf(orig_landuse), bbox)
+        landuse = clip_gdf(prepare_landuse_gdf(orig_landuse), bbox) if osm_data["landuse"] else create_empty_gdf()
         pbar.update("landuse geodataframe prepared")
         pbar.update("preparing hidden_roads geodataframe...", stall=True)
-        hidden_roads = clip_gdf(prepare_hidden_roads_gdf(orig_landuse, orig_natural), bbox)
+        hidden_roads = clip_gdf(prepare_hidden_roads_gdf(orig_landuse, orig_natural), bbox) if osm_data["hidden_roads"] else create_empty_gdf()
         pbar.update("hidden_roads landuse geodataframe prepared")
         pbar.update("preparing natural geodataframe...", stall=True)
-        natural = clip_gdf(prepare_natural_gdf(orig_natural), bbox)
+        natural = clip_gdf(prepare_natural_gdf(orig_natural), bbox) if osm_data["natural"] else create_empty_gdf()
         pbar.update("natural geodataframe prepared")
         pbar.update("preparing natural water geodataframe...", stall=True)
         natural_water = clip_gdf(prepare_gdf(remove_not_water_natural_gdf(orig_natural_water)), bbox)
@@ -2355,19 +2331,19 @@ class MsfsProject:
         bridges = prepare_roads_gdf(orig_road, orig_railway, bridge_only=True, automatic_road_width_calculation=False)
         pbar.update("bridges geodataframe prepared")
         pbar.update("preparing roads and places geodataframes...", stall=True)
-        roads = prepare_roads_gdf(orig_road, orig_railway, bridge_only=False, automatic_road_width_calculation=False)
+        roads = prepare_roads_gdf(orig_road, orig_railway, bridge_only=False, automatic_road_width_calculation=False) if osm_data["roads"] else create_empty_gdf()
         pbar.update("roads and places geodataframes prepared")
         pbar.update("preparing aeroway geodataframe...", stall=True)
-        aeroway = clip_gdf(prepare_gdf(orig_aeroway), bbox)
+        aeroway = clip_gdf(prepare_gdf(orig_aeroway), bbox) if osm_data["aeroway"] else create_empty_gdf()
         pbar.update("aeroway geodataframe prepared")
         pbar.update("preparing pitches geodataframe...", stall=True)
-        pitches = clip_gdf(prepare_gdf(orig_pitch), bbox)
+        pitches = clip_gdf(prepare_gdf(orig_pitch), bbox) if osm_data["terraform"] else create_empty_gdf()
         pbar.update("pitches geodataframe prepared")
         pbar.update("preparing constructions geodataframe...", stall=True)
-        constructions = clip_gdf(prepare_gdf(orig_construction), bbox)
+        constructions = clip_gdf(prepare_gdf(orig_construction), bbox) if osm_data["construction"] else create_empty_gdf()
         pbar.update("constructions geodataframe prepared")
         pbar.update("preparing amenities geodataframe...", stall=True)
-        amenities = prepare_amenity_gdf(orig_amenity, water, natural_water, orig_airport)
+        amenities = prepare_amenity_gdf(orig_amenity, water, natural_water, orig_airport) if osm_data["terraform"] else create_empty_gdf()
         pbar.update("amenities geodataframe prepared")
         pbar.update("preparing airport geodataframe...", stall=True)
         airport = prepare_gdf(orig_airport)
@@ -2421,7 +2397,7 @@ class MsfsProject:
             residentials = create_empty_gdf()
 
         pbar.update("preparing industrials geodataframe...", stall=True)
-        industrials = clip_gdf(prepare_gdf(orig_industrial), bbox)
+        industrials = clip_gdf(prepare_gdf(orig_industrial), bbox) if osm_data["industrial"] else create_empty_gdf()
         pbar.update("industrials geodataframe prepared")
 
         pbar.update("creating whole water geodataframe...", stall=True)
@@ -2433,7 +2409,7 @@ class MsfsProject:
         pbar.update("water exclusion geodataframe created")
         # create ground exclusion masks to cleanup 3d data tiles
         pbar.update("creating ground exclusion geodataframe...", stall=True)
-        ground_exclusion = create_ground_exclusion_gdf(landuse, forests, woods, nature_reserves, natural, aeroway, bridges, parks, airport, self.settings)
+        ground_exclusion = create_ground_exclusion_gdf(landuse, forests, woods, nature_reserves, natural, aeroway, bridges, parks, airport, self.settings) if self.settings.exclude_ground else create_empty_gdf()
         pbar.update("ground exclusion geodataframe created")
         pbar.update("creating exclusion geodataframe...", stall=True)
         exclusion = union_gdf(water_exclusion, ground_exclusion if self.settings.exclude_ground else create_empty_gdf())

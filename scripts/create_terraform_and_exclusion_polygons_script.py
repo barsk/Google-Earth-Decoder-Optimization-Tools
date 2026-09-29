@@ -51,15 +51,9 @@ def create_terraform_and_exclusion_polygons(global_settings):
         isolated_print(EOL)
         print_title("CREATE TERRAFORM AND EXCLUSION POLYGONS")
 
-        msfs_project.settings.exclude_ground = True
-        msfs_project.settings.exclude_nature_reserves = True
-        msfs_project.settings.exclude_parks = True
-        msfs_project.settings.isolate_3d_data = False
-        msfs_project.settings.keep_roads = False
-        msfs_project.settings.keep_residential = False
+        # the polygons of this step don't flatten the ground (not saved: the other settings of the project are the ones of the panel,
+        # which also select the OSM data to retrieve)
         msfs_project.settings.disable_terraform = True
-        msfs_project.settings.ground_exclusion_margin = STANDARD_EXCLUSION_MARGIN
-        msfs_project.settings.save()
         msfs_project.prepare_3d_data(global_settings, create_polygons=True)
 
         if msfs_project.settings.build_package_enabled:

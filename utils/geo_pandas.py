@@ -493,6 +493,27 @@ def prefetch_osm_data(coords, requested_data):
         ox.settings.timeout = timeout
 
 
+# the elements of the roads and railways that prepare_roads_gdf keeps as bridges (bridges, seamark bridges, piers): when all the
+# roads are not needed, the Overpass query retrieves only these, instead of all the roads
+BRIDGE_OSM_DATA = [(BRIDGE_OSM_TAG, True), (SEAMARK_TYPE_OSM_TAG, [BRIDGE_OSM_TAG]), (MAN_MADE_OSM_KEY, [PIER_OSM_TAG])]
+
+
+def get_prefetched_bridges(coords, key):
+    parts = [get_prefetched_osm_data(coords, bridge_key, bridge_tags) for bridge_key, bridge_tags in BRIDGE_OSM_DATA]
+    if any(part is None for part in parts):
+        return None
+    return filter_bridges(pd.concat([part for part in parts if not part.empty]) if any(not part.empty for part in parts) else create_empty_gdf(), key)
+
+
+def filter_bridges(gdf, key):
+    # the bridges of the key (e.g. highway or railway), once (an element can match several bridge tags)
+    if gdf.empty or key not in gdf:
+        return create_empty_gdf()
+    result = gdf[gdf[key].notna()]
+    result = result[~result.index.duplicated()]
+    return result.dropna(axis=1, how="all") if not result.empty else create_empty_gdf()
+
+
 def release_prefetched_osm_data(entry):
     # release the prefetched data once loaded, so that later runs don't reuse outdated OSM data
     if entry is not None:
@@ -524,7 +545,7 @@ def filter_prefetched_osm_data(gdf, key, tags):
     return result.dropna(axis=1, how="all")
 
 
-def load_gdf(coords, key, tags, shp_file_path="", keep_geocode_data=False, is_roads=False, is_sea=False, is_waterway=False, is_grass=False, is_wall=False, land_mass=None, bbox=None, keep_points=False):
+def load_gdf(coords, key, tags, shp_file_path="", keep_geocode_data=False, is_roads=False, is_sea=False, is_waterway=False, is_grass=False, is_wall=False, land_mass=None, bbox=None, keep_points=False, bridges_only=False):
     result = create_empty_gdf()
     has_cache = os.path.isfile(shp_file_path)
     logging.getLogger('shapely.geos').setLevel(logging.CRITICAL)
@@ -542,9 +563,14 @@ def load_gdf(coords, key, tags, shp_file_path="", keep_geocode_data=False, is_ro
             result = symmetric_difference_gdf(land_mass, bbox).assign(boundary=BOUNDING_BOX_OSM_KEY)
         elif coords is not None:
             warnings.simplefilter("ignore", DeprecationWarning, append=True)
-            result = get_prefetched_osm_data(coords, key, tags)
-            if result is None:
-                result = ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags={key: tags})
+            if bridges_only:
+                result = get_prefetched_bridges(coords, key)
+                if result is None:
+                    result = filter_bridges(ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags=dict(BRIDGE_OSM_DATA)), key)
+            else:
+                result = get_prefetched_osm_data(coords, key, tags)
+                if result is None:
+                    result = ox.geometries_from_bbox(coords[0], coords[1], coords[2], coords[3], tags={key: tags})
 
             # truncate index fields to avoid ogr2ogr warning logs
             if not result.empty:

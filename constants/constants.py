@@ -208,6 +208,8 @@ LANDMARKS_PLACEMENT_FILE = "landmarks_placement.json"
 # margin (in meters) of the downloaded rectangles around the landmarks
 LANDMARKS_DOWNLOAD_MARGIN = 2.0
 # color settings of the TEXTURES section applied by TileDownloader to the downloaded textures: (setting, option, neutral value)
+# suffix of the shapefiles of the roads and railways that only contain their bridges (and piers)
+BRIDGES_SHP_SUFFIX = "_bridges"
 TILE_DOWNLOADER_COLOR_OPTIONS = (("brightness", "--brightness", 1.0), ("contrast", "--contrast", 1.0), ("saturation", "--saturation", 1.0),
                                  ("hue", "--hue", 0.0), ("red_level", "--red", 1.0), ("green_level", "--green", 1.0), ("blue_level", "--blue", 1.0))
 # script running several scripts in one Blender process (e.g. all the lods of a tile)
