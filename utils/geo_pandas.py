@@ -93,7 +93,7 @@ except ModuleNotFoundError:
     install_python_lib(OSMNX_LIB, OSMNX_LIB_VERSION)
     import osmnx as ox
 
-from shapely.errors import ShapelyDeprecationWarning
+from shapely.errors import ShapelyDeprecationWarning, GEOSException
 
 from osmnx.utils_geo import bbox_to_poly
 
@@ -196,8 +196,28 @@ def resize_gdf(gdf, resize_distance, single_sided=True, keep_points=False):
     if keep_points:
         gdf[GEOMETRY_OSM_COLUMN] = gdf[GEOMETRY_OSM_COLUMN].buffer(resize_distance)
     else:
-        gdf[GEOMETRY_OSM_COLUMN] = gdf[GEOMETRY_OSM_COLUMN].buffer(resize_distance, cap_style=CAP_STYLE.flat, join_style=JOIN_STYLE.mitre, single_sided=single_sided)
+        options = dict(cap_style=CAP_STYLE.flat, join_style=JOIN_STYLE.mitre, single_sided=single_sided)
+        try:
+            gdf[GEOMETRY_OSM_COLUMN] = gdf[GEOMETRY_OSM_COLUMN].buffer(resize_distance, **options)
+        except GEOSException:
+            # GEOS can fail on a large complex geometry (e.g. the single-sided buffer of the dissolved buildings of a city
+            # center): its parts are buffered separately, which gives the same result
+            gdf[GEOMETRY_OSM_COLUMN] = gdf[GEOMETRY_OSM_COLUMN].apply(lambda geometry: buffer_parts(geometry, resize_distance, **options))
     return gdf.to_crs(EPSG.key + str(EPSG.WGS84_degree_unit))
+
+
+def buffer_parts(geometry, distance, **options):
+    if geometry is None or geometry.is_empty:
+        return geometry
+
+    results = []
+    for part in (geometry.geoms if hasattr(geometry, "geoms") else [geometry]):
+        try:
+            results.append(part.buffer(distance, **options))
+        except GEOSException:
+            # repair the part (e.g. a ring with too few points)
+            results.append(part.buffer(0).buffer(distance, **options))
+    return unary_union(results)
 
 
 def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserve_roads=True, preserve_buildings=True, keep_data=False, coords=None, shpfiles_folder=None, display_warnings=True, by_osmid=False, check_geocode=False):
