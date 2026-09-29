@@ -1398,12 +1398,16 @@ def read_areas_in_tile(positioning_file_path, areas_file_path, clip_margin=None)
     to_lon_lat = lambda y, x: (west - x / meters_per_lon_degree, south - y / meters_per_lat_degree)
 
     areas_gdf = areas_gdf.to_crs("EPSG:4326")
+    areas = None
     if clip_margin is not None:
-        areas_gdf = areas_gdf[areas_gdf.intersects(bbox.buffer(clip_margin))]
+        # only the areas near the tile (the water areas of a project are a single large geometry: clipped, not only selected)
+        clip = bbox.buffer(clip_margin)
+        areas_gdf = areas_gdf[areas_gdf.intersects(clip)]
         if areas_gdf.empty:
             return None, to_lon_lat
+        areas = areas_gdf.unary_union.intersection(clip)
 
-    areas = affinity.affine_transform(areas_gdf.unary_union, [-meters_per_lon_degree, 0.0, 0.0, -meters_per_lat_degree, meters_per_lon_degree * west, meters_per_lat_degree * south])
+    areas = affinity.affine_transform(areas if areas is not None else areas_gdf.unary_union, [-meters_per_lon_degree, 0.0, 0.0, -meters_per_lat_degree, meters_per_lon_degree * west, meters_per_lat_degree * south])
     return areas, to_lon_lat
 
 
@@ -1478,9 +1482,10 @@ def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, s
     # Returns the water points, the shore points and a (y, x) -> (lon, lat) function
     from shapely.prepared import prep
 
-    areas, to_lon_lat = read_areas_in_tile(positioning_file_path, areas_file_path)
+    # clipped around the tile: buffering the water of a whole city for each tile took most of the time of the height data
+    areas, to_lon_lat = read_areas_in_tile(positioning_file_path, areas_file_path, clip_margin=0.001)
     if areas is None:
-        return set(), set(), None
+        return set(), set(), to_lon_lat
 
     prepared_areas = prep(areas)
     prepared_shores = prep(areas.buffer(shore_distance))
