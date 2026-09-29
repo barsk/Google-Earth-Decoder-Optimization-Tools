@@ -22,7 +22,7 @@ import shutil
 from pathlib import Path
 
 from blender import import_model_files, bake_texture_files, fix_object_bounding_box, place_tile_objects, export_to_optimized_gltf_files, clean_scene, extract_splitted_tile, align_model_with_mask, process_3d_data, generate_model_height_data, reduce_number_of_vertices, push_down_water_in_mask, smooth_in_mask, remove_overlapping_octant_faces, clip_nodes_to_octree_cells, has_legacy_tile_scale
-from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE, BEACH_SMOOTHING_RADIUS, BEACH_SMOOTHING_RAMP_DISTANCE, OVERLAPPING_OCTANTS_TOLERANCE, NODE_CLIPPING_MARGIN
+from constants import PNG_TEXTURE_FORMAT, JPG_TEXTURE_FORMAT, GLTF_FILE_PATTERN, GLTF_FILE_EXT, XML_FILE_EXT, TEXTURE_FOLDER, WATER_PUSH_DOWN_DEPTH, WATER_PUSH_DOWN_RAMP_DISTANCE, WATER_PUSH_DOWN_MAX_HEIGHT, BEACH_SMOOTHING_RADIUS, BEACH_SMOOTHING_RAMP_DISTANCE, OVERLAPPING_OCTANTS_TOLERANCE, NODE_CLIPPING_MARGIN
 from msfs_project.binary import MsfsBinary
 from msfs_project.texture import MsfsTexture
 from msfs_project.gltf import MsfsGltf
@@ -260,7 +260,7 @@ class MsfsLod:
         if remove_overlapping_octants:
             passes.append(("remove the overlapping octants of", None, lambda: remove_overlapping_octant_faces(tolerance=OVERLAPPING_OCTANTS_TOLERANCE)))
         if cleanup and is_file(water_mask_file_path):
-            passes.append(("push down the water of", water_mask_file_path, lambda: push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH, ramp_distance=WATER_PUSH_DOWN_RAMP_DISTANCE)))
+            passes.append(("push down the water of", water_mask_file_path, lambda: push_down_water_in_mask(depth=WATER_PUSH_DOWN_DEPTH, ramp_distance=WATER_PUSH_DOWN_RAMP_DISTANCE, max_height=WATER_PUSH_DOWN_MAX_HEIGHT)))
         if cleanup and is_file(beach_mask_file_path):
             passes.append(("smooth the beaches of", beach_mask_file_path, lambda: smooth_in_mask(radius=BEACH_SMOOTHING_RADIUS, ramp_distance=BEACH_SMOOTHING_RAMP_DISTANCE)))
 

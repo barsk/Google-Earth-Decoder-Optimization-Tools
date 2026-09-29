@@ -980,6 +980,47 @@ def prepare_water_exclusion_gdf(gdf, building, bridges):
     return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
 
 
+def create_water_push_down_gdf(water, road, railway, man_made, band_width):
+    # the water where the tiles are pushed under the water level (step 4): the whole water, minus narrow bands (band_width meters on each
+    # side) around the axis of the bridges, seamark bridges and piers (their decks can be low) and the pier areas. What stands higher above
+    # the water (the bridge decks, the walls of the buildings in the water) is kept by the push down itself
+    if water.empty:
+        return water
+
+    result = resize_gdf(water, -WATER_EXCLUSION_INSET) if WATER_EXCLUSION_INSET > 0 else water.copy()
+    metric_crs = result.estimate_utm_crs()
+    spared = []
+
+    ways = [gdf for gdf in (road, railway) if not gdf.empty]
+    if ways:
+        ways = pd.concat(ways)
+        ways = ways[~ways[GEOMETRY_OSM_COLUMN].isna()]
+        if TUNNEL_OSM_TAG in ways:
+            ways = ways[ways[TUNNEL_OSM_TAG].isna()]
+        selected = pd.Series(False, index=ways.index)
+        if BRIDGE_OSM_TAG in ways:
+            selected |= ways[BRIDGE_OSM_TAG].notna()
+        if SEAMARK_TYPE_OSM_TAG in ways:
+            selected |= ways[SEAMARK_TYPE_OSM_TAG] == BRIDGE_OSM_TAG
+        if MAN_MADE_OSM_KEY in ways:
+            selected |= ways[MAN_MADE_OSM_KEY] == PIER_OSM_TAG
+        if selected.any():
+            spared.append(ways[selected].to_crs(metric_crs).buffer(band_width).unary_union)
+
+    if not man_made.empty and MAN_MADE_OSM_KEY in man_made:
+        piers = man_made[(man_made[MAN_MADE_OSM_KEY] == PIER_OSM_TAG) & man_made.geom_type.isin([SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon])]
+        if not piers.empty:
+            spared.append(piers.to_crs(metric_crs).buffer(1.0).unary_union)
+
+    area = result.to_crs(metric_crs).unary_union
+    if spared:
+        area = area.difference(unary_union(spared))
+    result = gpd.GeoDataFrame(geometry=[area], crs=metric_crs).to_crs(EPSG.key + str(EPSG.WGS84_degree_unit)).explode(index_parts=False)
+    result = result[(result.geom_type == SHAPELY_TYPE.polygon) | (result.geom_type == SHAPELY_TYPE.multiPolygon)]
+
+    return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
+
+
 def prepare_hidden_roads_gdf(landuse_gdf, natural_gdf):
     landuse_src = landuse_gdf.copy()
     natural_src = natural_gdf.copy()
