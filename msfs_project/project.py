@@ -2101,6 +2101,9 @@ class MsfsProject:
 
         pbar = ProgressBar(tiles_to_remove, title="REMOVE TILES THAT COVER ONLY WATER")
         for tile in tiles_to_remove:
+            # the tile is removed from the scene too (before its files: its guid is read from its definition file), otherwise the
+            # scene keeps an object whose model doesn't exist anymore
+            self.__remove_object(tile)
             tile.remove_files()
             pbar.update("%s removed" % tile.name)
 
