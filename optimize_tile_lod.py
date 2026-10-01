@@ -128,14 +128,12 @@ try:
 
     clean_scene()
 
-    global_settings = GlobalSettings(get_global_path())
-
     frame, tile_position = None, None
     if args.placement_file_path and args.tile_name and args.tile_position:
         frame = load_tile_frame(args.placement_file_path, args.tile_name)
         tile_position = tuple(float(value) for value in args.tile_position.split(","))
 
     lod = MsfsLod(int(args.folder[-2:]), 0, args.folder, args.model_file)
-    lod.optimize(global_settings.bake_textures_enabled, args.output_texture_format, frame=frame, tile_position=tile_position)
+    lod.optimize(args.output_texture_format, frame=frame, tile_position=tile_position)
 except:
     pass

@@ -144,7 +144,7 @@ class MsfsLod:
 
         return False
 
-    def optimize(self, bake_textures_enabled, output_texture_format, frame=None, tile_position=None):
+    def optimize(self, output_texture_format, frame=None, tile_position=None):
         # frame: the frame of the download of the tile (utils.placement), tile_position: (lat, lon, alt) of the tile.
         # Without them, the tile is placed by its bounding box (older behaviour)
         model_files = [model_file for model_file in Path(self.folder).glob(GLTF_FILE_PATTERN) if not self.__is_optimized(model_file)]
@@ -163,8 +163,10 @@ class MsfsLod:
             if lod.has_unbaked_textures():
                 has_unbaked_textures = True
 
+        # the textures of the tile lod are packed into a single texture (fewer files and draw calls, no resampling); kept separate
+        # when they can't be packed
         baked = False
-        if bake_textures_enabled and has_unbaked_textures:
+        if has_unbaked_textures:
             isolated_print("bake textures for", self.name)
             baked = bake_texture_files(os.path.join(os.path.dirname(self.folder), TEXTURE_FOLDER), self.name + "." + output_texture_format)
             if not baked:

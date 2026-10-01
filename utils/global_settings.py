@@ -32,7 +32,6 @@ class GlobalSettings(Settings):
     project_name: str
     author_name: str
     definition_file: str
-    bake_textures_enabled: str
     nb_parallel_blender_tasks: float
     reload_modules: str
     sources_path: str
@@ -49,7 +48,6 @@ class GlobalSettings(Settings):
         self.project_name = str()
         self.author_name = str()
         self.definition_file = str()
-        self.bake_textures_enabled = "True"
         self.nb_parallel_blender_tasks = 4.0
         self.reload_modules = "False"
         self.sections = []
@@ -64,9 +62,6 @@ class GlobalSettings(Settings):
 
         if self.definition_file == str() and self.project_name != str():
             self.definition_file = self.project_name.capitalize() + XML_FILE_EXT
-
-        # reduce the number of texture files by packing the textures of each tile lod into a single texture
-        self.bake_textures_enabled = json.loads(self.bake_textures_enabled.lower())
 
         # check if modules have to be reloaded (mostly for blender dev purpose)
         self.reload_modules = json.loads(self.reload_modules.lower())

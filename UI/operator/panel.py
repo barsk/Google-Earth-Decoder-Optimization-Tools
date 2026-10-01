@@ -103,8 +103,6 @@ class SettingsOperator(PanelOperator):
         col.separator()
         col.separator()
         if self.operator_name in ["wm.optimize_msfs_scenery"]:
-            draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "bake_textures_enabled", "Bake textures enabled")
-            col.separator()
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "output_texture_format", "Output texture format")
             col.separator()
         if self.operator_name in ["wm.add_tile_colliders"]:

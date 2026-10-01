@@ -84,11 +84,6 @@ def reload_author_name(context):
         context.scene.setting_props.author_name = context.scene.global_settings.author_name
 
 
-def reload_bake_textures_enabled(context):
-    if context.scene.global_settings is not None:
-        context.scene.setting_props.bake_textures_enabled = context.scene.global_settings.bake_textures_enabled
-
-
 def reload_output_texture_format(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.output_texture_format = context.scene.project_settings.output_texture_format
@@ -397,7 +392,6 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_nb_parallel_blender_tasks(context)
     reload_project_path_to_merge(context)
     reload_author_name(context)
-    reload_bake_textures_enabled(context)
     reload_output_texture_format(context)
     reload_collider_as_lower_lod(context)
     reload_backup_enabled(context)

@@ -93,9 +93,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     def nb_parallel_blender_tasks_updated(self, context):
         context.scene.global_settings.nb_parallel_blender_tasks = int(self.nb_parallel_blender_tasks)
 
-    def bake_textures_enabled_updated(self, context):
-        context.scene.global_settings.bake_textures_enabled = self.bake_textures_enabled
-
     def output_texture_format_updated(self, context):
         context.scene.project_settings.output_texture_format = self.output_texture_format
         context.scene.project_settings.save()
@@ -427,12 +424,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.global_settings.author_name if bpy.types.Scene.global_settings is not None else str(),
         maxlen=256,
         update=author_name_updated
-    )
-    bake_textures_enabled: BoolProperty(
-        name="Bake textures enabled",
-        description="Reduce the number of texture files by packing the textures of each tile lod into a single texture",
-        default=bpy.types.Scene.global_settings.bake_textures_enabled,
-        update=bake_textures_enabled_updated
     )
     output_texture_format: EnumProperty(
         name="Output texture format",
