@@ -137,6 +137,21 @@ LANDMARK_OBJECT_PREFIX = "landmark_"
 DEFAULT_TILES_MAX_LOD_LEVEL = 19
 LANDMARK_MIN_SCORE = 3
 CLEANUP_3D_DATA_BACKUP_FOLDER = "cleanup_3d_data"
+# shadow lightening (step 2b): the original textures, the fits, the results and the work files of the step, in the backup folder
+SHADOW_LIGHTENING_BACKUP_FOLDER = "shadow_lightening"
+SHADOW_LIGHTENING_REPORT_FILE = "shadow_lightening.txt"
+# the tiles on which the capture suns are estimated (the most built-up ones: the largest LOD00 meshes)
+SHADOW_LIGHTENING_MIN_SUN_TILES = 4
+SHADOW_LIGHTENING_MAX_SUN_TILES = 12
+# memory of a shadow lightening task (the maps of a LOD00 texture; measured peak 4.5 GB on a 3536 x 3612 LOD00): limits the
+# parallel tasks
+SHADOW_LIGHTENING_TASK_MEMORY_GB = 5.0
+# the default settings (SHADOW_LIGHTENING section), set on the Karlstad test scenery: part 1, the shaded side of walls, roofs and
+# trees brightened up to the lit side, at most x wall_gain_cap, vegetation at vegetation_strength; part 2, the cast shadows lifted
+# by gain^shadow_strength (a full shadow ~x2.9), shadow_color of the shadow ratio's color shift, at most x shadow_gain_cap,
+# vegetation at shadow_vegetation_strength. sun_candidates: "azimuth/elevation, ..." (empty: estimated from the tiles)
+SHADOW_LIGHTENING_DEFAULTS = {"wall_gain_cap": 3.0, "vegetation_strength": 0.9, "shadow_strength": 0.6, "shadow_color": 0.5,
+                              "shadow_gain_cap": 6.0, "shadow_vegetation_strength": 0.5}
 RESIZE_SCENERY_TEXTURES_BACKUP_FOLDER = "resize_scenery_textures"
 
 SCRIPT_PREFIX = "_script"
@@ -372,6 +387,7 @@ OSM_INI_SECTION = "OPENSTREETMAP"
 GEOCODE_INI_SECTION = "GEOCODE"
 ALTITUDE_ADJUSTMENT_INI_SECTION = "ALTITUDE_ADJUSTMENT"
 TEXTURES_INI_SECTION = "TEXTURES"
+SHADOW_LIGHTENING_INI_SECTION = "SHADOW_LIGHTENING"
 MSFS_SDK_INI_SECTION = "MSFS_SDK"
 BUILD_INI_SECTION = "AUTOMATIC_BUILD"
 COMPRESSONATOR_INI_SECTION = "COMPRESSONATOR"

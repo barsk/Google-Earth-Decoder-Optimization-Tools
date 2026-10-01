@@ -40,7 +40,8 @@ import shutil
 
 from utils.settings import Settings
 
-from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT, DEFAULT_GROUND_FILTER_SIZE, DEFAULT_WATER_DEPTH
+from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT, DEFAULT_GROUND_FILTER_SIZE, DEFAULT_WATER_DEPTH, \
+    SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_DEFAULTS
 
 
 class ProjectSettings(Settings):
@@ -95,8 +96,16 @@ class ProjectSettings(Settings):
     create_forests_vegetation: str
     create_woods_vegetation: str
     resize_ratio: float
+    wall_gain_cap: float
+    vegetation_strength: float
+    shadow_strength: float
+    shadow_color: float
+    shadow_gain_cap: float
+    shadow_vegetation_strength: float
+    sun_candidates: str
 
     LODS_SECTION = "LODS"
+    SUN_CANDIDATES_SETTING = "sun_candidates"
     HEIGHT_MAPS_SECTION = "HEIGHT_MAPS"
     GROUND_FILTER_SIZE_SETTING = "ground_filter_size"
     BLEND_OUTER_EDGES_SETTING = "blend_outer_edges"
@@ -167,6 +176,9 @@ class ProjectSettings(Settings):
         self.create_forests_vegetation = "False"
         self.create_woods_vegetation = "False"
         self.resize_ratio = 0.5
+        for name, value in SHADOW_LIGHTENING_DEFAULTS.items():
+            setattr(self, name, value)
+        self.sun_candidates = str()
 
         # the default min size values of the lods, from the most detailed one (the last one) in the template, used when a lod is added
         self.default_target_min_size_values = self.__read_default_target_min_size_values(os.path.join(global_path, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE))
@@ -211,6 +223,13 @@ class ProjectSettings(Settings):
         self.contrast = "{:.2f}".format(float(str(self.contrast))).rstrip("0").rstrip(".")
         self.saturation = "{:.2f}".format(float(str(self.saturation))).rstrip("0").rstrip(".")
         self.hue = "{:.2f}".format(float(str(self.hue))).rstrip("0").rstrip(".")
+
+        for name in SHADOW_LIGHTENING_DEFAULTS:
+            setattr(self, name, "{:.2f}".format(float(str(getattr(self, name)))).rstrip("0").rstrip("."))
+        self.sun_candidates = str(self.sun_candidates).strip()
+        # setting section added after the creation of older projects: listed (with its defaults) for the panels, written on save
+        if self.sections and SHADOW_LIGHTENING_INI_SECTION not in [section[0] for section in self.sections]:
+            self.sections.append((SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION))
 
         self.high_precision = json.loads(self.high_precision.lower())
         self.blend_outer_edges = json.loads(str(self.blend_outer_edges).lower())
@@ -268,6 +287,11 @@ class ProjectSettings(Settings):
         config.set(self.OPENSTREETMAP_SECTION, self.SMOOTH_BEACHES_SETTING, str(self.smooth_beaches))
         config.set(self.OPENSTREETMAP_SECTION, self.REMOVE_OVERLAPPING_OCTANTS_SETTING, str(self.remove_overlapping_octants))
         config.set(self.OPENSTREETMAP_SECTION, self.CLIP_NODES_TO_CELLS_SETTING, str(self.clip_nodes_to_cells))
+        if not config.has_section(SHADOW_LIGHTENING_INI_SECTION):
+            config.add_section(SHADOW_LIGHTENING_INI_SECTION)
+        for name in SHADOW_LIGHTENING_DEFAULTS:
+            config.set(SHADOW_LIGHTENING_INI_SECTION, name, str(getattr(self, name)))
+        config.set(SHADOW_LIGHTENING_INI_SECTION, self.SUN_CANDIDATES_SETTING, str(self.sun_candidates))
 
         with open(os.path.join(self.path, self.file_name), "w", encoding=ENCODING) as configfile:
             config.write(configfile)

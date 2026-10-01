@@ -18,7 +18,7 @@
 
 import bpy
 from bpy_types import Operator
-from constants import MAX_PHOTOGRAMMETRY_LOD, PROJECT_INI_SECTION, TILE_INI_SECTION, LODS_INI_SECTION, OSM_INI_SECTION, GEOCODE_INI_SECTION, ALTITUDE_ADJUSTMENT_INI_SECTION, COMPRESSONATOR_INI_SECTION, BUILD_INI_SECTION, MERGE_INI_SECTION, BACKUP_INI_SECTION, NONE_ICON, FILE_FOLDER_ICON, FILE_REFRESH_ICON, FILE_TICK_ICON, INFO_ICON, ADD_ICON, REMOVE_ICON, TEXTURES_INI_SECTION
+from constants import MAX_PHOTOGRAMMETRY_LOD, PROJECT_INI_SECTION, TILE_INI_SECTION, LODS_INI_SECTION, OSM_INI_SECTION, GEOCODE_INI_SECTION, ALTITUDE_ADJUSTMENT_INI_SECTION, COMPRESSONATOR_INI_SECTION, BUILD_INI_SECTION, MERGE_INI_SECTION, BACKUP_INI_SECTION, NONE_ICON, FILE_FOLDER_ICON, FILE_REFRESH_ICON, FILE_TICK_ICON, INFO_ICON, ADD_ICON, REMOVE_ICON, TEXTURES_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION
 from .operator import OT_ProjectPathOperator, OT_ReloadSettingsOperator, \
     OT_SaveSettingsOperator, OT_ProjectsPathOperator, OT_ProjectPathToMergeOperator, OT_addLodOperator, OT_removeLowerLodOperator, OT_openSettingsFileOperator
 from .tools import reload_setting_props
@@ -296,6 +296,21 @@ class SettingsOperator(PanelOperator):
         col.separator()
         self.draw_footer(context, self.layout, self.operator_name)
 
+    def draw_shadow_lightening_panel(self, context):
+        split = self.draw_setting_sections_panel(context)
+        col = self.draw_header(split, display_save=False)
+        col.separator()
+        col.label(text="The shaded side of walls, roofs and trees is brightened up to its lit side; the cast shadows are partly lifted", icon=INFO_ICON)
+        col.separator()
+        for name, label in (("wall_gain_cap", "Most brightening of the shaded side (x)"), ("vegetation_strength", "Share applied to vegetation"),
+                            ("shadow_strength", "Cast shadows: strength (1 = up to the lit surface)"), ("shadow_color", "Cast shadows: share of the color shift removed"),
+                            ("shadow_gain_cap", "Cast shadows: most brightening (x)"), ("shadow_vegetation_strength", "Cast shadows: share applied to vegetation")):
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label)
+            col.separator()
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns, azimuth/elevation, ... (empty: estimated)")
+        col.separator()
+        self.draw_footer(context, self.layout, self.operator_name)
+
     def draw_python_panel(self, context):
         split = self.draw_setting_sections_panel(context)
         col = self.draw_header(split)
@@ -429,6 +444,24 @@ class OT_OptimizeSceneryPanel(SettingsOperator):
         LODS_INI_SECTION,
         BUILD_INI_SECTION,
         BACKUP_INI_SECTION,
+    ]
+
+
+class OT_ShadowLighteningPanel(SettingsOperator):
+    operator_name = "wm.shadow_lightening"
+    id_name = "wm.shadow_lightening_panel"
+    bl_idname = id_name
+    bl_label = "2b. Shadow lightening"
+    operator_description = """This script lightens the shadows baked into the Google Earth textures (MSFS lights the tiles again).
+        It finds the sun of the capture from the cast shadows (or takes the capture suns of the settings), then for each tile it brightens
+        the shaded side of the walls, roofs and trees up to their lit side, and partly lifts the cast shadows, on all the LODs.
+        Run it after step 2: steps 4 to 7 keep its result. The original textures are kept in the backup folder (shadow_lightening),
+        so that it can be run again with other settings. The report is written to shadow_lightening.txt in the project folder."""
+    starting_section = SHADOW_LIGHTENING_INI_SECTION
+    displayed_sections = [
+        PROJECT_INI_SECTION,
+        SHADOW_LIGHTENING_INI_SECTION,
+        BUILD_INI_SECTION,
     ]
 
 

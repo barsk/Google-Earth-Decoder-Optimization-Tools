@@ -23,6 +23,7 @@ from bpy.props import StringProperty
 from constants import MAX_PHOTOGRAMMETRY_LOD, INI_FILE
 from msfs_project.project import MsfsProject
 from scripts.cleanup_3d_data_script import cleanup_3d_data
+from scripts.shadow_lightening_script import shadow_lightening
 from scripts.add_tile_colliders_script import add_tile_colliders
 from scripts.clean_package_files_script import clean_package_files
 from scripts.fix_tiles_lightning_issues_script import fix_tiles_lightning_issues
@@ -306,6 +307,21 @@ class OT_GenerateHeightDataOperator(ActionOperator):
     def execute(self, context):
         super().execute(context)
         generate_height_data(context.scene.global_settings)
+        return {'FINISHED'}
+
+
+class OT_ShadowLighteningOperator(ActionOperator):
+    bl_idname = "wm.shadow_lightening"
+    bl_label = "Lighten the shadows of the textures..."
+
+    @classmethod
+    def poll(cls, context):
+        msfs_project = super().poll(context)
+        return os.path.isdir(msfs_project.scene_folder)
+
+    def execute(self, context):
+        super().execute(context)
+        shadow_lightening(context.scene.global_settings)
         return {'FINISHED'}
 
 

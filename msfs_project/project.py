@@ -78,6 +78,7 @@ from pathlib import Path
 
 from utils.compressonator import Compressonator
 from utils.msfs_sdk import is_msfs_2024_target
+from utils.system_memory import free_memory_gb
 from utils.minidom_xml import add_scenery_object, create_new_definition_file, add_new_lod
 from utils.progress_bar import ProgressBar
 
@@ -295,6 +296,86 @@ class MsfsProject:
             tile.update_min_size_values(self.settings.target_min_size_values, pbar=pbar)
         for collider in self.colliders.values():
             collider.update_min_size_values(self.settings.target_min_size_values, pbar=pbar)
+
+    def shadow_lighten(self, settings):
+        # step 2b, the shadow lightening of the textures (see shadow_lighten/__init__.py): the capture suns of the project, then the
+        # textures of every tile (all their LODs) corrected in parallel Blender tasks, the originals kept in the backup folder
+        from shadow_lighten import capture_suns, parse_suns, format_suns, DEFAULT_PARAMETERS
+
+        originals_folder = os.path.join(self.backup_folder, SHADOW_LIGHTENING_BACKUP_FOLDER)
+        results_folder = os.path.join(originals_folder, "results")
+        work_folder = os.path.join(originals_folder, "work")
+        shutil.rmtree(results_folder, ignore_errors=True)
+        os.makedirs(results_folder, exist_ok=True)
+        model_lib_folder = self.model_lib_folder
+        objects_xml = self.objects_xml.file_path
+        tiles = sorted(tile.name for tile in self.tiles.values() if tile.valid and os.path.isfile(os.path.join(model_lib_folder, tile.name + "_LOD00.gltf")))
+        report = []
+
+        # the capture suns: from the settings, else from the tile fits of the most built-up tiles
+        suns = parse_suns(self.settings.sun_candidates) if str(self.settings.sun_candidates).strip() else []
+        if suns:
+            project_sun = suns[0]
+            report.append("capture suns from the settings: %s" % format_suns(suns))
+        else:
+            sizes = {name: os.path.getsize(os.path.join(model_lib_folder, name + "_LOD00.bin")) for name in tiles if os.path.isfile(os.path.join(model_lib_folder, name + "_LOD00.bin"))}
+            count = min(len(sizes), max(SHADOW_LIGHTENING_MIN_SUN_TILES, min(SHADOW_LIGHTENING_MAX_SUN_TILES, len(sizes) // 8)))
+            sun_tiles = sorted(sizes, key=sizes.get, reverse=True)[:count]
+            data = [{"name": name, "params": ["--folder", str(model_lib_folder), "--name", name, "--objects_xml", str(objects_xml), "--originals_folder", str(originals_folder),
+                                              "--output", os.path.join(results_folder, "sun_" + name + JSON_FILE_EXT)]} for name in sun_tiles]
+            self.__multithread_blender_process_data(chunks(data, settings.nb_parallel_blender_tasks), "estimate_tile_sun.py", "ESTIMATE THE CAPTURE SUNS", "capture sun estimated")
+            fits = []
+            for name in sun_tiles:
+                path = os.path.join(results_folder, "sun_" + name + JSON_FILE_EXT)
+                if os.path.isfile(path):
+                    with open(path, encoding="utf-8") as f:
+                        fit = json.load(f)
+                    fits.append((fit["azimuth"], fit["elevation"], fit["correlation"]))
+                    report.append("tile %s: sun %.0f/%.0f, correlation %.2f" % (name, fit["azimuth"], fit["elevation"], fit["correlation"]))
+            project_sun, suns = capture_suns(fits)
+            if project_sun is None:
+                self.__write_shadow_lightening_report(report + ["no clear capture sun: set the sun candidates in the SHADOW_LIGHTENING settings"])
+                raise ScriptError("No clear capture sun found on the tiles (" + ", ".join(report) + "). Set the sun candidates (azimuth/elevation) in the SHADOW_LIGHTENING settings")
+            report.append("capture suns: %s, project sun %s" % (format_suns(suns), format_suns([project_sun])))
+        isolated_print("capture suns: " + format_suns(suns) + EOL)
+
+        # the tiles
+        step4_texture_folder = os.path.join(self.__find_backup_path(CLEANUP_3D_DATA_BACKUP_FOLDER), TEXTURE_FOLDER)
+        parameters = []
+        for name, default in DEFAULT_PARAMETERS.items():
+            parameters.extend(["--" + name, str(float(getattr(self.settings, name, default)))])
+        data = [{"name": name, "params": ["--folder", str(model_lib_folder), "--name", name, "--objects_xml", str(objects_xml), "--originals_folder", str(originals_folder),
+                                          "--work_folder", os.path.join(work_folder, name), "--suns", format_suns(suns).replace(" ", ""),
+                                          "--project_sun", format_suns([project_sun]), "--step4_texture_folder", str(step4_texture_folder),
+                                          "--output", os.path.join(results_folder, name + JSON_FILE_EXT)] + parameters} for name in tiles]
+        # each task holds the maps of a LOD00 texture (up to ~4.5 GB): no more tasks than the free memory allows (12 tasks with 33 GB
+        # free crashed half of them)
+        nb_tasks = min(int(settings.nb_parallel_blender_tasks), max(1, int(free_memory_gb() // SHADOW_LIGHTENING_TASK_MEMORY_GB)))
+        isolated_print("%d parallel tasks (%.0f GB of free memory)" % (nb_tasks, free_memory_gb()) + EOL)
+        self.__multithread_blender_process_data(chunks(data, nb_tasks), "shadow_lighten_tile.py", "SHADOW LIGHTENING", "textures lightened")
+        shutil.rmtree(work_folder, ignore_errors=True)
+
+        failed = []
+        for name in tiles:
+            path = os.path.join(results_folder, name + JSON_FILE_EXT)
+            if not os.path.isfile(path):
+                failed.append(name)
+                report.append("tile %s: FAILED (no result)" % name)
+                continue
+            with open(path, encoding="utf-8") as f:
+                result = json.load(f)
+            report.append("tile %s: sun %.0f/%.0f (%s), %d s" % (name, result["azimuth"], result["elevation"], result["sun"], result["seconds"]))
+            report.extend("    " + line for line in result["log"])
+        self.__write_shadow_lightening_report(report)
+        if failed:
+            raise ScriptError("Shadow lightening failed on %d tiles (%s), see %s" % (len(failed), ", ".join(failed[:10]), os.path.join(self.project_folder, SHADOW_LIGHTENING_REPORT_FILE)))
+
+    def __write_shadow_lightening_report(self, lines):
+        # (the report of step 2b, in the project folder)
+        import time
+        with open(os.path.join(self.project_folder, SHADOW_LIGHTENING_REPORT_FILE), "w", encoding="utf-8") as f:
+            f.write("shadow lightening, %s\n" % time.strftime("%Y-%m-%d %H:%M"))
+            f.write("\n".join(lines) + "\n")
 
     def compress_built_package(self):
         from UI.prefs import get_prefs

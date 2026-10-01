@@ -21,7 +21,7 @@ import bpy
 from bpy.props import IntProperty
 from msfs_project.project import MsfsProject
 from . import SettingsPropertyGroup
-from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, MAX_PHOTOGRAMMETRY_LOD, TILE_DOWNLOADER_COLOR_OPTIONS
+from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, MAX_PHOTOGRAMMETRY_LOD, TILE_DOWNLOADER_COLOR_OPTIONS, SHADOW_LIGHTENING_DEFAULTS
 from utils import GlobalSettings
 
 
@@ -305,6 +305,13 @@ def reload_texture_colors(context):
             setattr(context.scene.setting_props, setting, float(getattr(context.scene.project_settings, setting, neutral)))
 
 
+def reload_shadow_lightening(context):
+    if context.scene.project_settings is not None:
+        for setting, default in SHADOW_LIGHTENING_DEFAULTS.items():
+            setattr(context.scene.setting_props, setting, float(getattr(context.scene.project_settings, setting, default)))
+        context.scene.setting_props.sun_candidates = str(getattr(context.scene.project_settings, "sun_candidates", ""))
+
+
 def reload_build_package_enabled(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.build_package_enabled = context.scene.project_settings.build_package_enabled
@@ -421,6 +428,7 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_create_woods_vegetation(context)
     reload_resize_ratio(context)
     reload_texture_colors(context)
+    reload_shadow_lightening(context)
     reload_build_package_enabled(context)
     reload_python_reload_modules(context)
     reload_project_settings(context)
