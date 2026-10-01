@@ -49,7 +49,7 @@ from scripts.isolate_3d_data_from_geocode_script import isolate_3d_data_from_geo
 from scripts.upgrade_landmarks_script import upgrade_landmarks
 from scripts.adjust_scenery_altitude_script import adjust_scenery_altitude
 from utils import open_console
-from .tools import reload_current_operator, reload_setting_props, reload_project_settings
+from .tools import reload_current_operator, reload_setting_props, reload_project_settings, save_project_selection
 from bpy_extras.io_utils import ImportHelper
 from bpy_types import Operator
 
@@ -81,8 +81,8 @@ class OT_ProjectsPathOperator(DirectoryBrowserOperator):
 
     def execute(self, context):
         context.scene.setting_props.projects_path = self.directory
+        save_project_selection(context)
         reload_current_operator(context)
-        reload_project_settings(context)
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -109,8 +109,8 @@ class OT_ProjectPathOperator(DirectoryBrowserOperator):
     def execute(self, context):
         context.scene.setting_props.definition_file = os.path.basename(self.filepath)
         context.scene.setting_props.project_path = os.path.dirname(self.filepath) + os.sep
+        save_project_selection(context)
         reload_current_operator(context)
-        reload_project_settings(context)
         return {'FINISHED'}
 
     def invoke(self, context, event):

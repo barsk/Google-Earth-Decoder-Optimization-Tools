@@ -56,7 +56,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         if os.path.isfile(os.path.join(self.project_path, self.definition_file)):
             context.scene.global_settings.definition_file = self.definition_file
 
-        self.project_path_readonly = context.scene.global_settings.project_path
+        self.project_path_readonly = getattr(context.scene.global_settings, "project_path", str())
 
     def project_name_updated(self, context):
         context.scene.global_settings.project_name = self.project_name

@@ -371,9 +371,20 @@ def reload_setting_props_property_group(context, reload_settings_file=True):
 def reload_project_settings(context):
     if context.scene.global_settings.projects_path is not str() and context.scene.global_settings.project_name is not str():
         project_path = os.path.join(context.scene.global_settings.projects_path, context.scene.global_settings.project_name)
-        if os.path.exists(project_path) and not hasattr(bpy.types.Scene, "project_settings"):
+        # Scene.project_settings always exists (set to None when the addon is loaded): load the settings when there are none yet or
+        # they belong to another project
+        project_settings = getattr(bpy.types.Scene, "project_settings", None)
+        loaded = project_settings is not None and os.path.normcase(os.path.normpath(project_settings.path)) == os.path.normcase(os.path.normpath(project_path))
+        if os.path.exists(project_path) and not loaded:
             msfs_project = MsfsProject(context.scene.global_settings.projects_path, context.scene.global_settings.project_name, context.scene.global_settings.definition_file, context.scene.global_settings.path, context.scene.global_settings.author_name, fast_init=True)
             context.scene.project_settings = bpy.types.Scene.project_settings = msfs_project.settings
+
+def save_project_selection(context):
+    # the panels reload the global settings file when they open: save the selected project in it, then load the settings of the
+    # project, so that the next panel shows the selected project and its settings
+    context.scene.global_settings.save()
+    reload_setting_props(context)
+
 
 def reload_setting_props(context, reload_settings_file=True):
     reload_setting_props_property_group(context, reload_settings_file)
