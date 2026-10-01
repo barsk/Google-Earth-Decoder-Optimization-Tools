@@ -128,7 +128,7 @@ class SettingsOperator(PanelOperator):
                             ("shadow_gain_cap", "Cast shadows: max boost"), ("shadow_vegetation_strength", "Cast shadows: vegetation")):
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
             col.separator()
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns")
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Sun directions (empty = auto)")
         col.separator()
 
     def draw_merge_panel(self, context):
