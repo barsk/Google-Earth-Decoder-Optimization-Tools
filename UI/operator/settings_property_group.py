@@ -845,7 +845,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     wall_gain_cap: FloatProperty(
         name="Wall gain cap",
-        description="Shadow lightening: the most the shaded side of walls, roofs and trees is brightened (300 % = up to 3 times)",
+        description="The most the shaded side of walls, roofs and trees is brightened towards its lit side (300 % = up to 3 times). Default: 300 %",
         subtype="PERCENTAGE",
         min=100.0,
         max=600.0,
@@ -856,7 +856,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     vegetation_strength: FloatProperty(
         name="Vegetation strength",
-        description="Shadow lightening: the share of the correction of the shaded side applied to vegetation (lumpy meshes)",
+        description="The share of the shaded side correction applied to trees and other vegetation (lumpy meshes). Default: 90 %",
         subtype="PERCENTAGE",
         min=0.0,
         max=100.0,
@@ -867,7 +867,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_strength: FloatProperty(
         name="Shadow strength",
-        description="Shadow lightening: how much the cast shadows are lifted (100 % = up to the lit surface, 60 % = partly)",
+        description="How much the cast shadows are lifted (100 % = up to the lit surface around them; lower keeps some shadow and fewer artifacts). Default: 60 %",
         subtype="PERCENTAGE",
         min=0.0,
         max=100.0,
@@ -878,7 +878,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_color: FloatProperty(
         name="Shadow color",
-        description="Shadow lightening: the share of the color shift of the shadows that is removed (0 % = only the brightness, 100 % = all: can turn yellowish)",
+        description="The share of the bluish color shift of the cast shadows that is removed (0 % = brightness only, 100 % = all, can turn yellowish). Default: 50 %",
         subtype="PERCENTAGE",
         min=0.0,
         max=100.0,
@@ -889,7 +889,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_gain_cap: FloatProperty(
         name="Shadow gain cap",
-        description="Shadow lightening: the most a cast shadow is brightened (600 % = up to 6 times, before the shadow strength)",
+        description="The most a cast shadow is brightened, before the strength is applied (600 % = up to 6 times). Default: 600 %",
         subtype="PERCENTAGE",
         min=100.0,
         max=1000.0,
@@ -900,7 +900,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_vegetation_strength: FloatProperty(
         name="Shadow vegetation strength",
-        description="Shadow lightening: the share of the cast shadow correction applied to vegetation (tree on tree shadows)",
+        description="The share of the cast shadow correction applied to vegetation (shadows of trees on trees). Default: 50 %",
         subtype="PERCENTAGE",
         min=0.0,
         max=100.0,
@@ -911,7 +911,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     sun_candidates: StringProperty(
         name="Sun candidates",
-        description="Shadow lightening: the capture suns as azimuth/elevation, ... (empty: estimated from the tiles)",
+        description="The sun directions when the imagery was captured, as azimuth/elevation in degrees, separated by commas, e.g. 168/34, 150/40. Empty (default): estimated from the shadows in the tiles",
         default=str(getattr(bpy.types.Scene.project_settings, "sun_candidates", "")) if bpy.types.Scene.project_settings is not None else "",
         update=sun_candidates_updated
     )

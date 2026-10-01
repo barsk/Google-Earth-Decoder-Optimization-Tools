@@ -118,17 +118,17 @@ class SettingsOperator(PanelOperator):
     def draw_shadow_lightening_settings(context, col):
         # the settings of the SHADOW_LIGHTENING section of the project ini (read from it, saved to it when changed)
         if getattr(bpy.types.Scene, "project_settings", None) is None:
-            col.label(text="Shadow lightening settings: select an existing project first (they are stored in its ini file)", icon=INFO_ICON)
+            col.label(text="Shadow lightening settings: select a project first", icon=INFO_ICON)
             col.separator()
             return
-        col.label(text="Shadow lightening (saved to the project ini, section SHADOW_LIGHTENING): the shaded side of walls, roofs and trees is brightened up to its lit side; the cast shadows are partly lifted", icon=INFO_ICON)
+        col.label(text="Shadow lightening (hover for details, saved to the project ini)", icon=INFO_ICON)
         col.separator()
-        for name, label in (("wall_gain_cap", "Most brightening of the shaded side (300 % = 3 times)"), ("vegetation_strength", "Share applied to vegetation"),
-                            ("shadow_strength", "Cast shadows: strength (100 % = up to the lit surface)"), ("shadow_color", "Cast shadows: share of the color shift removed"),
-                            ("shadow_gain_cap", "Cast shadows: most brightening (600 % = 6 times)"), ("shadow_vegetation_strength", "Cast shadows: share applied to vegetation")):
+        for name, label in (("wall_gain_cap", "Shaded side: max boost"), ("vegetation_strength", "Shaded side: vegetation"),
+                            ("shadow_strength", "Cast shadows: strength"), ("shadow_color", "Cast shadows: color fix"),
+                            ("shadow_gain_cap", "Cast shadows: max boost"), ("shadow_vegetation_strength", "Cast shadows: vegetation")):
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
             col.separator()
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns, azimuth/elevation, ... (empty: estimated)")
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns")
         col.separator()
 
     def draw_merge_panel(self, context):
