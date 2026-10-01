@@ -41,8 +41,8 @@ import numpy as np
 from mathutils import Vector
 from PIL import Image
 
-from .textures import load_triangles, load_occluders, rasterize, smooth_normals, srgb_to_linear, linear_to_srgb, lum, smoothstep, \
-    upsample_smooth, box_blur, pad_gain, reference_cells, cell_means
+from .textures import load_triangles, load_occluders, rasterize, smooth_normals, srgb_from_8bit, srgb_to_linear, linear_to_srgb, lum, \
+    smoothstep, upsample_smooth, box_blur, pad_gain, reference_cells, cell_means
 from .facing import fit_ratio, vegetation, correct_facing, WALL_MAX_UP, FIT_SAMPLES
 from .sun import RAY_OFFSET, RAY_LENGTH
 from constants import SHADOW_LIGHTENING_DEFAULTS
@@ -120,20 +120,26 @@ def shadow_likelihood(bvh, point_map, normal_map, sun):
 
 
 def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, scale):
-    # the maps of one texture from its own triangles: 3D points, normals, smoothed normals, the shadow likelihood
-    srgb = np.asarray(Image.open(originals.path(image_name)).convert("RGB"), dtype=np.float32) / 255.0
-    height, width = srgb.shape[:2]
+    # the maps of one texture from its own triangles: the texels covered by the mesh, normals, smoothed normals, the shadow likelihood.
+    # A LOD00 texture has ~22 million texels (each float map of it 0.5 GB per 64 bits channel): the colors are kept as 8 bits and
+    # converted where used, the maps freed as soon as they are no longer needed
+    srgb8 = np.asarray(Image.open(originals.path(image_name)).convert("RGB"))
+    height, width = srgb8.shape[:2]
     smoothed = smooth_normals(triangles, normals, SMOOTH_CELL)
     point_map, (normal_map, smooth_map) = rasterize(triangles, uvs, [normals, smoothed], width, height)
+    covered = ~np.isnan(point_map[..., 0])
+    del point_map
+    linear = np.empty((height, width, 3))
+    for c in range(3):
+        linear[..., c] = srgb_to_linear(srgb_from_8bit(srgb8[..., c]).astype(np.float64))
     sw, sh = max(width // scale, 1), max(height // scale, 1)
     small_points, (small_normals,) = rasterize(triangles, uvs, [normals], sw, sh)
     small_likelihood = shadow_likelihood(bvh, small_points, small_normals, sun)
     # only over the texels of the mesh: the empty space around the pieces of the atlas would lower the likelihood along their
     # edges (dark "cracks" along the triangle edges in the sim)
     likelihood = np.nan_to_num(upsample_smooth(small_likelihood, height, width, valid=~np.isnan(small_likelihood)), nan=0.0)
-    return {"name": image_name, "srgb": srgb, "linear": srgb_to_linear(srgb.astype(np.float64)), "point_map": point_map,
-            "normal_map": normal_map, "smooth_map": smooth_map, "small_points": small_points, "small_likelihood": small_likelihood,
-            "likelihood": likelihood, "covered": ~np.isnan(point_map[..., 0]), "blocked": likelihood >= 0.5, "size": (sw, sh)}
+    return {"name": image_name, "srgb8": srgb8, "linear": linear, "normal_map": normal_map, "smooth_map": smooth_map, "small_points": small_points,
+            "small_likelihood": small_likelihood, "likelihood": likelihood, "covered": covered, "blocked": likelihood >= 0.5, "size": (sw, sh)}
 
 
 def stored_fits(fits_folder):
@@ -157,7 +163,7 @@ def stored_fits(fits_folder):
 
 def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, originals, fits_folder, log):
     # parts 1 and 2 on the textures of one LOD (each with its own triangles); fit: None for LOD00 (fitted here, over all its
-    # textures, and returned), else the LOD00 parameters. Returns [(image name, corrected texture)], the fit
+    # textures, and returned), else the LOD00 parameters. Returns [(image name, corrected texture, 8 bits)], the fit
     triangles, uvs, normals, images, owners = load_triangles(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, lod)))
     if not len(triangles):
         return [], fit
@@ -185,13 +191,16 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
             fit["knee"] = stored["knee"] if stored["knee"] is not None else 0.4
             log.append("part 1: too few walls to fit, %s" % ("the median fit of the tiles done" if stored["ratios"] is not None else "no facing correction"))
     for t in textures:
-        t["part1"] = correct_facing(t["linear"], t["srgb"], t["normal_map"], t["smooth_map"], t["covered"], t["blocked"], sun,
+        t["part1"] = correct_facing(t["linear"], t["srgb8"], t.pop("normal_map"), t.pop("smooth_map"), t["covered"], t["blocked"], sun,
                                     fit["ratios"], fit["knee"], parameters["wall_gain_cap"], parameters["vegetation_strength"])
         # the low resolution texels facing the sun: 3D point, color after part 1, likelihood
         sw, sh = t["size"]
         sys_, sxs = np.nonzero(~np.isnan(t["small_likelihood"]))
-        part1_srgb = linear_to_srgb(t["part1"])
-        small_colors = srgb_to_linear(np.asarray(Image.fromarray((part1_srgb * 255).astype(np.uint8)).resize((sw, sh), Image.BOX), dtype=np.float64) / 255.0)
+        part1_srgb8 = np.empty(t["part1"].shape, dtype=np.uint8)
+        for c in range(3):
+            part1_srgb8[..., c] = (linear_to_srgb(t["part1"][..., c]) * 255).astype(np.uint8)
+        small_colors = srgb_to_linear(np.asarray(Image.fromarray(part1_srgb8).resize((sw, sh), Image.BOX), dtype=np.float64) / 255.0)
+        del part1_srgb8
         t["low"] = (sys_, sxs, t["small_points"][sys_, sxs].astype(np.float64), small_colors[sys_, sxs], t["small_likelihood"][sys_, sxs])
 
     # part 2, the cast shadows: lit reference in 3D from the lit LOD00 texels (of all its textures) for every LOD
@@ -234,32 +243,47 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
         fit["shadow_ratio"] = ratio * min(1.0, parameters["shadow_gain_cap"] / max(ratio.max(), 1e-6))
         fit["shadow_pairs"] = len(found)
 
-    # the shadow weight at full size, the brightening, per texture
+    # the shadow weight at full size, the brightening, per texture (its maps freed as soon as they are no longer needed)
     results = []
-    for t in textures:
-        linear, part1, covered, srgb = t["linear"], t["part1"], t["covered"], t["srgb"]
+    while textures:
+        t = textures.pop(0)
+        linear, part1, covered = t.pop("linear"), t.pop("part1"), t["covered"]
         height, width = linear.shape[:2]
         ref_big = upsample_smooth(t["reference_map"], height, width, valid=~np.isnan(t["reference_map"][..., 0]))
         ys, xs = np.nonzero(covered & ~np.isnan(ref_big[..., 0]))
+        ref_lum = lum(ref_big[ys, xs])
+        del ref_big
         blurred = box_blur(lum(part1), covered, DARKNESS_BLUR)
-        q = blurred[ys, xs] / np.maximum(lum(ref_big[ys, xs]), 1e-6)
+        q = blurred[ys, xs] / np.maximum(ref_lum, 1e-6)
+        del blurred, ref_lum
         weight = smoothstep(t["likelihood"][ys, xs], 0.3, 0.7) * (1.0 - smoothstep(q, *DARKNESS_RANGE))
-        weight *= np.where(vegetation(srgb[ys, xs]), parameters["shadow_vegetation_strength"], 1.0)
+        weight *= np.where(vegetation(srgb_from_8bit(t["srgb8"][ys, xs])), parameters["shadow_vegetation_strength"], 1.0)
         ratio = fit["shadow_ratio"]
         ratio_lum = max(float(lum(ratio)), 1.0001)
         gain = 1.0 + weight * (np.clip(np.minimum(ratio_lum, 1.0 / np.maximum(q, 1e-6)), 1.0, None) - 1.0)
         exponent = parameters["shadow_strength"] * np.log(gain) / math.log(ratio_lum)
         tinted = ratio_lum * (ratio / ratio_lum) ** parameters["shadow_color"]
-        out = part1.copy()
-        out[ys, xs] = part1[ys, xs] * tinted[None, :] ** exponent[:, None]
-        # parts 1 and 2 as one gain per texel, padded into the texels around the mesh pieces, applied to the whole texture
+        brightness_before, brightness_part1 = lum(linear[covered]).mean(), lum(part1[covered]).mean()
+        # parts 1 and 2 as one gain per texel (the part 2 texels: the part 1 color brightened, over the original color), padded
+        # into the texels around the mesh pieces, applied to the whole texture
         gain_map = np.full(linear.shape, np.nan)
-        gain_map[covered] = out[covered] / np.maximum(linear[covered], 1e-6)
-        result = linear_to_srgb(linear * pad_gain(gain_map))
-        results.append((t["name"], result))
+        gain_map[covered] = part1[covered] / np.maximum(linear[covered], 1e-6)
+        gain_map[ys, xs] = (part1[ys, xs] * tinted[None, :] ** exponent[:, None]) / np.maximum(linear[ys, xs], 1e-6)
+        del part1
+        result = pad_gain(gain_map)
+        del gain_map
+        result *= linear
+        del linear
+        for c in range(3):
+            result[..., c] = linear_to_srgb(result[..., c])
         log.append("%s %s: %dx%d, predicted shadow %.0f%%, brightened as shadow %.0f%%, mean brightness %.4f -> %.4f -> %.4f" % (
             lod, t["name"], width, height, 100 * (t["likelihood"][covered] >= 0.5).mean(), 100 * (weight > 0.5).sum() / max(covered.sum(), 1),
-            lum(linear[covered]).mean(), lum(part1[covered]).mean(), lum(srgb_to_linear(result)[covered]).mean()))
+            brightness_before, brightness_part1, lum(srgb_to_linear(result[covered])).mean()))
+        result8 = np.empty(result.shape, dtype=np.uint8)
+        for c in range(3):
+            result8[..., c] = (result[..., c] * 255 + 0.5).astype(np.uint8)
+        results.append((t["name"], result8))
+        del t, result
     return results, fit
 
 
@@ -275,10 +299,11 @@ def lighten_tile(model_lib_folder, tile, placements, sun, parameters, originals_
         if not os.path.isfile(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, lod))):
             continue
         results, fit = correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, originals, fits_folder, log)
-        for name, result in results:
+        for name, result8 in results:
             path = os.path.join(work_folder, name)
-            Image.fromarray((result * 255 + 0.5).astype(np.uint8)).save(path)
+            Image.fromarray(result8).save(path)
             corrected.append((name, path))
+        del results
     for name, path in corrected:
         originals.install(name, path)
         os.remove(path)

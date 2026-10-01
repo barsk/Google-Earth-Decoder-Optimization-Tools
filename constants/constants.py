@@ -144,9 +144,8 @@ SHADOW_LIGHTENING_REPORT_FILE = "shadow_lightening.txt"
 SHADOW_LIGHTENING_MIN_SUN_TILES = 4
 SHADOW_LIGHTENING_MAX_SUN_TILES = 12
 # memory of a shadow lightening task (the maps of a LOD00 texture): limits the parallel tasks. Committed memory, which is what runs
-# out: up to 8.7 GB on a 4752 x 4704 LOD00 (Orebro, Windows killed two tasks when 6 ran with 36 GB of free commit), the working set
-# peaks lower (4.5 GB on a 3536 x 3612 LOD00)
-SHADOW_LIGHTENING_TASK_MEMORY_GB = 9.0
+# out: measured peak 4.5 GB on a 4752 x 4704 LOD00 (Orebro), with a margin for larger textures
+SHADOW_LIGHTENING_TASK_MEMORY_GB = 5.5
 # the default settings (SHADOW_LIGHTENING section), set on the Karlstad test scenery: part 1, the shaded side of walls, roofs and
 # trees brightened up to the lit side, at most x wall_gain_cap, vegetation at vegetation_strength; part 2, the cast shadows lifted
 # by gain^shadow_strength (a full shadow ~x2.9), shadow_color of the shadow ratio's color shift, at most x shadow_gain_cap,

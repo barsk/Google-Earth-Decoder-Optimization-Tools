@@ -227,6 +227,12 @@ def rasterize(triangles, uvs, normal_sets, width, height):
     return point_map, normal_maps
 
 
+def srgb_from_8bit(srgb8):
+    # the sRGB colors (0-1, float32) of 8 bits colors, e.g. of the texels used only (a full float copy of a 4700 x 4700 texture is
+    # 0.27 GB)
+    return srgb8.astype(np.float32) / 255.0
+
+
 def srgb_to_linear(c):
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 
@@ -251,8 +257,10 @@ def upsample_smooth(small, height, width, valid=None):
     mask = np.ones(channels.shape[:2], dtype=np.float32) if valid is None else valid.astype(np.float32)
     resize = lambda a: np.asarray(Image.fromarray(a.astype(np.float32), mode="F").resize((width, height), Image.BILINEAR), dtype=np.float64)
     weight = resize(mask)
-    big = np.stack([resize(np.nan_to_num(channels[..., c]) * mask) for c in range(channels.shape[2])], axis=-1)
-    big = big / np.maximum(weight, 1e-6)[..., None]
+    big = np.empty((height, width, channels.shape[2]))
+    for c in range(channels.shape[2]):
+        big[..., c] = resize(np.nan_to_num(channels[..., c]) * mask)
+    big /= np.maximum(weight, 1e-6)[..., None]
     if valid is not None:
         big[weight < 0.25] = np.nan
     return big[..., 0] if small.ndim == 2 else big
@@ -268,21 +276,28 @@ def box_blur(values, mask, radius):
     return box(np.where(mask, values, 0.0)) / np.maximum(weights, 1e-9)
 
 
-def pad_gain(gain_map, iterations=8):
+def pad_gain(gain, iterations=8):
     # spreads a per-texel gain (NaN outside the mesh) into the uncovered texels around the pieces of the atlas: the sim filters
-    # across them, uncorrected borders showed as dark lines along the triangle edges
-    gain = gain_map.copy()
+    # across them, uncorrected borders showed as dark lines along the triangle edges. In place (the gain map is not copied), one
+    # channel at a time (the full-size temporary arrays of a 4700 x 4700 texture are 0.18 GB per channel)
     for _ in range(iterations):
         missing = np.isnan(gain[..., 0])
         if not missing.any():
             break
         valid = ~missing
-        filled = np.where(valid[..., None], gain, 0.0)
-        sums = np.zeros_like(gain)
         counts = np.zeros(missing.shape)
         for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            sums += np.roll(filled, (dy, dx), axis=(0, 1))
             counts += np.roll(valid, (dy, dx), axis=(0, 1))
         fill = missing & (counts > 0)
-        gain[fill] = sums[fill] / counts[fill, None]
-    return np.nan_to_num(gain, nan=1.0)
+        fill_counts = counts[fill]
+        del counts
+        for c in range(gain.shape[2]):
+            filled = np.where(valid, gain[..., c], 0.0)
+            sums = np.zeros(missing.shape)
+            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                sums += np.roll(filled, (dy, dx), axis=(0, 1))
+            del filled
+            gain[fill, c] = sums[fill] / fill_counts
+            del sums
+    np.nan_to_num(gain, copy=False, nan=1.0)
+    return gain

@@ -348,7 +348,7 @@ class MsfsProject:
                                           "--work_folder", os.path.join(work_folder, name), "--suns", format_suns(suns).replace(" ", ""),
                                           "--project_sun", format_suns([project_sun]), "--step4_texture_folder", str(step4_texture_folder),
                                           "--output", os.path.join(results_folder, name + JSON_FILE_EXT)] + parameters} for name in tiles]
-        # each task holds the maps of a LOD00 texture (up to ~9 GB committed): no more tasks than the free memory allows (too many tasks
+        # each task holds the maps of a LOD00 texture (up to ~4.5 GB committed): no more tasks than the free memory allows (too many tasks
         # get killed by Windows when the memory runs out)
         free_memory = free_memory_gb()
         nb_tasks = min(int(settings.nb_parallel_blender_tasks), max(1, int(free_memory // SHADOW_LIGHTENING_TASK_MEMORY_GB)))

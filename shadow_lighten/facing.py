@@ -76,12 +76,12 @@ def correction(normals, sun, ratios, knee, weights, gain_cap):
     return factor ** weights[:, None]
 
 
-def correct_facing(linear, srgb, normal_map, smooth_map, covered, blocked, sun, ratios, knee, gain_cap, vegetation_strength):
-    # part 1 on a texture (linear colors): vegetation with the smoothed normals at its strength, the texels in a cast shadow
-    # left as they are (part 2)
+def correct_facing(linear, srgb8, normal_map, smooth_map, covered, blocked, sun, ratios, knee, gain_cap, vegetation_strength):
+    # part 1 on a texture (linear colors, srgb8: the 8 bits colors): vegetation with the smoothed normals at its strength, the texels
+    # in a cast shadow left as they are (part 2)
     out = linear.copy()
     ys, xs = np.nonzero(covered)
-    green = vegetation(srgb[ys, xs])
+    green = vegetation(srgb8[ys, xs].astype(np.float32) / 255.0)
     normals = np.where(green[:, None], smooth_map[ys, xs], normal_map[ys, xs]).astype(np.float64)
     weights = np.where(green, vegetation_strength, 1.0)
     weights[blocked[ys, xs]] = 0.0
