@@ -348,11 +348,19 @@ class MsfsProject:
                                           "--work_folder", os.path.join(work_folder, name), "--suns", format_suns(suns).replace(" ", ""),
                                           "--project_sun", format_suns([project_sun]), "--step4_texture_folder", str(step4_texture_folder),
                                           "--output", os.path.join(results_folder, name + JSON_FILE_EXT)] + parameters} for name in tiles]
-        # each task holds the maps of a LOD00 texture (up to ~4.5 GB): no more tasks than the free memory allows (12 tasks with 33 GB
-        # free crashed half of them)
-        nb_tasks = min(int(settings.nb_parallel_blender_tasks), max(1, int(free_memory_gb() // SHADOW_LIGHTENING_TASK_MEMORY_GB)))
-        isolated_print("%d parallel tasks (%.0f GB of free memory)" % (nb_tasks, free_memory_gb()) + EOL)
+        # each task holds the maps of a LOD00 texture (up to ~9 GB committed): no more tasks than the free memory allows (too many tasks
+        # get killed by Windows when the memory runs out)
+        free_memory = free_memory_gb()
+        nb_tasks = min(int(settings.nb_parallel_blender_tasks), max(1, int(free_memory // SHADOW_LIGHTENING_TASK_MEMORY_GB)))
+        isolated_print("%d parallel tasks (%.0f GB of free memory)" % (nb_tasks, free_memory) + EOL)
         self.__multithread_blender_process_data(chunks(data, nb_tasks), "shadow_lighten_tile.py", "SHADOW LIGHTENING", "textures lightened")
+        # the tiles whose task died (e.g. killed when the memory ran out, other programs using more of it meanwhile): once more, one
+        # at a time
+        retried = [item for item in data if not os.path.isfile(os.path.join(results_folder, item["name"] + JSON_FILE_EXT))]
+        if retried:
+            isolated_print("%d tiles without result, retried one at a time: %s" % (len(retried), ", ".join(item["name"] for item in retried)) + EOL)
+            report.append("retried one at a time (no result in the parallel run): %s" % ", ".join(item["name"] for item in retried))
+            self.__multithread_blender_process_data(chunks(retried, 1), "shadow_lighten_tile.py", "SHADOW LIGHTENING (RETRY)", "textures lightened")
         shutil.rmtree(work_folder, ignore_errors=True)
 
         failed = []

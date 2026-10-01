@@ -24,7 +24,8 @@ DEFAULT_FREE_MEMORY_GB = 16.0
 
 
 def free_memory_gb():
-    # the physical memory available now, in GB
+    # the memory available now for new processes, in GB: the free physical memory, and on Windows at most the free commit (physical
+    # memory + page file not yet committed: when it runs out, Windows kills processes even with physical memory left)
     try:
         if sys.platform == "win32":
             import ctypes
@@ -37,7 +38,7 @@ def free_memory_gb():
             status = MemoryStatus()
             status.dwLength = ctypes.sizeof(MemoryStatus)
             if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
-                return status.ullAvailPhys / 1024 ** 3
+                return min(status.ullAvailPhys, status.ullAvailPageFile) / 1024 ** 3
         elif hasattr(os, "sysconf"):
             return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 1024 ** 3
     except (OSError, ValueError, AttributeError):
