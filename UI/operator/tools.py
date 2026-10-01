@@ -308,7 +308,8 @@ def reload_texture_colors(context):
 def reload_shadow_lightening(context):
     if context.scene.project_settings is not None:
         for setting, default in SHADOW_LIGHTENING_DEFAULTS.items():
-            setattr(context.scene.setting_props, setting, float(getattr(context.scene.project_settings, setting, default)))
+            # shown in percent, stored as a factor
+            setattr(context.scene.setting_props, setting, 100.0 * float(getattr(context.scene.project_settings, setting, default)))
         context.scene.setting_props.sun_candidates = str(getattr(context.scene.project_settings, "sun_candidates", ""))
 
 
@@ -377,7 +378,7 @@ def reload_project_settings(context):
         loaded = project_settings is not None and os.path.normcase(os.path.normpath(project_settings.path)) == os.path.normcase(os.path.normpath(project_path))
         if os.path.exists(project_path) and not loaded:
             msfs_project = MsfsProject(context.scene.global_settings.projects_path, context.scene.global_settings.project_name, context.scene.global_settings.definition_file, context.scene.global_settings.path, context.scene.global_settings.author_name, fast_init=True)
-            context.scene.project_settings = bpy.types.Scene.project_settings = msfs_project.settings
+            bpy.types.Scene.project_settings = msfs_project.settings
 
 def save_project_selection(context):
     # the panels reload the global settings file when they open: save the selected project in it, then load the settings of the

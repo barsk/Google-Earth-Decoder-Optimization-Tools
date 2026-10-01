@@ -32,6 +32,12 @@ def save_float_setting(props, context, name):
     context.scene.project_settings.save()
 
 
+def save_percent_setting(props, context, name):
+    # a setting shown in percent in the panel, saved as a factor in the project ini (60 % -> 0.6)
+    setattr(context.scene.project_settings, name, "{:.2f}".format(float(str(getattr(props, name))) / 100.0).rstrip("0").rstrip("."))
+    context.scene.project_settings.save()
+
+
 class SettingsPropertyGroup(bpy.types.PropertyGroup):
     def projects_path_updated(self, context):
         context.scene.global_settings.projects_path = self.projects_path_readonly = self.projects_path
@@ -288,22 +294,22 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
 
     # shadow lightening (step 2b): the settings of the SHADOW_LIGHTENING section
     def wall_gain_cap_updated(self, context):
-        save_float_setting(self, context, "wall_gain_cap")
+        save_percent_setting(self, context, "wall_gain_cap")
 
     def vegetation_strength_updated(self, context):
-        save_float_setting(self, context, "vegetation_strength")
+        save_percent_setting(self, context, "vegetation_strength")
 
     def shadow_strength_updated(self, context):
-        save_float_setting(self, context, "shadow_strength")
+        save_percent_setting(self, context, "shadow_strength")
 
     def shadow_color_updated(self, context):
-        save_float_setting(self, context, "shadow_color")
+        save_percent_setting(self, context, "shadow_color")
 
     def shadow_gain_cap_updated(self, context):
-        save_float_setting(self, context, "shadow_gain_cap")
+        save_percent_setting(self, context, "shadow_gain_cap")
 
     def shadow_vegetation_strength_updated(self, context):
-        save_float_setting(self, context, "shadow_vegetation_strength")
+        save_percent_setting(self, context, "shadow_vegetation_strength")
 
     def sun_candidates_updated(self, context):
         context.scene.project_settings.sun_candidates = self.sun_candidates.strip()
@@ -839,62 +845,68 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     wall_gain_cap: FloatProperty(
         name="Wall gain cap",
-        description="Shadow lightening: the most the shaded side of walls, roofs and trees is brightened (x)",
-        soft_min=1.0,
-        soft_max=5.0,
-        step=10,
-        precision=2,
-        default=float(getattr(bpy.types.Scene.project_settings, "wall_gain_cap", 3.0)) if bpy.types.Scene.project_settings is not None else 3.0,
+        description="Shadow lightening: the most the shaded side of walls, roofs and trees is brightened (300 % = up to 3 times)",
+        subtype="PERCENTAGE",
+        min=100.0,
+        max=600.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "wall_gain_cap", 3.0)) if bpy.types.Scene.project_settings is not None else 300.0,
         update=wall_gain_cap_updated
     )
     vegetation_strength: FloatProperty(
         name="Vegetation strength",
         description="Shadow lightening: the share of the correction of the shaded side applied to vegetation (lumpy meshes)",
-        soft_min=0.0,
-        soft_max=1.0,
-        step=5,
-        precision=2,
-        default=float(getattr(bpy.types.Scene.project_settings, "vegetation_strength", 0.9)) if bpy.types.Scene.project_settings is not None else 0.9,
+        subtype="PERCENTAGE",
+        min=0.0,
+        max=100.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "vegetation_strength", 0.9)) if bpy.types.Scene.project_settings is not None else 90.0,
         update=vegetation_strength_updated
     )
     shadow_strength: FloatProperty(
         name="Shadow strength",
-        description="Shadow lightening: how much the cast shadows are lifted (the gain to this power: 1 = up to the lit surface, 0.6 = partly)",
-        soft_min=0.0,
-        soft_max=1.0,
-        step=5,
-        precision=2,
-        default=float(getattr(bpy.types.Scene.project_settings, "shadow_strength", 0.6)) if bpy.types.Scene.project_settings is not None else 0.6,
+        description="Shadow lightening: how much the cast shadows are lifted (100 % = up to the lit surface, 60 % = partly)",
+        subtype="PERCENTAGE",
+        min=0.0,
+        max=100.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_strength", 0.6)) if bpy.types.Scene.project_settings is not None else 60.0,
         update=shadow_strength_updated
     )
     shadow_color: FloatProperty(
         name="Shadow color",
-        description="Shadow lightening: the share of the color shift of the shadows that is removed (0 = only the brightness, 1 = all: can turn yellowish)",
-        soft_min=0.0,
-        soft_max=1.0,
-        step=5,
-        precision=2,
-        default=float(getattr(bpy.types.Scene.project_settings, "shadow_color", 0.5)) if bpy.types.Scene.project_settings is not None else 0.5,
+        description="Shadow lightening: the share of the color shift of the shadows that is removed (0 % = only the brightness, 100 % = all: can turn yellowish)",
+        subtype="PERCENTAGE",
+        min=0.0,
+        max=100.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_color", 0.5)) if bpy.types.Scene.project_settings is not None else 50.0,
         update=shadow_color_updated
     )
     shadow_gain_cap: FloatProperty(
         name="Shadow gain cap",
-        description="Shadow lightening: the most a cast shadow is brightened (x, before the shadow strength)",
-        soft_min=1.0,
-        soft_max=10.0,
-        step=10,
-        precision=2,
-        default=float(getattr(bpy.types.Scene.project_settings, "shadow_gain_cap", 6.0)) if bpy.types.Scene.project_settings is not None else 6.0,
+        description="Shadow lightening: the most a cast shadow is brightened (600 % = up to 6 times, before the shadow strength)",
+        subtype="PERCENTAGE",
+        min=100.0,
+        max=1000.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_gain_cap", 6.0)) if bpy.types.Scene.project_settings is not None else 600.0,
         update=shadow_gain_cap_updated
     )
     shadow_vegetation_strength: FloatProperty(
         name="Shadow vegetation strength",
         description="Shadow lightening: the share of the cast shadow correction applied to vegetation (tree on tree shadows)",
-        soft_min=0.0,
-        soft_max=1.0,
-        step=5,
-        precision=2,
-        default=float(getattr(bpy.types.Scene.project_settings, "shadow_vegetation_strength", 0.5)) if bpy.types.Scene.project_settings is not None else 0.5,
+        subtype="PERCENTAGE",
+        min=0.0,
+        max=100.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_vegetation_strength", 0.5)) if bpy.types.Scene.project_settings is not None else 50.0,
         update=shadow_vegetation_strength_updated
     )
     sun_candidates: StringProperty(

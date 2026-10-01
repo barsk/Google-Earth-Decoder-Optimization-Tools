@@ -123,10 +123,10 @@ class SettingsOperator(PanelOperator):
             return
         col.label(text="Shadow lightening (saved to the project ini, section SHADOW_LIGHTENING): the shaded side of walls, roofs and trees is brightened up to its lit side; the cast shadows are partly lifted", icon=INFO_ICON)
         col.separator()
-        for name, label in (("wall_gain_cap", "Most brightening of the shaded side (x)"), ("vegetation_strength", "Share applied to vegetation"),
-                            ("shadow_strength", "Cast shadows: strength (1 = up to the lit surface)"), ("shadow_color", "Cast shadows: share of the color shift removed"),
-                            ("shadow_gain_cap", "Cast shadows: most brightening (x)"), ("shadow_vegetation_strength", "Cast shadows: share applied to vegetation")):
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label)
+        for name, label in (("wall_gain_cap", "Most brightening of the shaded side (300 % = 3 times)"), ("vegetation_strength", "Share applied to vegetation"),
+                            ("shadow_strength", "Cast shadows: strength (100 % = up to the lit surface)"), ("shadow_color", "Cast shadows: share of the color shift removed"),
+                            ("shadow_gain_cap", "Cast shadows: most brightening (600 % = 6 times)"), ("shadow_vegetation_strength", "Cast shadows: share applied to vegetation")):
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
             col.separator()
         draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns, azimuth/elevation, ... (empty: estimated)")
         col.separator()
