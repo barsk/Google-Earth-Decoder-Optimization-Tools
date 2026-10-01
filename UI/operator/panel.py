@@ -110,7 +110,26 @@ class SettingsOperator(PanelOperator):
         if self.operator_name in ["wm.add_tile_colliders"]:
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "collider_as_lower_lod", "Add the collider as the lower LOD for each tile")
             col.separator()
+        if self.operator_name == "wm.shadow_lightening":
+            self.draw_shadow_lightening_settings(context, col)
         self.draw_footer(context, self.layout, self.operator_name)
+
+    @staticmethod
+    def draw_shadow_lightening_settings(context, col):
+        # the settings of the SHADOW_LIGHTENING section of the project ini (read from it, saved to it when changed)
+        if getattr(bpy.types.Scene, "project_settings", None) is None:
+            col.label(text="Shadow lightening settings: select an existing project first (they are stored in its ini file)", icon=INFO_ICON)
+            col.separator()
+            return
+        col.label(text="Shadow lightening (saved to the project ini, section SHADOW_LIGHTENING): the shaded side of walls, roofs and trees is brightened up to its lit side; the cast shadows are partly lifted", icon=INFO_ICON)
+        col.separator()
+        for name, label in (("wall_gain_cap", "Most brightening of the shaded side (x)"), ("vegetation_strength", "Share applied to vegetation"),
+                            ("shadow_strength", "Cast shadows: strength (1 = up to the lit surface)"), ("shadow_color", "Cast shadows: share of the color shift removed"),
+                            ("shadow_gain_cap", "Cast shadows: most brightening (x)"), ("shadow_vegetation_strength", "Cast shadows: share applied to vegetation")):
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label)
+            col.separator()
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns, azimuth/elevation, ... (empty: estimated)")
+        col.separator()
 
     def draw_merge_panel(self, context):
         split = self.draw_setting_sections_panel(context)
@@ -300,15 +319,7 @@ class SettingsOperator(PanelOperator):
         split = self.draw_setting_sections_panel(context)
         col = self.draw_header(split, display_save=False)
         col.separator()
-        col.label(text="The shaded side of walls, roofs and trees is brightened up to its lit side; the cast shadows are partly lifted", icon=INFO_ICON)
-        col.separator()
-        for name, label in (("wall_gain_cap", "Most brightening of the shaded side (x)"), ("vegetation_strength", "Share applied to vegetation"),
-                            ("shadow_strength", "Cast shadows: strength (1 = up to the lit surface)"), ("shadow_color", "Cast shadows: share of the color shift removed"),
-                            ("shadow_gain_cap", "Cast shadows: most brightening (x)"), ("shadow_vegetation_strength", "Cast shadows: share applied to vegetation")):
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label)
-            col.separator()
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Capture suns, azimuth/elevation, ... (empty: estimated)")
-        col.separator()
+        self.draw_shadow_lightening_settings(context, col)
         self.draw_footer(context, self.layout, self.operator_name)
 
     def draw_python_panel(self, context):

@@ -25,6 +25,13 @@ from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, PNG_TEXTURE_FORMAT,
     LIGHT_500_SKY_BLUE_GUID, LIGHT_500_SKY_BLUE_DISPLAY_NAME, LIGHT_1000_SKY_BLUE_GUID, LIGHT_1000_SKY_BLUE_DISPLAY_NAME, LIGHT_100_PURPLE_GUID, LIGHT_100_PURPLE_DISPLAY_NAME, LIGHT_500_PURPLE_GUID, LIGHT_500_PURPLE_DISPLAY_NAME, LIGHT_1000_PURPLE_GUID, LIGHT_1000_PURPLE_DISPLAY_NAME, LIGHT_100_YELLOW_GUID, LIGHT_100_YELLOW_DISPLAY_NAME, LIGHT_500_YELLOW_GUID, LIGHT_500_YELLOW_DISPLAY_NAME, LIGHT_1000_YELLOW_GUID, LIGHT_1000_YELLOW_DISPLAY_NAME
 
 
+def save_float_setting(props, context, name):
+    # a float setting of the project ini (2 decimals) saved: a module function, not a method, because the property group used at
+    # runtime (updatedSettingsPropertyGroup) is built from the annotations only, so the update functions can't call its methods
+    setattr(context.scene.project_settings, name, "{:.2f}".format(float(str(getattr(props, name)))).rstrip("0").rstrip("."))
+    context.scene.project_settings.save()
+
+
 class SettingsPropertyGroup(bpy.types.PropertyGroup):
     def projects_path_updated(self, context):
         context.scene.global_settings.projects_path = self.projects_path_readonly = self.projects_path
@@ -258,49 +265,45 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.resize_ratio = "{:.2f}".format(float(str(self.resize_ratio))).rstrip("0").rstrip(".")
         context.scene.project_settings.save()
 
-    def texture_color_updated(self, context, name):
-        setattr(context.scene.project_settings, name, "{:.2f}".format(float(str(getattr(self, name)))).rstrip("0").rstrip("."))
-        context.scene.project_settings.save()
-
     def brightness_updated(self, context):
-        self.texture_color_updated(context, "brightness")
+        save_float_setting(self, context, "brightness")
 
     def contrast_updated(self, context):
-        self.texture_color_updated(context, "contrast")
+        save_float_setting(self, context, "contrast")
 
     def saturation_updated(self, context):
-        self.texture_color_updated(context, "saturation")
+        save_float_setting(self, context, "saturation")
 
     def hue_updated(self, context):
-        self.texture_color_updated(context, "hue")
+        save_float_setting(self, context, "hue")
 
     def red_level_updated(self, context):
-        self.texture_color_updated(context, "red_level")
+        save_float_setting(self, context, "red_level")
 
     def green_level_updated(self, context):
-        self.texture_color_updated(context, "green_level")
+        save_float_setting(self, context, "green_level")
 
     def blue_level_updated(self, context):
-        self.texture_color_updated(context, "blue_level")
+        save_float_setting(self, context, "blue_level")
 
     # shadow lightening (step 2b): the settings of the SHADOW_LIGHTENING section
     def wall_gain_cap_updated(self, context):
-        self.texture_color_updated(context, "wall_gain_cap")
+        save_float_setting(self, context, "wall_gain_cap")
 
     def vegetation_strength_updated(self, context):
-        self.texture_color_updated(context, "vegetation_strength")
+        save_float_setting(self, context, "vegetation_strength")
 
     def shadow_strength_updated(self, context):
-        self.texture_color_updated(context, "shadow_strength")
+        save_float_setting(self, context, "shadow_strength")
 
     def shadow_color_updated(self, context):
-        self.texture_color_updated(context, "shadow_color")
+        save_float_setting(self, context, "shadow_color")
 
     def shadow_gain_cap_updated(self, context):
-        self.texture_color_updated(context, "shadow_gain_cap")
+        save_float_setting(self, context, "shadow_gain_cap")
 
     def shadow_vegetation_strength_updated(self, context):
-        self.texture_color_updated(context, "shadow_vegetation_strength")
+        save_float_setting(self, context, "shadow_vegetation_strength")
 
     def sun_candidates_updated(self, context):
         context.scene.project_settings.sun_candidates = self.sun_candidates.strip()
