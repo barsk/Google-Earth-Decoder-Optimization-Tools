@@ -568,8 +568,8 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     high_precision: BoolProperty(
         name="High precision height data generation",
-        description="Generate the height data, using the most detailed tile lods",
-        default=bpy.types.Scene.project_settings.high_precision if bpy.types.Scene.project_settings is not None else False,
+        description="Generate the height data from the ground seen from above on the most detailed tile lods (the ground filter removes the buildings and trees). Off: the coarsest lods, smoothed, nearly a flat plane. Needed for an accurate flat water level. Default: on",
+        default=bpy.types.Scene.project_settings.high_precision if bpy.types.Scene.project_settings is not None else True,
         update=high_precision_updated
     )
     ground_filter_size: FloatProperty(

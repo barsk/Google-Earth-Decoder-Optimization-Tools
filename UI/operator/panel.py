@@ -681,9 +681,9 @@ class OT_GenerateHeightDataPanel(SettingsOperator):
     bl_idname = id_name
     bl_label = "5. Generate height data based on Google Earth tiles"
     operator_description = """Generate height data based on the profile of the Google Earth tiles.
-        In the OPENSTREETMAP section, you can enable high precision, by ticking the "high precision" checkbox if you want to generate 
-        height data based on the highest google Earth tile lods. This can help calculating the data 
-        for mountain areas but it is not suitable for city area, as it will produce noise due to building height"""
+        Keep "high precision" on (the default): the heights come from the ground of the most detailed tile lods, with the
+        buildings and trees removed by the ground filter, in cities as well as in mountain areas. The flat water level needs it.
+        Off, the heights come from the coarsest lods, smoothed into a nearly flat plane."""
     starting_section = OSM_INI_SECTION
     displayed_sections = [
         PROJECT_INI_SECTION,
