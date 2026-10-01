@@ -40,7 +40,7 @@ import shutil
 
 from utils.settings import Settings
 
-from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT, DEFAULT_GROUND_FILTER_SIZE, DEFAULT_WATER_DEPTH, \
+from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT, DEFAULT_GROUND_FILTER_SIZE, \
     SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_DEFAULTS
 
 
@@ -74,12 +74,9 @@ class ProjectSettings(Settings):
     ground_filter_size: float
     blend_outer_edges: str
     flat_water_level: str
-    water_depth: float
     exclude_water: str
     push_down_water: str
     smooth_beaches: str
-    remove_overlapping_octants: str
-    clip_nodes_to_cells: str
     exclude_forests: str
     exclude_woods: str
     exclude_nature_reserves: str
@@ -110,12 +107,9 @@ class ProjectSettings(Settings):
     GROUND_FILTER_SIZE_SETTING = "ground_filter_size"
     BLEND_OUTER_EDGES_SETTING = "blend_outer_edges"
     FLAT_WATER_LEVEL_SETTING = "flat_water_level"
-    WATER_DEPTH_SETTING = "water_depth"
     OPENSTREETMAP_SECTION = "OPENSTREETMAP"
     PUSH_DOWN_WATER_SETTING = "push_down_water"
     SMOOTH_BEACHES_SETTING = "smooth_beaches"
-    REMOVE_OVERLAPPING_OCTANTS_SETTING = "remove_overlapping_octants"
-    CLIP_NODES_TO_CELLS_SETTING = "clip_nodes_to_cells"
     TARGET_MIN_SIZE_VALUES_SETTING = "target_min_size_values"
 
     def __init__(self, global_path, path, project_name):
@@ -151,13 +145,10 @@ class ProjectSettings(Settings):
         self.ground_filter_size = DEFAULT_GROUND_FILTER_SIZE
         self.blend_outer_edges = "True"
         self.flat_water_level = "True"
-        self.water_depth = DEFAULT_WATER_DEPTH
         self.exclude_ground = "False"
         self.exclude_water = "True"
         self.push_down_water = "True"
         self.smooth_beaches = "True"
-        self.remove_overlapping_octants = "True"
-        self.clip_nodes_to_cells = "True"
         self.exclude_forests = "True"
         self.exclude_woods = "True"
         self.exclude_nature_reserves = "False"
@@ -234,13 +225,10 @@ class ProjectSettings(Settings):
         self.high_precision = json.loads(self.high_precision.lower())
         self.blend_outer_edges = json.loads(str(self.blend_outer_edges).lower())
         self.flat_water_level = json.loads(str(self.flat_water_level).lower())
-        self.water_depth = "{:.1f}".format(float(str(self.water_depth))).rstrip("0").rstrip(".")
         self.exclude_ground = json.loads(self.exclude_ground.lower())
         self.exclude_water = json.loads(self.exclude_water.lower())
         self.push_down_water = json.loads(str(self.push_down_water).lower())
         self.smooth_beaches = json.loads(str(self.smooth_beaches).lower())
-        self.remove_overlapping_octants = json.loads(str(self.remove_overlapping_octants).lower())
-        self.clip_nodes_to_cells = json.loads(str(self.clip_nodes_to_cells).lower())
         self.exclude_forests = json.loads(self.exclude_forests.lower())
         self.exclude_woods = json.loads(self.exclude_woods.lower())
         self.exclude_nature_reserves = json.loads(self.exclude_nature_reserves.lower())
@@ -280,13 +268,10 @@ class ProjectSettings(Settings):
         config.set(self.HEIGHT_MAPS_SECTION, self.GROUND_FILTER_SIZE_SETTING, str(self.ground_filter_size))
         config.set(self.HEIGHT_MAPS_SECTION, self.BLEND_OUTER_EDGES_SETTING, str(self.blend_outer_edges))
         config.set(self.HEIGHT_MAPS_SECTION, self.FLAT_WATER_LEVEL_SETTING, str(self.flat_water_level))
-        config.set(self.HEIGHT_MAPS_SECTION, self.WATER_DEPTH_SETTING, str(self.water_depth))
         if not config.has_section(self.OPENSTREETMAP_SECTION):
             config.add_section(self.OPENSTREETMAP_SECTION)
         config.set(self.OPENSTREETMAP_SECTION, self.PUSH_DOWN_WATER_SETTING, str(self.push_down_water))
         config.set(self.OPENSTREETMAP_SECTION, self.SMOOTH_BEACHES_SETTING, str(self.smooth_beaches))
-        config.set(self.OPENSTREETMAP_SECTION, self.REMOVE_OVERLAPPING_OCTANTS_SETTING, str(self.remove_overlapping_octants))
-        config.set(self.OPENSTREETMAP_SECTION, self.CLIP_NODES_TO_CELLS_SETTING, str(self.clip_nodes_to_cells))
         if not config.has_section(SHADOW_LIGHTENING_INI_SECTION):
             config.add_section(SHADOW_LIGHTENING_INI_SECTION)
         for name in SHADOW_LIGHTENING_DEFAULTS:

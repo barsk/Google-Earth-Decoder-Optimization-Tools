@@ -253,7 +253,6 @@ TILE_DOWNLOADER_COLOR_OPTIONS = (("brightness", "--brightness", 1.0), ("contrast
 # script running several scripts in one Blender process (e.g. all the lods of a tile)
 TASKS_RUNNER_SCRIPT = "run_tasks.py"
 WATER_DEPTH_SLOPE = 0.15
-DEFAULT_WATER_DEPTH = 0.0
 LANDMARK_PREFIX = "landmark_"
 
 RESOURCE_FOLDER = "resource"

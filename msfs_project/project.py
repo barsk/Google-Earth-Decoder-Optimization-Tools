@@ -1421,9 +1421,6 @@ class MsfsProject:
             has_mask_file = os.path.isfile(mask_file_path)
             has_water_mask_file = os.path.isfile(water_mask_file_path)
             has_beach_mask_file = os.path.isfile(beach_mask_file_path)
-            remove_overlapping_octants = bool(self.settings.remove_overlapping_octants)
-            clip_nodes_to_cells = bool(self.settings.clip_nodes_to_cells)
-            copy_lods = not has_mask_file and not has_water_mask_file and not has_beach_mask_file and not remove_overlapping_octants and not clip_nodes_to_cells
 
             for lod in tile.lods:
                 if not os.path.isdir(lod.folder):
@@ -1450,14 +1447,6 @@ class MsfsProject:
                     self.__remove_tile_collider(tile.name)
                     tiles.append(tile)
 
-                # if no mask file is present for this tile, this means that the tile will not be cleaned, so if it has been cleaned before,
-                # we ensure to retrieve the previous one (i.e. the entire tile, if it exists in the backup path)
-                if copy_lods:
-                    shutil.copyfile(os.path.join(lod_folder, lod.model_file), os.path.join(lod.folder, lod.model_file))
-
-                    for binary in lod.binaries:
-                        shutil.copyfile(os.path.join(lod_folder, binary.file), os.path.join(binary.folder, binary.file))
-
                 params = ["--folder", str(lod_folder), "--output_folder", str(lod.folder), "--model_file", str(lod.model_file),
                                                           "--positioning_file_path", str(os.path.join(self.osmfiles_folder, BOUNDING_BOX_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT))]
 
@@ -1473,14 +1462,10 @@ class MsfsProject:
                 if has_beach_mask_file:
                     params.extend(["--beach_mask_file_path", str(beach_mask_file_path)])
 
-                if remove_overlapping_octants:
-                    params.extend(["--remove_overlapping_octants", "True"])
-
-                if clip_nodes_to_cells:
-                    params.extend(["--clip_nodes_to_cells", "True"])
-
-                if has_mask_file or has_water_mask_file or has_beach_mask_file or remove_overlapping_octants or clip_nodes_to_cells:
-                    data.append({"name": lod.name, "params": params})
+                # every lod is processed: the nodes are always clipped to their octree cells (they overlap their neighbours with the same
+                # surface, which flickers), and the ground duplicated in the lower and upper octants is always removed
+                params.extend(["--remove_overlapping_octants", "True", "--clip_nodes_to_cells", "True"])
+                data.append({"name": lod.name, "params": params})
 
         return tiles, chunks(data, nb_parallel_blender_tasks)
 
@@ -1809,7 +1794,7 @@ class MsfsProject:
                                         "values": [float(h) for h in height_data.get(xml.DATA_ATTR).split()], "bounds": get_coords_from_file_name(tile.name)})
 
         levels = flatten_water_height_data(height_maps, samples, water_areas_file_path, level_offset=WATER_LEVEL_OFFSET, shore_margin=WATER_LEVEL_SHORE_MARGIN, grid_coverage=HEIGHT_MAP_GRID_COVERAGE,
-                                           max_depth=float(self.settings.water_depth), shore_depth=WATER_SHORE_DEPTH, depth_slope=WATER_DEPTH_SLOPE)
+                                           max_depth=0.0, shore_depth=WATER_SHORE_DEPTH, depth_slope=WATER_DEPTH_SLOPE)
 
         for height_map in height_maps:
             height_map["elem"].set(height_map["xml"].DATA_ATTR, " ".join(str(h) for h in height_map["values"]))

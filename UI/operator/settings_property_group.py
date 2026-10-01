@@ -176,20 +176,8 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.process_all = self.process_all
         context.scene.project_settings.save()
 
-    def water_depth_updated(self, context):
-        context.scene.project_settings.water_depth = "{:.1f}".format(float(str(self.water_depth))).rstrip("0").rstrip(".")
-        context.scene.project_settings.save()
-
     def flat_water_level_updated(self, context):
         context.scene.project_settings.flat_water_level = self.flat_water_level
-        context.scene.project_settings.save()
-
-    def clip_nodes_to_cells_updated(self, context):
-        context.scene.project_settings.clip_nodes_to_cells = self.clip_nodes_to_cells
-        context.scene.project_settings.save()
-
-    def remove_overlapping_octants_updated(self, context):
-        context.scene.project_settings.remove_overlapping_octants = self.remove_overlapping_octants
         context.scene.project_settings.save()
 
     def smooth_beaches_updated(self, context):
@@ -474,18 +462,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         maxlen=256,
         update=airport_city_updated
     )
-    clip_nodes_to_cells: BoolProperty(
-        name="Clip the nodes to their octree cells",
-        description="The Google Earth nodes overlap their neighbours by 1 to 4 m with the same surface, which flickers on the tile seams and the node boundaries: cut each node at the edges of its cell (tiles placed in their octree cell only)",
-        default=bpy.types.Scene.project_settings.clip_nodes_to_cells if bpy.types.Scene.project_settings is not None else True,
-        update=clip_nodes_to_cells_updated
-    )
-    remove_overlapping_octants: BoolProperty(
-        name="Remove the ground duplicated in the octants",
-        description="The lower and upper halves (octants) of the Google Earth tiles both contain the ground near their split, and the two copies flicker: remove the upper copy",
-        default=bpy.types.Scene.project_settings.remove_overlapping_octants if bpy.types.Scene.project_settings is not None else True,
-        update=remove_overlapping_octants_updated
-    )
     smooth_beaches: BoolProperty(
         name="Smooth the beaches",
         description="Smooth the beaches (OpenStreetMap natural=beach) of the Google Earth tiles, whose photogrammetry of the sand is spiky",
@@ -578,16 +554,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=bpy.types.Scene.project_settings.process_all if bpy.types.Scene.project_settings is not None else False,
         update=process_all_updated
     )
-    water_depth: FloatProperty(
-        name="Water depth",
-        description="Maximum depth (in meters) of the bottom of the water bodies, under their flat level. The bottom goes down from 1 meter at the shore (0: flat bottom at the level). The MSFS water surface follows the bottom, keep 0 unless testing",
-        min=0.0,
-        soft_max=20.0,
-        step=50,
-        precision=1,
-        default=float(bpy.types.Scene.project_settings.water_depth) if bpy.types.Scene.project_settings is not None else 0.0,
-        update=water_depth_updated
-    )
     flat_water_level: BoolProperty(
         name="Flat water level",
         description="Set the height data of each water body to a flat level, at the Google Earth water surface. The MSFS water surface follows the terrain",
@@ -617,10 +583,10 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         update=ground_filter_size_updated
     )
     height_adjustment: FloatProperty(
-        name="Height adjustment",
-        description="Adjust the height data calculation (in meters)",
-        soft_min=-100.0,
-        soft_max=100.0,
+        name="MSFS terrain offset",
+        description="Height of the MSFS terrain relative to the ground of the tiles (in meters, 0 or below), keeping the terrain from poking through the tiles: more negative if it shows through, closer to 0 if gaps appear at the edges. Default: -1 m",
+        soft_min=-10.0,
+        max=0.0,
         step=0.1,
         precision=1,
         default=float(bpy.types.Scene.project_settings.height_adjustment) if bpy.types.Scene.project_settings is not None else 0.0,

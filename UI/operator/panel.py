@@ -187,12 +187,21 @@ class SettingsOperator(PanelOperator):
         col = self.draw_header(split, display_save=False)
         col.separator()
 
-        if self.operator_name != "wm.create_terraform_and_exclusion_polygons":
+        # the OpenStreetMap settings define the data shared by the steps 3, 4 and 5 (downloaded, and used for the polygons, the 3d data
+        # cleanup and the height data): they are set in step 3 only, so that the three steps use the same data
+        osm_settings_step = self.operator_name == "wm.create_terraform_and_exclusion_polygons"
+        osm_settings_from_step_3 = self.operator_name in ["wm.cleanup_3d_data", "wm.generate_height_data"]
+        project_settings = getattr(bpy.types.Scene, "project_settings", None)
+
+        if osm_settings_from_step_3:
+            col.label(text="OpenStreetMap settings (accuracy, kept and excluded data, airport): set in step 3", icon=INFO_ICON)
+            col.separator()
+        else:
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "isolate_3d_data", "OpenStreetMap accuracy")
             col.separator()
 
-        if self.operator_name in ["wm.generate_height_data", "wm.cleanup_3d_data", "wm.keep_only_buildings_3d_data", "wm.keep_only_buildings_and_roads_3d_data"]:
-            if context.scene.project_settings.isolate_3d_data:
+        if osm_settings_step or self.operator_name in ["wm.keep_only_buildings_3d_data", "wm.keep_only_buildings_and_roads_3d_data"]:
+            if project_settings is not None and project_settings.isolate_3d_data:
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_buildings", "Keep buildings 3d data", enabled=False)
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "building_margin", "Building margin")
@@ -210,10 +219,6 @@ class SettingsOperator(PanelOperator):
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "smooth_beaches", "Smooth the beaches")
                 col.separator()
-                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "clip_nodes_to_cells", "Clip the nodes to their octree cells")
-                col.separator()
-                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "remove_overlapping_octants", "Remove the ground duplicated in the octants")
-                col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_forests", "Exclude forests 3d data")
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_woods", "Exclude woods 3d data")
@@ -227,7 +232,7 @@ class SettingsOperator(PanelOperator):
             col.separator()
 
         if self.operator_name == "wm.generate_height_data" or self.operator_name == "wm.prepare_3d_data":
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "height_adjustment", "Height data adjustment (in meters)")
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "height_adjustment", "MSFS terrain offset (m)")
             col.separator()
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "ground_filter_size", "Ground filter size (in meters, 0 = off)")
             col.separator()
@@ -235,29 +240,28 @@ class SettingsOperator(PanelOperator):
             col.separator()
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "flat_water_level", "Flat water level")
             col.separator()
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "water_depth", "Water depth (in meters, 0 = flat bottom)")
-            col.separator()
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "high_precision", "High precision height data generation")
             col.separator()
 
-        if self.operator_name != "wm.generate_height_data" and self.operator_name != "wm.prepare_3d_data" and self.operator_name != "wm.create_terraform_and_exclusion_polygons":
+        if self.operator_name != "wm.generate_height_data" and self.operator_name != "wm.prepare_3d_data" and not osm_settings_step:
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "process_all", "Process all the tiles (if unticked, process only the tiles that have not been cleaned)")
             col.separator()
 
-        if self.operator_name == "wm.create_terraform_and_exclusion_polygons":
+        if osm_settings_step:
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_forests_vegetation", "Create MSFS vegetation on forests OSM area")
             col.separator()
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_woods_vegetation", "Create MSFS vegetation on woods OSM area")
             col.separator()
 
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "airport_city", "Airport city")
-        col.separator()
+        if not osm_settings_from_step_3:
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "airport_city", "Airport city")
+            col.separator()
 
-        draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "force_osm_data_download", "Force openStreetMap data download")
-        col.separator()
+            draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "force_osm_data_download", "Force openStreetMap data download")
+            col.separator()
 
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "overpass_api_uri_readonly", "Uri of the Overpass API", enabled=False)
-        col.separator()
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "overpass_api_uri_readonly", "Uri of the Overpass API", enabled=False)
+            col.separator()
 
         self.draw_footer(context, self.layout, self.operator_name)
 
@@ -563,7 +567,8 @@ class OT_CreateTerraformAndExclusionPolygonsPanel(SettingsOperator):
     operator_description = """Create the terraform and exclusion polygons for the scenery.
         In the OPENSTREETMAP section, set the city to exclude the airport, if it exists.
         In the OPENSTREETMAP section, indicate if you want to exclude the ground 3d data (forests, woods), 
-        the nature reserves, and/or the parks (can produce 3d artifacts)."""
+        the nature reserves, and/or the parks (can produce 3d artifacts).
+        The OpenStreetMap settings are set here only: the steps 4 and 5 use the same data."""
     starting_section = OSM_INI_SECTION
     displayed_sections = [
         PROJECT_INI_SECTION,
@@ -579,7 +584,7 @@ class OT_Cleanup3dDataPanel(SettingsOperator):
     bl_idname = id_name
     bl_label = "4. Cleanup 3d data from Google Earth tiles"
     operator_description = """Automatically cleans 3d data from the Google Earth tiles, based on the OpenStreetMap data.
-        Optionally, in the OPENSTREETMAP section, set the city of the airport, in case you want to remove an airport.
+        The OpenStreetMap settings (accuracy, kept and excluded data, airport city) are set in step 3.
         Notice: this method can produce some visual artifacts, and buildings that are not included in OpenStreetMap data may be removed"""
     starting_section = OSM_INI_SECTION
     displayed_sections = [
