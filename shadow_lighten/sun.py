@@ -30,7 +30,7 @@ import numpy as np
 from mathutils import Vector
 from PIL import Image
 
-from .textures import load_triangles, load_occluders, srgb_to_linear, lum
+from .textures import finest_lod, load_triangles, load_occluders, srgb_to_linear, lum
 
 GRID_AZIMUTHS = np.arange(0, 360, 10)
 GRID_ELEVATIONS = np.arange(10, 61, 5)
@@ -108,7 +108,7 @@ def correlation(shadow, luminance):
 
 
 def tile_samples(model_lib_folder, tile, placements, texture_path, count, rng):
-    triangles, uvs, normals, images, owners = load_triangles(os.path.join(model_lib_folder, tile + "_LOD00.gltf"))
+    triangles, uvs, normals, images, owners = load_triangles(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, finest_lod(model_lib_folder, tile))))
     bvh = load_occluders(model_lib_folder, tile, placements, triangles)
     return bvh, sample_texels(triangles, uvs, normals, images, owners, texture_path, count, rng)
 
@@ -126,7 +126,8 @@ def estimate_tile_sun(model_lib_folder, tile, placements, texture_path):
             blocked, away = shadow_flags(bvh, points, normals, sun_vector(azimuth, elevation))
             best = max(best, (correlation(blocked | away, luminance), float(azimuth), float(elevation)))
     _, azimuth0, elevation0 = best
-    points, normals, luminance = sample_texels(*load_triangles(os.path.join(model_lib_folder, tile + "_LOD00.gltf")), texture_path, FINE_SAMPLES, rng)
+    points, normals, luminance = sample_texels(*load_triangles(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, finest_lod(model_lib_folder, tile)))),
+                                               texture_path, FINE_SAMPLES, rng)
     fine = []
     for azimuth in np.arange(azimuth0 - 8, azimuth0 + 9, 2):
         for elevation in np.arange(max(elevation0 - 4, 3), elevation0 + 5, 1):

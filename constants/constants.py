@@ -133,6 +133,9 @@ PACKAGE_ORDER_HINT = "CUSTOM_WORLD_SCENERY"
 
 # landmarks: buildings (OSM ids listed in the project landmarks file) keeping more detailed LODs than the tiles
 LANDMARKS_FILE = "landmarks.txt"
+# tiles downloaded to a more detailed lod level than the others (e.g. LOD 20 areas of a LOD 17-19 project, one tile name per
+# line): the landmark tool keeps their lods and skips the landmarks inside them
+UPGRADE_TILES_FILE = "upgrade_tiles.txt"
 LANDMARK_OBJECT_PREFIX = "landmark_"
 DEFAULT_TILES_MAX_LOD_LEVEL = 19
 LANDMARK_MIN_SCORE = 3

@@ -54,6 +54,7 @@ parser.add_argument("--suns", required=True, help="the capture suns: azimuth/ele
 parser.add_argument("--project_sun", required=True, help="the sun of the tiles that fit none: azimuth/elevation")
 parser.add_argument("--step4_texture_folder", default=str(), help="the textures of step 4's backup, corrected too")
 parser.add_argument("--output", required=True, help="the json file of the log")
+parser.add_argument("--context_tile", default=str(), help="for a model that isn't a tile (a landmark object): its tile")
 for name, value in DEFAULT_PARAMETERS.items():
     parser.add_argument("--" + name, type=float, default=value)
 args = parser.parse_args(argv)
@@ -65,6 +66,7 @@ project_sun = parse_suns(args.project_sun)[0]
 azimuth, elevation, how = choose_sun(args.folder, args.name, placements, originals.path, parse_suns(args.suns), project_sun)
 parameters = {name: getattr(args, name) for name in DEFAULT_PARAMETERS}
 log = lighten_tile(args.folder, args.name, placements, sun_vector(azimuth, elevation), parameters, args.originals_folder, args.work_folder,
-                   args.step4_texture_folder if args.step4_texture_folder and os.path.isdir(args.step4_texture_folder) else None)
+                   args.step4_texture_folder if args.step4_texture_folder and os.path.isdir(args.step4_texture_folder) else None,
+                   args.context_tile or None)
 with open(args.output, "w", encoding="utf-8") as f:
     json.dump({"tile": args.name, "azimuth": azimuth, "elevation": elevation, "sun": how, "seconds": round(time.time() - start), "log": log}, f)

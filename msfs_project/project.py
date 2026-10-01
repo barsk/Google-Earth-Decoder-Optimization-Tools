@@ -30,6 +30,7 @@ import os
 import subprocess
 
 from shapely.errors import ShapelyDeprecationWarning
+from shapely.ops import unary_union
 
 from utils.install_lib import install_python_lib
 from utils.string import remove_accents
@@ -309,7 +310,10 @@ class MsfsProject:
         os.makedirs(results_folder, exist_ok=True)
         model_lib_folder = self.model_lib_folder
         objects_xml = self.objects_xml.file_path
-        tiles = sorted(tile.name for tile in self.tiles.values() if tile.valid and os.path.isfile(os.path.join(model_lib_folder, tile.name + "_LOD00.gltf")))
+        # (the most detailed LOD of a tile is LOD01 when the landmark tool moved its level 20 to the landmark objects)
+        from shadow_lighten.textures import finest_lod
+        finest = {tile.name: finest_lod(model_lib_folder, tile.name) for tile in self.tiles.values() if tile.valid}
+        tiles = sorted(name for name, lod in finest.items() if lod is not None)
         report = []
 
         # the capture suns: from the settings, else from the tile fits of the most built-up tiles
@@ -318,7 +322,8 @@ class MsfsProject:
             project_sun = suns[0]
             report.append("capture suns from the settings: %s" % format_suns(suns))
         else:
-            sizes = {name: os.path.getsize(os.path.join(model_lib_folder, name + "_LOD00.bin")) for name in tiles if os.path.isfile(os.path.join(model_lib_folder, name + "_LOD00.bin"))}
+            bins = {name: os.path.join(model_lib_folder, "%s_%s.bin" % (name, finest[name])) for name in tiles}
+            sizes = {name: os.path.getsize(path) for name, path in bins.items() if os.path.isfile(path)}
             count = min(len(sizes), max(SHADOW_LIGHTENING_MIN_SUN_TILES, min(SHADOW_LIGHTENING_MAX_SUN_TILES, len(sizes) // 8)))
             sun_tiles = sorted(sizes, key=sizes.get, reverse=True)[:count]
             data = [{"name": name, "params": ["--folder", str(model_lib_folder), "--name", name, "--objects_xml", str(objects_xml), "--originals_folder", str(originals_folder),
@@ -361,6 +366,26 @@ class MsfsProject:
             isolated_print("%d tiles without result, retried one at a time: %s" % (len(retried), ", ".join(item["name"] for item in retried)) + EOL)
             report.append("retried one at a time (no result in the parallel run): %s" % ", ".join(item["name"] for item in retried))
             self.__multithread_blender_process_data(chunks(retried, 1), "shadow_lighten_tile.py", "SHADOW LIGHTENING (RETRY)", "textures lightened")
+        shutil.rmtree(work_folder, ignore_errors=True)
+
+        # the landmark objects (more detailed than their tiles): each with the sun of its tile and the geometry around its tile
+        landmark_objects = sorted(path.name[:-len("_LOD00" + GLTF_FILE_EXT)] for path in Path(model_lib_folder).glob(LANDMARK_OBJECT_PREFIX + "*_LOD00" + GLTF_FILE_EXT))
+        landmark_data = []
+        for name in landmark_objects:
+            tile_name = name.rsplit("_", 1)[-1]
+            tile_sun = project_sun
+            result_path = os.path.join(results_folder, tile_name + JSON_FILE_EXT)
+            if os.path.isfile(result_path):
+                with open(result_path, encoding="utf-8") as f:
+                    result = json.load(f)
+                tile_sun = (result["azimuth"], result["elevation"])
+            landmark_data.append({"name": name, "params": ["--folder", str(model_lib_folder), "--name", name, "--objects_xml", str(objects_xml), "--originals_folder", str(originals_folder),
+                                                           "--work_folder", os.path.join(work_folder, name), "--suns", format_suns([tile_sun]).replace(" ", ""),
+                                                           "--project_sun", format_suns([project_sun]), "--step4_texture_folder", str(step4_texture_folder),
+                                                           "--output", os.path.join(results_folder, name + JSON_FILE_EXT), "--context_tile", tile_name] + parameters})
+        if landmark_data:
+            self.__multithread_blender_process_data(chunks(landmark_data, nb_tasks), "shadow_lighten_tile.py", "SHADOW LIGHTENING OF THE LANDMARKS", "textures lightened")
+            tiles = tiles + landmark_objects
         shutil.rmtree(work_folder, ignore_errors=True)
 
         failed = []
@@ -517,8 +542,13 @@ class MsfsProject:
         max_level = int(getattr(self.settings, "tiles_max_lod_level", DEFAULT_TILES_MAX_LOD_LEVEL))
         landmarks = [osm_id for osm_id in read_landmarks(landmarks_file) if not self.__landmark_exists(osm_id)]
         isolated_print("%d new landmarks to upgrade, tiles max lod level %d" % (len(landmarks), max_level))
+        upgrade_tiles = self.__upgrade_tiles()
+        if upgrade_tiles:
+            isolated_print("%d tiles keep their lods (%s)" % (len(upgrade_tiles), UPGRADE_TILES_FILE))
 
         self.__create_tiles_bounding_boxes()
+        upgrade_area = unary_union([tile.bbox_gdf.to_crs(EPSG_WGS84).geometry.union_all() for tile in self.tiles.values() if tile.name in upgrade_tiles]) \
+            if upgrade_tiles else None
         ox.config(overpass_endpoint=settings.overpass_api_uri, log_console=False, use_cache=False, log_level=lg.ERROR)
         b = bbox_to_poly(self.coords[1], self.coords[0], self.coords[2], self.coords[3])
 
@@ -537,6 +567,9 @@ class MsfsProject:
                 pr_bg_orange("Landmark " + osm_id + " is already part of another landmark" + EOL + CEND)
                 continue
             geocode_gdf = geocode_gdf[[GEOMETRY_OSM_COLUMN]].dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
+            if upgrade_area is not None and geocode_gdf.to_crs(EPSG_WGS84).geometry.union_all().within(upgrade_area):
+                isolated_print("Landmark " + osm_id + " is in tiles that keep their lods: not needed")
+                continue
             isolated_area = union_gdf(isolated_area, geocode_gdf[[GEOMETRY_OSM_COLUMN]])
             masks[osm_id] = geocode_gdf
 
@@ -557,10 +590,18 @@ class MsfsProject:
             self.__create_geocode_mask_file(geocode_gdf, b)
             self.__exclude_lods_3d_data_from_geocode(osm_id, geocode_gdf, settings)
 
-        self.__drop_tiles_lods_above(max_level)
+        self.__drop_tiles_lods_above(max_level, upgrade_tiles)
         self.__repack_landmarks_textures(settings)
         self.__remove_unused_textures()
         return True
+
+    def __upgrade_tiles(self):
+        # the tiles that keep their lods (UPGRADE_TILES_FILE of the project)
+        file_path = os.path.join(self.project_folder, UPGRADE_TILES_FILE)
+        if not os.path.isfile(file_path):
+            return set()
+        with open(file_path, encoding="utf-8") as file:
+            return {line.split("#")[0].strip() for line in file if line.split("#")[0].strip()}
 
     def __tile_lod_numbers(self, tile):
         # {lod model file: lod number}, the least detailed lod (highest number) being the tile level, each lower number one level more
@@ -577,7 +618,9 @@ class MsfsProject:
         from UI.prefs import get_prefs
         from blender import has_legacy_tile_scale
 
-        tile_numbers = {tile.name: self.__tile_lod_numbers(tile) for tile in self.tiles.values()}
+        # the tiles that keep their lods (more detailed than the others) don't take part
+        upgrade_tiles = self.__upgrade_tiles()
+        tile_numbers = {tile.name: self.__tile_lod_numbers(tile) for tile in self.tiles.values() if tile.name not in upgrade_tiles}
         levels = [len(name) + max(numbers.values()) - min(numbers.values()) for name, numbers in tile_numbers.items() if numbers]
         if not levels or max(levels) > max_level:
             return False
@@ -592,8 +635,10 @@ class MsfsProject:
                 pr_bg_orange("The tiles were placed by an older version (bounding box): create the project again from its download to add the level %d of the landmarks" % level + EOL + CEND)
                 return False
 
+        # the downloader: GEDOT_TILE_DOWNLOADER (e.g. set by Earth2Scenery, whose downloader has TileDownloader's options), else the
+        # addon preference
         prefs = get_prefs()
-        exe = prefs.tile_downloader_exe_path if prefs is not None else str()
+        exe = os.environ.get("GEDOT_TILE_DOWNLOADER") or (prefs.tile_downloader_exe_path if prefs is not None else str())
         if not exe or not os.path.isfile(bpy.path.abspath(exe)):
             pr_bg_orange("Set the path of the Earth2MSFS TileDownloader.exe in the addon preferences to download the level %d of the landmarks" % level + EOL + CEND)
             return False
@@ -767,10 +812,12 @@ class MsfsProject:
     def __landmark_exists(self, osm_id):
         return len(list(Path(self.model_lib_folder).glob(LANDMARK_OBJECT_PREFIX + osm_id + "_*" + XML_FILE_EXT))) > 0
 
-    def __drop_tiles_lods_above(self, max_level):
-        # remove the tile lods more detailed than max_level (the textures are removed later if no longer used)
+    def __drop_tiles_lods_above(self, max_level, keep_tiles=frozenset()):
+        # remove the tile lods more detailed than max_level (the textures are removed later if no longer used), except in keep_tiles
         print_title("REMOVE THE TILE LODS ABOVE LEVEL %d" % max_level)
         for tile in self.tiles.values():
+            if tile.name in keep_tiles:
+                continue
             xml = MsfsObjectXml(self.model_lib_folder, tile.definition_file)
             model_files = [lod.get(xml.MODEL_FILE_ATTR) for lod in xml.find_scenery_lods()]
             numbers = {model_file: int(model_file[-7:-5]) for model_file in model_files if re.search(r"_LOD\d\d\.gltf$", model_file)}

@@ -58,7 +58,8 @@ DARKNESS_RANGE = (0.55, 0.9)  # luminance against the lit reference: fully a sha
 DARKNESS_BLUR = 2           # the luminance for the darkness blurred over 5 x 5 texels
 SMOOTH_CELL = 2.0           # vegetation normals: averaged over the 3 x 3 x 3 cells of this size around a vertex
 # the work size of the likelihood and the reference per LOD (upsampled), so that their texels are ~0.8 m on every LOD
-LOW_SCALES = {"LOD00": 4, "LOD01": 2, "LOD02": 1, "LOD03": 1}
+# by rank: the most detailed LOD of the tile, the next one, ...
+LOW_SCALES = (4, 2, 1, 1)
 FITS_FOLDER = "fits"
 
 DEFAULT_PARAMETERS = dict(SHADOW_LIGHTENING_DEFAULTS)
@@ -161,14 +162,14 @@ def stored_fits(fits_folder):
             "shadow_ratio_raw": median(shadow_ratios) if shadow_ratios else None}
 
 
-def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, originals, fits_folder, log):
+def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, originals, fits_folder, log, context=None, rank=0):
     # parts 1 and 2 on the textures of one LOD (each with its own triangles); fit: None for LOD00 (fitted here, over all its
     # textures, and returned), else the LOD00 parameters. Returns [(image name, corrected texture, 8 bits)], the fit
     triangles, uvs, normals, images, owners = load_triangles(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, lod)))
     if not len(triangles):
         return [], fit
-    bvh = load_occluders(model_lib_folder, tile, placements, triangles)
-    textures = [prepare_texture(originals, name, triangles[owners == k], uvs[owners == k], normals[owners == k], bvh, sun, LOW_SCALES.get(lod, 1))
+    bvh = load_occluders(model_lib_folder, tile, placements, triangles, context=context)
+    textures = [prepare_texture(originals, name, triangles[owners == k], uvs[owners == k], normals[owners == k], bvh, sun, LOW_SCALES[min(rank, len(LOW_SCALES) - 1)])
                 for k, name in enumerate(images) if (owners == k).any()]
     if not textures:
         return [], fit
@@ -287,18 +288,22 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
     return results, fit
 
 
-def lighten_tile(model_lib_folder, tile, placements, sun, parameters, originals_folder, work_folder, step4_texture_folder=None):
-    # parts 1 and 2 on every texture of every LOD of a tile, installed (the originals kept). Returns the log lines
+def lighten_tile(model_lib_folder, tile, placements, sun, parameters, originals_folder, work_folder, step4_texture_folder=None,
+                 context_tile=None):
+    # parts 1 and 2 on every texture of every LOD of a tile, installed (the originals kept). Returns the log lines. context_tile:
+    # for a model that isn't a tile (a landmark object), its tile (the geometry around it)
     parameters = dict(DEFAULT_PARAMETERS, **(parameters or {}))
     originals = Originals(os.path.join(model_lib_folder, "texture"), originals_folder, step4_texture_folder)
     fits_folder = os.path.join(originals_folder, FITS_FOLDER)
     os.makedirs(fits_folder, exist_ok=True)
     os.makedirs(work_folder, exist_ok=True)
     log, fit, corrected = [], None, []
+    rank = 0  # the LODs present, from the most detailed (it may be LOD01, see finest_lod)
     for lod in LODS:
         if not os.path.isfile(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, lod))):
             continue
-        results, fit = correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, originals, fits_folder, log)
+        results, fit = correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, originals, fits_folder, log, context_tile, rank)
+        rank += 1
         for name, result8 in results:
             path = os.path.join(work_folder, name)
             Image.fromarray(result8).save(path)

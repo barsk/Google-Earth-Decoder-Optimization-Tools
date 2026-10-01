@@ -50,6 +50,47 @@ def read_accessor(gltf, data, index):
     return values.reshape(accessor["count"], n) if n > 1 else values
 
 
+def finest_lod(model_lib_folder, name):
+    # the most detailed LOD of a model (e.g. "LOD00"; "LOD01" for the tiles whose level 20 went to their landmark objects), or None
+    for number in range(10):
+        lod = "LOD%02d" % number
+        if os.path.isfile(os.path.join(model_lib_folder, "%s_%s.gltf" % (name, lod))):
+            return lod
+    return None
+
+
+def node_matrix(node):
+    # the local transform of a glTF node (4x4, column vectors): its matrix, or translation x rotation x scale
+    if "matrix" in node:
+        return np.array(node["matrix"], dtype=np.float64).reshape(4, 4).T
+    x, y, z, w = node.get("rotation", [0.0, 0.0, 0.0, 1.0])
+    rotation = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                         [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation * np.array(node.get("scale", [1.0, 1.0, 1.0]))[None, :]
+    matrix[:3, 3] = node.get("translation", [0.0, 0.0, 0.0])
+    return matrix
+
+
+def mesh_nodes(gltf):
+    # (node, world matrix) of the nodes with a mesh, through the node hierarchy of the scene (all the root nodes without scene)
+    nodes = gltf.get("nodes", [])
+    children = {child for node in nodes for child in node.get("children", [])}
+    scenes = gltf.get("scenes", [])
+    roots = scenes[gltf.get("scene", 0)].get("nodes", []) if scenes else [i for i in range(len(nodes)) if i not in children]
+    result = []
+    stack = [(index, np.eye(4)) for index in roots]
+    while stack:
+        index, parent = stack.pop(0)
+        node = nodes[index]
+        world = parent @ node_matrix(node)
+        if "mesh" in node:
+            result.append((node, world))
+        stack.extend((child, world) for child in node.get("children", []))
+    return result
+
+
 def load_triangles(gltf_path):
     # the triangles of a model (T, 3, 3) as (east, north, up), their uvs (T, 3, 2) and vertex normals (T, 3, 3), the image files of
     # the model and the index of each triangle's image (-1: no texture). A LOD can have several textures (the terrain completion
@@ -60,21 +101,25 @@ def load_triangles(gltf_path):
         data = f.read()
     images = [image["uri"] for image in gltf.get("images", [])]
     positions, uvs, normals, owners = [], [], [], []
-    for node in gltf["nodes"]:
-        if "mesh" not in node:
-            continue
-        if any(key in node for key in ("matrix", "rotation", "scale")):
-            raise ValueError("transformed nodes are not supported")
-        translation = np.array(node.get("translation", [0.0, 0.0, 0.0]))
+    for node, world in mesh_nodes(gltf):
+        # the node transforms (GEDOT's placed tiles have translations only; the models exported by Blender, e.g. the landmark
+        # objects and the tiles they were cut from, can have rotations and scales); normals by the inverse transpose
+        linear = world[:3, :3]
+        plain = np.array_equal(linear, np.eye(3))
+        normal_matrix = np.eye(3) if plain else np.linalg.inv(linear).T
         for primitive in gltf["meshes"][node["mesh"]]["primitives"]:
             attributes = primitive["attributes"]
-            position = read_accessor(gltf, data, attributes["POSITION"]).astype(np.float64) + translation
+            position = read_accessor(gltf, data, attributes["POSITION"]).astype(np.float64)
+            position = (position if plain else position @ linear.T) + world[:3, 3]
             indices = read_accessor(gltf, data, primitive["indices"]).astype(np.int64).reshape(-1, 3)
             positions.append(np.column_stack([-position[:, 0], position[:, 2], position[:, 1]])[indices])
             uv = read_accessor(gltf, data, attributes["TEXCOORD_0"]).astype(np.float64) if "TEXCOORD_0" in attributes else np.zeros((len(position), 2))
             uvs.append(uv[indices])
             if "NORMAL" in attributes:
                 normal = read_accessor(gltf, data, attributes["NORMAL"]).astype(np.float64)
+                if not plain:
+                    normal = normal @ normal_matrix.T
+                    normal /= np.maximum(np.linalg.norm(normal, axis=1), 1e-12)[:, None]
                 normals.append(np.column_stack([-normal[:, 0], normal[:, 2], normal[:, 1]])[indices])
             else:
                 face = np.cross(positions[-1][:, 1] - positions[-1][:, 0], positions[-1][:, 2] - positions[-1][:, 0])
@@ -93,10 +138,11 @@ def load_triangles(gltf_path):
 
 
 def tile_placements(objects_xml_path, model_lib_folder):
-    # tile name -> (lat, lon, alt) of its scenery object (the tiles are recognized by the guid of their definition file)
+    # model name -> (lat, lon, alt) of its scenery object, for the tiles and the other models (e.g. the landmark objects)
+    # (recognized by the guid of their definition file)
     guid_to_tile = {}
     for name in os.listdir(model_lib_folder):
-        if re.fullmatch(r"\d+\.xml", name):
+        if name.endswith(".xml"):
             with open(os.path.join(model_lib_folder, name), encoding="utf-8") as f:
                 m = re.search(r'guid="(\{[^}]+\})"', f.read())
             if m:
@@ -126,12 +172,15 @@ def neighbours(tile, tiles):
     return result
 
 
-def load_occluders(model_lib_folder, tile, placements, triangles, lod="LOD02"):
+def load_occluders(model_lib_folder, tile, placements, triangles, lod="LOD02", context=None):
     # the ray casting structure of the tile and its neighbours (their coarse LOD), placed in the tile frame: the shadows cast
-    # across the tile edges
-    lat, lon, alt = placements[tile]
+    # across the tile edges. context: the tile of a model that isn't a tile (a landmark object, placed like its tile): the
+    # neighbours of that tile, and the tile itself
+    base = context or tile
+    lat, lon, alt = placements[base]
     occluders = [triangles]
-    for other in neighbours(tile, sorted(placements)):
+    tiles = sorted(name for name in placements if name.isdigit())
+    for other in neighbours(base, tiles) + ([base] if context else []):
         path = os.path.join(model_lib_folder, "%s_%s.gltf" % (other, lod))
         if os.path.isfile(path):
             tris = load_triangles(path)[0]
