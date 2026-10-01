@@ -432,7 +432,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     backup_enabled: BoolProperty(
         name="Backup enabled",
         description="Enable the backup of the project files before processing",
-        default=bpy.types.Scene.project_settings.backup_enabled if bpy.types.Scene.project_settings is not None else True,
+        default=bpy.types.Scene.project_settings.backup_enabled if bpy.types.Scene.project_settings is not None else False,
         update=backup_enabled_updated
     )
     lat_correction: FloatProperty(
@@ -465,7 +465,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     smooth_beaches: BoolProperty(
         name="Smooth the beaches",
         description="Smooth the beaches (OpenStreetMap natural=beach) of the Google Earth tiles, whose photogrammetry of the sand is spiky",
-        default=bpy.types.Scene.project_settings.smooth_beaches if bpy.types.Scene.project_settings is not None else True,
+        default=bpy.types.Scene.project_settings.smooth_beaches if bpy.types.Scene.project_settings is not None else False,
         update=smooth_beaches_updated
     )
     push_down_water: BoolProperty(
@@ -880,7 +880,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     build_package_enabled: BoolProperty(
         name="Build package enabled",
         description="Enable the package compilation when the script has finished",
-        default=bpy.types.Scene.project_settings.build_package_enabled if bpy.types.Scene.project_settings is not None else True,
+        default=bpy.types.Scene.project_settings.build_package_enabled if bpy.types.Scene.project_settings is not None else False,
         update=build_package_enabled_updated
     )
     compressonator_exe_path_readonly: StringProperty(

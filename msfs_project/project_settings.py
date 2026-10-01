@@ -116,8 +116,8 @@ class ProjectSettings(Settings):
         self.file_name = project_name + INI_FILE_EXT
         self.project_path_to_merge = str()
         self.definition_file_to_merge = str()
-        self.backup_enabled = "True"
-        self.build_package_enabled = "True"
+        self.backup_enabled = "False"
+        self.build_package_enabled = "False"
         self.target_min_size_values = str()
         self.output_texture_format = PNG_TEXTURE_FORMAT
         self.lat_correction = 0.0
@@ -148,9 +148,9 @@ class ProjectSettings(Settings):
         self.exclude_ground = "False"
         self.exclude_water = "True"
         self.push_down_water = "True"
-        self.smooth_beaches = "True"
-        self.exclude_forests = "True"
-        self.exclude_woods = "True"
+        self.smooth_beaches = "False"
+        self.exclude_forests = "False"
+        self.exclude_woods = "False"
         self.exclude_nature_reserves = "False"
         self.exclude_parks = "False"
         self.keep_buildings = "True"
