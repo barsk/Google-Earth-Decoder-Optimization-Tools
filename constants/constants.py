@@ -390,11 +390,13 @@ GEOCODE_INI_SECTION = "GEOCODE"
 ALTITUDE_ADJUSTMENT_INI_SECTION = "ALTITUDE_ADJUSTMENT"
 TEXTURES_INI_SECTION = "TEXTURES"
 SHADOW_LIGHTENING_INI_SECTION = "SHADOW_LIGHTENING"
-# step 2a, colour correction (COLOR_CORRECTION section): temperature and tint (white balance, -1 to 1), haze (0 to 0.3), brightness,
-# contrast and saturation (factors); the original textures in the backup folder (colors), the report color_correction.txt
+# step 2a, colour correction (COLOR_CORRECTION section): temperature and tint (white balance, -1 to 1), haze (the share of the haze
+# colour removed, 0 to 2), the haze colour (the light the atmosphere adds, as sRGB levels 0-255 of red, green and blue: measured by
+# Auto), brightness, contrast and saturation (factors); the original textures in the backup folder (colors), the report
+# color_correction.txt
 COLOR_CORRECTION_INI_SECTION = "COLOR_CORRECTION"
-COLOR_CORRECTION_DEFAULTS = {"color_temperature": 0.0, "color_tint": 0.0, "color_haze": 0.0, "color_brightness": 1.0, "color_contrast": 1.0,
-                             "color_saturation": 1.0}
+COLOR_CORRECTION_DEFAULTS = {"color_temperature": 0.0, "color_tint": 0.0, "color_haze": 0.0, "color_haze_red": 0.0, "color_haze_green": 0.0,
+                             "color_haze_blue": 0.0, "color_brightness": 1.0, "color_contrast": 1.0, "color_saturation": 1.0}
 COLOR_CORRECTION_BACKUP_FOLDER = "colors"
 COLOR_CORRECTION_REPORT_FILE = "color_correction.txt"
 # memory of a colour correction thread (a LOD00 texture of ~22 million pixels in float32)

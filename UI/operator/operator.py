@@ -50,7 +50,7 @@ from scripts.isolate_3d_data_from_geocode_script import isolate_3d_data_from_geo
 from scripts.upgrade_landmarks_script import upgrade_landmarks
 from scripts.adjust_scenery_altitude_script import adjust_scenery_altitude
 from utils import open_console
-from .tools import reload_current_operator, reload_setting_props, reload_project_settings, save_project_selection
+from .tools import reload_current_operator, reload_setting_props, reload_project_settings, save_project_selection, reload_color_correction
 from bpy_extras.io_utils import ImportHelper
 from bpy_types import Operator
 
@@ -227,6 +227,43 @@ class OT_DisplayTilesLiveColorsOperator(ActionOperator):
         super().execute(context)
         display_project_tiles(context, live_colors=True)
         return {'FINISHED'}
+
+
+class OT_ColorAutoOperator(ActionOperator):
+    bl_idname = "wm.color_auto"
+    bl_label = "Auto (measure the haze and the white balance)"
+    bl_description = ("Measures the haze colour (the black point of each channel) and the white balance (grey surfaces made grey, 6500 K) "
+                      "on the downloaded textures of the tiles shown (Tiles shown, or all), and sets haze removal 100 %, the haze colour, "
+                      "the temperature and the tint. Brightness, contrast and saturation are left as they are")
+
+    @classmethod
+    def poll(cls, context):
+        msfs_project = super().poll(context)
+        return os.path.isdir(os.path.join(msfs_project.model_lib_folder, "texture"))
+
+    def execute(self, context):
+        import re
+        super().execute(context)
+        global_settings = context.scene.global_settings
+        msfs_project = MsfsProject(global_settings.projects_path, global_settings.project_name, global_settings.definition_file, global_settings.path, global_settings.author_name, fast_init=True)
+        # the settings shown in the panels (loaded when a panel opens), else the project's
+        project_settings = getattr(context.scene, "project_settings", None) or msfs_project.settings
+        prefixes = [token for token in re.split(r"[,;\s]+", str(getattr(project_settings, "view_tiles", ""))) if token]
+        try:
+            result = msfs_project.measure_colors(prefixes)
+        except ValueError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+        for name, value in result["settings"].items():
+            setattr(project_settings, name, "{:.3f}".format(value).rstrip("0").rstrip("."))
+        project_settings.save()
+        reload_color_correction(context)
+        from blender.view import update_live_colors
+        update_live_colors(project_settings)
+        s = result["settings"]
+        self.report({"INFO"}, "Auto colours: haze colour %g/%g/%g, temperature %+.0f %%, tint %+.0f %% (%d textures)"
+                    % (s["color_haze_red"], s["color_haze_green"], s["color_haze_blue"], 100 * s["color_temperature"], 100 * s["color_tint"], result["textures"]))
+        return {"FINISHED"}
 
 
 class OT_ColorCorrectionOperator(ActionOperator):

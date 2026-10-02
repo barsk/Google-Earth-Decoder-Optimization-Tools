@@ -37,7 +37,7 @@ VIEW_ROOT = "GEDOT tiles (north up)"
 LANDMARK_PREFIX = "landmark_"
 # the live colour correction (step 2a): a node group shared by the materials of the tiles shown, its settings in Value nodes inside it
 COLOR_GROUP = "GEDOT colour correction"
-COLOR_VALUES = ("gain_r", "gain_g", "gain_b", "haze", "brightness", "contrast", "saturation")
+COLOR_VALUES = ("haze_r", "haze_g", "haze_b", "gain_r", "gain_g", "gain_b", "brightness", "contrast", "saturation")
 LUMINANCE = (0.2126, 0.7152, 0.0722)
 
 
@@ -123,8 +123,11 @@ def _color_group():
     # the colour correction of color_correction.colors in shader nodes: the input is the texture as stored (Non-Color: the sRGB
     # values), the output a linear colour for an emission shader (the Standard view transform shows the corrected sRGB values)
     group = bpy.data.node_groups.get(COLOR_GROUP)
-    if group is not None:
+    if group is not None and all(name in group.nodes for name in COLOR_VALUES):
         return group
+    if group is not None:
+        # the group of an older GEDOT (other settings): made again
+        bpy.data.node_groups.remove(group)
     group = bpy.data.node_groups.new(COLOR_GROUP, "ShaderNodeTree")
     group.inputs.new("NodeSocketColor", "Color")
     group.outputs.new("NodeSocketColor", "Color")
@@ -135,14 +138,15 @@ def _color_group():
     for name in COLOR_VALUES:
         node = group.nodes.new("ShaderNodeValue")
         node.name = node.label = name
-        node.outputs[0].default_value = 0.0 if name == "haze" else 1.0
+        node.outputs[0].default_value = 0.0 if name.startswith("haze") else 1.0
         values[name] = node.outputs[0]
     separate = group.nodes.new("ShaderNodeSeparateRGB")
     group.links.new(inputs.outputs["Color"], separate.inputs[0])
     channels = []
-    for index, gain in enumerate(("gain_r", "gain_g", "gain_b")):
-        linear = nodes.math("MULTIPLY", nodes.srgb_to_linear(separate.outputs[index]), values[gain])
-        linear = nodes.math("DIVIDE", nodes.math("MAXIMUM", nodes.math("SUBTRACT", linear, values["haze"]), 0.0), nodes.math("SUBTRACT", 1.0, values["haze"]))
+    for index, (haze, gain) in enumerate((("haze_r", "gain_r"), ("haze_g", "gain_g"), ("haze_b", "gain_b"))):
+        linear = nodes.srgb_to_linear(separate.outputs[index])
+        linear = nodes.math("DIVIDE", nodes.math("MAXIMUM", nodes.math("SUBTRACT", linear, values[haze]), 0.0), nodes.math("SUBTRACT", 1.0, values[haze]))
+        linear = nodes.math("MULTIPLY", linear, values[gain])
         linear = nodes.math("MULTIPLY", linear, values["brightness"])
         srgb = nodes.linear_to_srgb(linear)
         channels.append(nodes.math("ADD", nodes.math("MULTIPLY", nodes.math("SUBTRACT", srgb, 0.5), values["contrast"]), 0.5))
@@ -161,11 +165,13 @@ def update_live_colors(settings):
     group = bpy.data.node_groups.get(COLOR_GROUP)
     if group is None:
         return
-    from color_correction import white_balance_gains
-    get = lambda name, default: float(getattr(settings, name, default))
-    gains = white_balance_gains(get("color_temperature", 0.0), get("color_tint", 0.0))
-    values = {"gain_r": float(gains[0]), "gain_g": float(gains[1]), "gain_b": float(gains[2]), "haze": min(max(get("color_haze", 0.0), 0.0), 0.9),
-              "brightness": get("color_brightness", 1.0), "contrast": get("color_contrast", 1.0), "saturation": get("color_saturation", 1.0)}
+    from color_correction import haze_veil, parameters_from_settings, white_balance_gains
+    parameters = parameters_from_settings(settings)
+    gains = white_balance_gains(parameters["color_temperature"], parameters["color_tint"])
+    veil = haze_veil(parameters)
+    values = {"haze_r": float(veil[0]), "haze_g": float(veil[1]), "haze_b": float(veil[2]), "gain_r": float(gains[0]), "gain_g": float(gains[1]),
+              "gain_b": float(gains[2]), "brightness": parameters["color_brightness"], "contrast": parameters["color_contrast"],
+              "saturation": parameters["color_saturation"]}
     for name, value in values.items():
         group.nodes[name].outputs[0].default_value = value
     for window in bpy.context.window_manager.windows:

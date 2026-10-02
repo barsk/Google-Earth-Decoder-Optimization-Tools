@@ -40,7 +40,7 @@ from .operator import PanelPropertyGroup, OT_ProjectPathOperator, OT_ProjectsPat
     OT_Exclude3dDataFromGeocodeOperator, OT_Isolate3dDataFromGeocodeOperator, OT_Exclude3dDataFromGeocodePanel, OT_Isolate3dDataFromGeocodePanel, OT_UpgradeLandmarksOperator, OT_UpgradeLandmarksPanel, OT_AddTileCollidersPanel, OT_RemoveTileCollidersPanel, \
     OT_AddTileCollidersOperator, OT_RemoveTileCollidersOperator, OT_AdjustSceneryAltitudePanel, OT_AdjustSceneryAltitudeOperator, OT_AddLightsToGeocodeOperator, OT_AddLightsToGeocodePanel, OT_Cleanup3dDataPanel, OT_Cleanup3dDataOperator, OT_ResizeSceneryTexturesPanel, OT_ResizeSceneryTexturesOperator, \
     OT_ShadowLighteningPanel, OT_ShadowLighteningOperator, OT_DisplayTilesPanel, OT_DisplayTilesOperator, OT_ColorCorrectionPanel, \
-    OT_ColorCorrectionOperator, OT_DisplayTilesLiveColorsOperator
+    OT_ColorCorrectionOperator, OT_DisplayTilesLiveColorsOperator, OT_ColorAutoOperator
 
 
 class TOPBAR_MT_google_earth_optimization_menus(Menu):
@@ -178,6 +178,7 @@ classes = (
     OT_DisplayTilesOperator,
     OT_ColorCorrectionOperator,
     OT_DisplayTilesLiveColorsOperator,
+    OT_ColorAutoOperator,
     OT_RemoveWaterFrom3dDataOperator,
     OT_RemoveForestsAndWoodsFrom3dDataOperator,
     OT_RemoveForestsWoodsAndParksFrom3dDataOperator,

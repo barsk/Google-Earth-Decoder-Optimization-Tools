@@ -107,6 +107,9 @@ class ProjectSettings(Settings):
     color_temperature: float
     color_tint: float
     color_haze: float
+    color_haze_red: float
+    color_haze_green: float
+    color_haze_blue: float
     color_brightness: float
     color_contrast: float
     color_saturation: float

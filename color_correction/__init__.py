@@ -16,10 +16,11 @@
 #
 #  <pep8 compliant>
 
-# Step 2a, colour correction of the Google Earth textures (downloaded as they are): white balance (temperature, tint), haze,
-# brightness, contrast, saturation. The textures of the project are corrected from their originals (kept in the backup folder),
-# so that the step can be run again with other settings without stacking. Plain numpy (no Blender scene): the same formulas
-# as the live preview of the viewer (shader nodes, see blender/view.py).
+# Step 2a, colour correction of the Google Earth textures (downloaded as they are): haze (its colour measured by Auto), white
+# balance (temperature, tint, set by Auto too), brightness, contrast, saturation. The textures of the project are corrected from
+# their originals (kept in the backup folder), so that the step can be run again with other settings without stacking. Plain
+# numpy (no Blender scene): the same formulas as the live preview of the viewer (shader nodes, see blender/view.py).
 
-from .colors import CORRECTION_ORDER, DEFAULTS, correct, is_neutral, parameters_from_settings, white_balance_gains
-from .project import correct_textures
+from .colors import (CORRECTION_ORDER, DEFAULTS, HAZE_LEVELS, correct, estimate, haze_veil, is_neutral, parameters_from_settings,
+                     temperature_tint, white_balance_gains)
+from .project import correct_textures, measure_textures, original_texture

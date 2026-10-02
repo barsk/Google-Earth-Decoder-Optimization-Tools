@@ -32,6 +32,11 @@ def save_float_setting(props, context, name):
     context.scene.project_settings.save()
 
 
+# step 2a: the settings shown in percent (factors in the ini) and the haze colour (sRGB levels)
+COLOR_PERCENT_SETTINGS = ("color_temperature", "color_tint", "color_haze", "color_brightness", "color_contrast", "color_saturation")
+COLOR_LEVEL_SETTINGS = ("color_haze_red", "color_haze_green", "color_haze_blue")
+
+
 def save_percent_setting(props, context, name):
     # a setting shown in percent in the panel, saved as a factor in the project ini (60 % -> 0.6)
     setattr(context.scene.project_settings, name, "{:.2f}".format(float(str(getattr(props, name))) / 100.0).rstrip("0").rstrip("."))
@@ -301,9 +306,11 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.save()
 
     def color_setting_updated(self, context):
-        # the colour settings (step 2a): saved, and the live preview of the tiles shown updated
-        for name in ("color_temperature", "color_tint", "color_haze", "color_brightness", "color_contrast", "color_saturation"):
-            setattr(context.scene.project_settings, name, "{:.3f}".format(float(getattr(self, name)) / 100.0).rstrip("0").rstrip("."))
+        # the colour settings (step 2a): saved (in percent in the panel, factors in the ini; the haze colour in sRGB levels in
+        # both), and the live preview of the tiles shown updated
+        for name in COLOR_PERCENT_SETTINGS + COLOR_LEVEL_SETTINGS:
+            value = float(getattr(self, name)) / (100.0 if name in COLOR_PERCENT_SETTINGS else 1.0)
+            setattr(context.scene.project_settings, name, "{:.3f}".format(value).rstrip("0").rstrip("."))
         context.scene.project_settings.save()
         try:
             from blender.view import update_live_colors
@@ -826,7 +833,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     wall_gain_cap: FloatProperty(
         name="Wall gain cap",
         description="The most the shaded side of walls, roofs and trees is brightened towards its lit side (300 % = up to 3 times). Default: 300 %",
-        subtype="PERCENTAGE",
+        subtype="NONE",
         min=100.0,
         max=600.0,
         step=100,
@@ -837,7 +844,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     vegetation_strength: FloatProperty(
         name="Vegetation strength",
         description="The share of the shaded side correction applied to trees and other vegetation (lumpy meshes). Default: 90 %",
-        subtype="PERCENTAGE",
+        subtype="NONE",
         min=0.0,
         max=100.0,
         step=100,
@@ -848,7 +855,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     shadow_strength: FloatProperty(
         name="Shadow strength",
         description="How much the cast shadows are lifted (100 % = up to the lit surface around them; lower keeps some shadow and fewer artifacts). Default: 60 %",
-        subtype="PERCENTAGE",
+        subtype="NONE",
         min=0.0,
         max=100.0,
         step=100,
@@ -859,7 +866,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     shadow_color: FloatProperty(
         name="Shadow color",
         description="The share of the bluish color shift of the cast shadows that is removed (0 % = brightness only, 100 % = all, can turn yellowish). Default: 50 %",
-        subtype="PERCENTAGE",
+        subtype="NONE",
         min=0.0,
         max=100.0,
         step=100,
@@ -870,7 +877,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     shadow_gain_cap: FloatProperty(
         name="Shadow gain cap",
         description="The most a cast shadow is brightened, before the strength is applied (600 % = up to 6 times). Default: 600 %",
-        subtype="PERCENTAGE",
+        subtype="NONE",
         min=100.0,
         max=1000.0,
         step=100,
@@ -881,7 +888,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     shadow_vegetation_strength: FloatProperty(
         name="Shadow vegetation strength",
         description="The share of the cast shadow correction applied to vegetation (shadows of trees on trees). Default: 50 %",
-        subtype="PERCENTAGE",
+        subtype="NONE",
         min=0.0,
         max=100.0,
         step=100,
@@ -895,29 +902,43 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=str(getattr(bpy.types.Scene.project_settings, "sun_candidates", "")) if bpy.types.Scene.project_settings is not None else "",
         update=sun_candidates_updated
     )
+    # (plain numbers, "%" in the labels: Blender draws a PERCENTAGE slider as if its range began at 0, wrong for negative values)
     color_temperature: FloatProperty(
-        name="Temperature", subtype="PERCENTAGE", min=-100.0, max=100.0, step=100, precision=0, default=0.0,
-        description="White balance: warmer (more red, less blue) above 0, cooler below. A bluish download takes a positive temperature. Default: 0 %",
+        name="Temperature", subtype="NONE", min=-100.0, max=100.0, step=100, precision=0, default=0.0,
+        description="White balance in %: warmer (more red, less blue) above 0, cooler below. Set by Auto (grey surfaces made grey, 6500 K). Default: 0",
         update=color_setting_updated)
     color_tint: FloatProperty(
-        name="Tint", subtype="PERCENTAGE", min=-100.0, max=100.0, step=100, precision=0, default=0.0,
-        description="White balance: magenta (less green) above 0, green below. Default: 0 %",
+        name="Tint", subtype="NONE", min=-100.0, max=100.0, step=100, precision=0, default=0.0,
+        description="White balance in %: magenta (less green) above 0, green below. Set by Auto. Default: 0",
         update=color_setting_updated)
     color_haze: FloatProperty(
-        name="Haze", subtype="PERCENTAGE", min=0.0, max=30.0, step=50, precision=0, default=0.0,
-        description="Removes the pale veil of the atmosphere (the light it adds), which also deepens the colours. Default: 0 %",
+        name="Haze removal", subtype="NONE", min=0.0, max=200.0, step=100, precision=0, default=0.0,
+        description="The share in % of the haze colour removed (the bluish light the atmosphere adds, most visible in the shadows). "
+                    "Auto measures the haze colour and sets 100. Default: 0",
+        update=color_setting_updated)
+    color_haze_red: FloatProperty(
+        name="Haze red", subtype="NONE", min=0.0, max=100.0, step=100, precision=0, default=0.0,
+        description="The haze colour, red: the sRGB level (0-255) the atmosphere adds to the red of every pixel at 100 % haze removal. Measured by Auto",
+        update=color_setting_updated)
+    color_haze_green: FloatProperty(
+        name="Haze green", subtype="NONE", min=0.0, max=100.0, step=100, precision=0, default=0.0,
+        description="The haze colour, green: the sRGB level (0-255) the atmosphere adds to the green of every pixel at 100 % haze removal. Measured by Auto",
+        update=color_setting_updated)
+    color_haze_blue: FloatProperty(
+        name="Haze blue", subtype="NONE", min=0.0, max=100.0, step=100, precision=0, default=0.0,
+        description="The haze colour, blue: the sRGB level (0-255) the atmosphere adds to the blue of every pixel at 100 % haze removal. Measured by Auto",
         update=color_setting_updated)
     color_brightness: FloatProperty(
-        name="Brightness", subtype="PERCENTAGE", min=50.0, max=150.0, step=100, precision=0, default=100.0,
-        description="Exposure of the textures (in linear light). Default: 100 %",
+        name="Brightness", subtype="NONE", min=50.0, max=150.0, step=100, precision=0, default=100.0,
+        description="Exposure of the textures in % (in linear light). Default: 100",
         update=color_setting_updated)
     color_contrast: FloatProperty(
-        name="Contrast", subtype="PERCENTAGE", min=50.0, max=150.0, step=100, precision=0, default=100.0,
-        description="Contrast around the middle grey. Default: 100 %",
+        name="Contrast", subtype="NONE", min=50.0, max=150.0, step=100, precision=0, default=100.0,
+        description="Contrast in % around the middle grey. Default: 100",
         update=color_setting_updated)
     color_saturation: FloatProperty(
-        name="Saturation", subtype="PERCENTAGE", min=0.0, max=200.0, step=100, precision=0, default=100.0,
-        description="Strength of the colours (0 %: grey). Default: 100 %",
+        name="Saturation", subtype="NONE", min=0.0, max=200.0, step=100, precision=0, default=100.0,
+        description="Strength of the colours in % (0: grey). Default: 100",
         update=color_setting_updated)
     view_lod: EnumProperty(
         name="LOD shown",

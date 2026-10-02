@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from PIL import Image
 
-from .colors import DEFAULTS, correct, is_neutral
+from .colors import DEFAULTS, correct, estimate, is_neutral
 
 TEXTURE_EXTENSIONS = (".png", ".jpg", ".jpeg")
 MARKER_EXTENSION = ".corrected"
@@ -66,6 +66,67 @@ def _save(image_array, path):
         image.save(path)
 
 
+def _is_ours(name, current_md5, marker, shadow_originals_folder):
+    # the installed correction, or step 2b's lightening of it (2b's original is the installed correction)
+    if marker is None:
+        return False
+    if current_md5 == marker.get("md5"):
+        return True
+    if shadow_originals_folder:
+        shadow_marker = os.path.join(shadow_originals_folder, name + SHADOW_MARKER_EXTENSION)
+        shadow_original = os.path.join(shadow_originals_folder, name)
+        if os.path.isfile(shadow_marker) and os.path.isfile(shadow_original):
+            with open(shadow_marker, encoding="utf-8") as file:
+                if file.read().strip() == current_md5 and md5(shadow_original) == marker.get("md5"):
+                    return True
+    return False
+
+
+def original_texture(texture_folder, originals_folder, name, shadow_originals_folder=None):
+    """The downloaded texture of name: the original kept by step 2a when the installed one is its correction, else the one kept
+    by step 2b when the installed one is its lightening, else the installed one."""
+    current = os.path.join(texture_folder, name)
+    current_md5 = md5(current)
+    original = os.path.join(originals_folder, name)
+    if os.path.isfile(original) and _is_ours(name, current_md5, _read_marker(original + MARKER_EXTENSION), shadow_originals_folder):
+        return original
+    if shadow_originals_folder:
+        shadow_marker = os.path.join(shadow_originals_folder, name + SHADOW_MARKER_EXTENSION)
+        shadow_original = os.path.join(shadow_originals_folder, name)
+        if os.path.isfile(shadow_marker) and os.path.isfile(shadow_original):
+            with open(shadow_marker, encoding="utf-8") as file:
+                if file.read().strip() == current_md5:
+                    return shadow_original
+    return current
+
+
+def measure_textures(texture_folder, originals_folder, shadow_originals_folder=None, prefixes=(), max_textures=300, pixels_per_texture=40000,
+                     log=print):
+    """Auto: the colour settings measured on the original textures (those of the tiles starting with one of prefixes, or all),
+    see colors.estimate. A sample: at most max_textures textures, pixels_per_texture pixels of each."""
+    names = sorted(name for name in os.listdir(texture_folder) if name.lower().endswith(TEXTURE_EXTENSIONS)
+                   and (not prefixes or any(name.startswith(prefix) for prefix in prefixes)))
+    if not names:
+        raise ValueError("no textures to measure" + (" for the tiles %s" % ", ".join(prefixes) if prefixes else ""))
+    random = np.random.default_rng(1)
+    if len(names) > max_textures:
+        names = sorted(random.choice(names, max_textures, replace=False))
+    samples = []
+    for name in names:
+        with Image.open(original_texture(texture_folder, originals_folder, name, shadow_originals_folder)) as image:
+            pixels = np.asarray(image.convert("RGB")).reshape(-1, 3)
+        if len(pixels) > pixels_per_texture:
+            pixels = pixels[random.choice(len(pixels), pixels_per_texture, replace=False)]
+        samples.append(pixels)
+    result = estimate(np.concatenate(samples))
+    result["textures"] = len(names)
+    s = result["settings"]
+    log("auto colours, %d textures (%d grey pixels of %d): haze colour %g/%g/%g, temperature %+.0f %%, tint %+.0f %%; grey surfaces %s -> %s"
+        % (len(names), result["grey_pixels"], result["pixels"], s["color_haze_red"], s["color_haze_green"], s["color_haze_blue"],
+           100 * s["color_temperature"], 100 * s["color_tint"], result["grey_before"], result["grey_after"]))
+    return result
+
+
 def correct_textures(texture_folder, originals_folder, parameters, step4_texture_folder=None, shadow_originals_folder=None, threads=8,
                      log=print):
     """Corrects the textures of texture_folder. Returns {"corrected": n, "up to date": n, "new originals": n}."""
@@ -76,28 +137,13 @@ def correct_textures(texture_folder, originals_folder, parameters, step4_texture
     counts = {"corrected": 0, "up to date": 0, "new originals": 0}
     lock = threading.Lock()
 
-    def ours(name, current_md5, marker):
-        # the installed correction, or step 2b's lightening of it (2b's original is the installed correction)
-        if marker is None:
-            return False
-        if current_md5 == marker.get("md5"):
-            return True
-        if shadow_originals_folder:
-            shadow_marker = os.path.join(shadow_originals_folder, name + SHADOW_MARKER_EXTENSION)
-            shadow_original = os.path.join(shadow_originals_folder, name)
-            if os.path.isfile(shadow_marker) and os.path.isfile(shadow_original):
-                with open(shadow_marker, encoding="utf-8") as file:
-                    if file.read().strip() == current_md5 and md5(shadow_original) == marker.get("md5"):
-                        return True
-        return False
-
     def process(name):
         current = os.path.join(texture_folder, name)
         original = os.path.join(originals_folder, name)
         marker_path = original + MARKER_EXTENSION
         marker = _read_marker(marker_path)
         current_md5 = md5(current)
-        if ours(name, current_md5, marker) and os.path.isfile(original):
+        if _is_ours(name, current_md5, marker, shadow_originals_folder) and os.path.isfile(original):
             if marker.get("settings") == wanted:
                 with lock:
                     counts["up to date"] += 1

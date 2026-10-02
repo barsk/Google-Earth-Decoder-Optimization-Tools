@@ -124,10 +124,21 @@ class SettingsOperator(PanelOperator):
             return
         col.label(text="Colours of the downloaded textures (hover for details). Show the tiles to see the changes live, Run to bake them", icon=INFO_ICON)
         col.separator()
-        for name, label in (("color_temperature", "Temperature (warm +, cool -)"), ("color_tint", "Tint (magenta +, green -)"), ("color_haze", "Haze removal"),
-                            ("color_brightness", "Brightness"), ("color_contrast", "Contrast"), ("color_saturation", "Saturation")):
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
+        col.operator("wm.color_auto", text="Auto: measure the haze and the white balance (on the tiles shown)")
+        col.separator()
+        props = context.scene.setting_props
+        for name, label in (("color_haze", "Haze removal (%)"), ("color_temperature", "Temperature (%, warm +, cool -)"), ("color_tint", "Tint (%, magenta +, green -)"),
+                            ("color_brightness", "Brightness (%)"), ("color_contrast", "Contrast (%)"), ("color_saturation", "Saturation (%)")):
+            draw_splitted_prop(props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
             col.separator()
+            if name == "color_haze":
+                # the haze colour, measured by Auto: the sRGB levels the atmosphere adds to red, green and blue
+                split = col.split(factor=SPLIT_LABEL_FACTOR, align=True)
+                split.label(text="Haze colour (levels R, G, B)")
+                row = split.row(align=True)
+                for level in ("color_haze_red", "color_haze_green", "color_haze_blue"):
+                    row.prop(props, level, text="")
+                col.separator()
         draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "view_tiles", "Tiles shown (empty = all)")
         col.separator()
         draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "view_lod", "LOD shown")
@@ -160,9 +171,9 @@ class SettingsOperator(PanelOperator):
             return
         col.label(text="Shadow lightening (hover for details, saved to the project ini)", icon=INFO_ICON)
         col.separator()
-        for name, label in (("wall_gain_cap", "Shaded side: max boost"), ("vegetation_strength", "Shaded side: vegetation"),
-                            ("shadow_strength", "Cast shadows: strength"), ("shadow_color", "Cast shadows: color fix"),
-                            ("shadow_gain_cap", "Cast shadows: max boost"), ("shadow_vegetation_strength", "Cast shadows: vegetation")):
+        for name, label in (("wall_gain_cap", "Shaded side: max boost (%)"), ("vegetation_strength", "Shaded side: vegetation (%)"),
+                            ("shadow_strength", "Cast shadows: strength (%)"), ("shadow_color", "Cast shadows: color fix (%)"),
+                            ("shadow_gain_cap", "Cast shadows: max boost (%)"), ("shadow_vegetation_strength", "Cast shadows: vegetation (%)")):
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
             col.separator()
         draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "sun_candidates", "Sun directions (empty = auto)")
@@ -522,10 +533,11 @@ class OT_ColorCorrectionPanel(SettingsOperator):
     id_name = "wm.color_correction_panel"
     bl_idname = id_name
     bl_label = "2a. Colour correction"
-    operator_description = """Corrects the colours of the textures, downloaded as they are: white balance (temperature, tint), haze,
-        brightness, contrast, saturation. Show the tiles: the 3D view shows the downloaded textures with the settings applied live
-        (move the sliders). Run: the corrected textures are written (from the originals kept in the backup folder colors: run it
-        again with other settings at any time). Run it after step 2 and the landmarks, before step 2b (run 2b again after a change)."""
+    operator_description = """Corrects the colours of the textures, downloaded as they are: haze (the bluish light the atmosphere adds),
+        white balance (temperature, tint), brightness, contrast, saturation. Auto measures the haze colour and the white balance
+        (grey surfaces made grey, 6500 K) on the tiles shown. Show the tiles: the 3D view shows the downloaded textures with the
+        settings applied live (move the sliders). Run: the corrected textures are written (from the originals kept in the backup
+        folder colors: run it again with other settings at any time). Run it after step 2 and the landmarks, before step 2b."""
     starting_section = PROJECT_INI_SECTION
     displayed_sections = [
         PROJECT_INI_SECTION,

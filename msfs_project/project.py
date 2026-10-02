@@ -322,6 +322,13 @@ class MsfsProject:
             pr_bg_orange("The colours changed after step 2b: run step 2b again (it starts from the corrected textures)" + EOL + CEND)
         return counts
 
+    def measure_colors(self, prefixes=()):
+        # step 2a, Auto: the haze colour and the white balance measured on the original textures (those of the tiles starting
+        # with one of prefixes, or all), see color_correction.measure_textures
+        from color_correction import measure_textures
+        return measure_textures(os.path.join(self.model_lib_folder, TEXTURE_FOLDER), os.path.join(self.backup_folder, COLOR_CORRECTION_BACKUP_FOLDER),
+                                os.path.join(self.backup_folder, SHADOW_LIGHTENING_BACKUP_FOLDER), prefixes=prefixes, log=isolated_print)
+
     def shadow_lighten(self, settings):
         # step 2b, the shadow lightening of the textures (see shadow_lighten/__init__.py): the capture suns of the project, then the
         # textures of every tile (all their LODs) corrected in parallel Blender tasks, the originals kept in the backup folder

@@ -21,7 +21,8 @@ import bpy
 from bpy.props import IntProperty
 from msfs_project.project import MsfsProject
 from . import SettingsPropertyGroup
-from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, MAX_PHOTOGRAMMETRY_LOD, TILE_DOWNLOADER_COLOR_OPTIONS, SHADOW_LIGHTENING_DEFAULTS
+from constants import TARGET_MIN_SIZE_VALUE_PROPERTY_PREFIX, MAX_PHOTOGRAMMETRY_LOD, TILE_DOWNLOADER_COLOR_OPTIONS, SHADOW_LIGHTENING_DEFAULTS, \
+    COLOR_CORRECTION_DEFAULTS
 from utils import GlobalSettings
 
 
@@ -296,9 +297,11 @@ def reload_shadow_lightening(context):
 def reload_color_correction(context):
     if context.scene.project_settings is not None:
         props = context.scene.setting_props
-        for name in ("color_temperature", "color_tint", "color_haze", "color_brightness", "color_contrast", "color_saturation"):
-            # shown in percent, stored as a factor; set without the update (no save, no preview update while loading)
-            props[name] = 100.0 * float(getattr(context.scene.project_settings, name, 0.0 if name in ("color_temperature", "color_tint", "color_haze") else 1.0))
+        for name, default in COLOR_CORRECTION_DEFAULTS.items():
+            # shown in percent, stored as a factor (the haze colour: sRGB levels in both); set without the update (no save, no
+            # preview update while loading)
+            value = float(getattr(context.scene.project_settings, name, default))
+            props[name] = value if name.startswith("color_haze_") else 100.0 * value
 
 
 def reload_view(context):
