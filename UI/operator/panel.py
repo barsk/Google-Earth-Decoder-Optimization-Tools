@@ -124,7 +124,10 @@ class SettingsOperator(PanelOperator):
             return
         col.label(text="Colours of the downloaded textures (hover for details). Show the tiles to see the changes live, Run to bake them", icon=INFO_ICON)
         col.separator()
-        col.operator("wm.color_auto", text="Auto: measure the haze and the white balance (on the tiles shown)")
+        row = col.row(align=True)
+        row.operator("wm.color_auto", text="Auto: measure the haze and the white balance (on the tiles shown)")
+        # the white balance from surfaces known to be grey, clicked on the tiles shown with the colours live
+        row.operator("wm.color_pick_grey", text="Pick grey", icon="EYEDROPPER")
         col.separator()
         props = context.scene.setting_props
         for name, label in (("color_haze", "Haze removal (%)"), ("color_temperature", "Temperature (%, warm +, cool -)"), ("color_tint", "Tint (%, magenta +, green -)"),

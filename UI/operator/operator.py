@@ -266,6 +266,112 @@ class OT_ColorAutoOperator(ActionOperator):
         return {"FINISHED"}
 
 
+class OT_ColorPickGreyOperator(Operator):
+    bl_idname = "wm.color_pick_grey"
+    bl_label = "Pick grey"
+    bl_description = ("Click surfaces known to be grey (asphalt, concrete, grey roofs) on the tiles shown with the colours live: the temperature "
+                      "and the tint are set so that they are grey (their downloaded texture, after the haze removal). Several clicks are "
+                      "averaged. Backspace: undo the last pick, Enter or right click: done, Esc: cancel")
+    # the events left to the 3D view while picking (navigation)
+    PASSED = {"MIDDLEMOUSE", "WHEELUPMOUSE", "WHEELDOWNMOUSE", "TRACKPADPAN", "TRACKPADZOOM", "MOUSEMOVE", "INBETWEEN_MOUSEMOVE",
+              "NDOF_MOTION", "LEFT_SHIFT", "RIGHT_SHIFT", "LEFT_CTRL", "RIGHT_CTRL", "LEFT_ALT", "RIGHT_ALT"}
+
+    def invoke(self, context, event):
+        from blender.view import COLOR_GROUP
+        if getattr(context.scene, "project_settings", None) is None or not hasattr(context.scene, "setting_props"):
+            # (from the menu, before any panel loaded the settings)
+            reload_setting_props(context)
+        if bpy.data.node_groups.get(COLOR_GROUP) is None or getattr(context.scene, "project_settings", None) is None:
+            self.report({"ERROR"}, "Show the tiles with the colours live first (2a)")
+            return {"CANCELLED"}
+        props = context.scene.setting_props
+        self.start = (props.color_temperature, props.color_tint)
+        self.patches = []
+        context.window.cursor_modal_set("EYEDROPPER")
+        self.status(context, "click a grey surface")
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def status(self, context, text):
+        context.workspace.status_text_set("Pick grey: %s   |   click: pick (averaged), Backspace: undo, Enter / right click: done, Esc: cancel, "
+                                          "the view can be moved" % text)
+
+    def finish(self, context):
+        context.window.cursor_modal_restore()
+        context.workspace.status_text_set(None)
+
+    @staticmethod
+    def view_under(context, event):
+        # the 3D view region under the mouse, and the mouse in its pixels
+        for area in context.window.screen.areas:
+            if area.type != "VIEW_3D":
+                continue
+            for region in area.regions:
+                if region.type == "WINDOW" and region.x <= event.mouse_x < region.x + region.width and region.y <= event.mouse_y < region.y + region.height:
+                    return region, area.spaces.active.region_3d, (event.mouse_x - region.x, event.mouse_y - region.y)
+        return None
+
+    def apply(self, context):
+        import numpy as np
+        from color_correction import parameters_from_settings, white_balance_from_grey
+        props = context.scene.setting_props
+        if not self.patches:
+            props.color_temperature, props.color_tint = self.start
+            self.status(context, "no pick: temperature and tint as before")
+            return
+        result = white_balance_from_grey(np.concatenate([patch["pixels"] for patch in self.patches]), parameters_from_settings(context.scene.project_settings))
+        props.color_temperature = 100.0 * result["temperature"]
+        props.color_tint = 100.0 * result["tint"]
+        # at the end of a range: hardly a grey surface (or a strong colour cast)
+        limit = "  (at the limit: not a grey surface? Backspace)" if max(abs(result["temperature"]), abs(result["tint"])) > 0.999 else ""
+        self.status(context, "%d picks, %s -> %s: temperature %+.0f %%, tint %+.0f %%%s"
+                    % (len(self.patches), " ".join(map(str, result["before"])), " ".join(map(str, result["after"])), props.color_temperature,
+                       props.color_tint, limit))
+
+    def modal(self, context, event):
+        if event.type in self.PASSED:
+            return {"PASS_THROUGH"}
+        if event.value != "PRESS":
+            return {"RUNNING_MODAL"} if event.type == "LEFTMOUSE" else {"PASS_THROUGH"}
+        if event.type == "ESC":
+            context.scene.setting_props.color_temperature, context.scene.setting_props.color_tint = self.start
+            self.finish(context)
+            self.report({"INFO"}, "Pick grey cancelled")
+            return {"CANCELLED"}
+        if event.type in {"RET", "NUMPAD_ENTER", "RIGHTMOUSE"}:
+            self.finish(context)
+            props = context.scene.setting_props
+            self.report({"INFO"}, "Pick grey: %d picks, temperature %+.0f %%, tint %+.0f %%" % (len(self.patches), props.color_temperature, props.color_tint))
+            return {"FINISHED"}
+        if event.type == "BACK_SPACE":
+            if self.patches:
+                self.patches.pop()
+                self.apply(context)
+            return {"RUNNING_MODAL"}
+        if event.type == "LEFTMOUSE":
+            view = self.view_under(context, event)
+            if view is None:
+                return {"PASS_THROUGH"}
+            from blender.view import pick_texture_patch
+            try:
+                patch = pick_texture_patch(context, *view)
+            except ValueError as error:
+                self.finish(context)
+                self.report({"ERROR"}, str(error))
+                return {"CANCELLED"}
+            if patch is None:
+                self.status(context, "no tile there")
+                return {"RUNNING_MODAL"}
+            try:
+                self.patches.append(patch)
+                self.apply(context)
+            except ValueError as error:
+                self.patches.pop()
+                self.status(context, "not used: %s" % error)
+            return {"RUNNING_MODAL"}
+        return {"PASS_THROUGH"}
+
+
 class OT_ColorCorrectionOperator(ActionOperator):
     bl_idname = "wm.color_correction"
     bl_label = "Correct the colours of the textures..."

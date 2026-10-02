@@ -310,3 +310,77 @@ def display_tiles(model_lib_folder, objects_xml_path, lod_mode="finest", tile_fi
     bpy.ops.object.select_all(action="DESELECT")
     _set_views(live_colors is not None)
     return shown
+
+
+# --- the grey picker of step 2a: the texture patch under a point of the 3D view ------------------------------------------------
+
+# the patch read around the picked texel: (2 * radius + 1)^2 texels
+PICK_RADIUS = 3
+# the textures read last (uint8 RGB arrays by file), kept for the next picks
+_PIXELS = {}
+_PIXELS_KEPT = 4
+
+
+def _texture_pixels(path):
+    # the pixels of a texture file as stored (the downloaded sRGB values, as step 2a reads them)
+    if path not in _PIXELS:
+        import numpy as np
+        from PIL import Image
+        with Image.open(path) as image:
+            _PIXELS[path] = np.asarray(image.convert("RGB"))
+        while len(_PIXELS) > _PIXELS_KEPT:
+            del _PIXELS[next(iter(_PIXELS))]
+    return _PIXELS[path]
+
+
+def _hit_uv(mesh, face_index, local):
+    # the UV of a point of a face (a fan of triangles), from its position in the triangle holding it
+    from mathutils import Vector, geometry
+    polygon = mesh.polygons[face_index]
+    loops = list(polygon.loop_indices)
+    corners = [mesh.vertices[mesh.loops[loop].vertex_index].co for loop in loops]
+    uvs = [Vector((*mesh.uv_layers.active.data[loop].uv, 0.0)) for loop in loops]
+    triangles = [(0, i, i + 1) for i in range(1, len(loops) - 1)]
+    inside = next((t for t in triangles if geometry.intersect_point_tri(local, *(corners[k] for k in t)) is not None), triangles[0])
+    return geometry.barycentric_transform(local, *(corners[k] for k in inside), *(uvs[k] for k in inside))
+
+
+def pick_texture_patch(context, region, region_3d, coord, radius=PICK_RADIUS):
+    """The grey picker: the texture patch under coord (pixels of a 3D view's region) on the tiles shown with the live colours.
+    Returns {"object", "texture", "x", "y", "pixels" (uint8 RGB, N x 3, of the downloaded texture)}, or None (no tile there).
+    Raises ValueError when the tiles are not shown with the live colours (their textures are not the downloaded ones)."""
+    from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
+    collection = bpy.data.collections.get(VIEW_COLLECTION)
+    if collection is None:
+        return None
+    shown = set(collection.all_objects)
+    origin = region_2d_to_origin_3d(region, region_3d, coord)
+    direction = region_2d_to_vector_3d(region, region_3d, coord)
+    depsgraph = context.evaluated_depsgraph_get()
+    for _ in range(20):
+        hit, location, _normal, face_index, obj, matrix = context.scene.ray_cast(depsgraph, origin, direction)
+        if not hit:
+            return None
+        if obj.type == "MESH" and obj in shown and _textured(obj) and not obj.hide_get():
+            break
+        # through what is not a textured tile
+        origin = location + direction * 0.01
+    else:
+        return None
+    mesh = obj.evaluated_get(depsgraph).data
+    material = obj.material_slots[mesh.polygons[face_index].material_index].material if obj.material_slots else None
+    nodes = material.node_tree.nodes if material is not None and material.use_nodes else []
+    if not any(node.type == "GROUP" and node.node_tree is not None and node.node_tree.name == COLOR_GROUP for node in nodes):
+        raise ValueError("show the tiles with the colours live first (2a: the downloaded textures)")
+    image = next((node.image for node in nodes if node.type == "TEX_IMAGE" and node.image), None)
+    if image is None:
+        return None
+    path = bpy.path.abspath(image.filepath)
+    pixels = _texture_pixels(path)
+    height, width = pixels.shape[:2]
+    uv = _hit_uv(mesh, face_index, matrix.inverted() @ location)
+    # Blender's UV v goes up from the bottom of the image, the rows of the file down from its top
+    x = min(int((uv.x % 1.0) * width), width - 1)
+    y = min(int((1.0 - uv.y % 1.0) * height), height - 1)
+    patch = pixels[max(0, y - radius):y + radius + 1, max(0, x - radius):x + radius + 1].reshape(-1, 3)
+    return {"object": obj.name, "texture": os.path.basename(path), "x": x, "y": y, "pixels": patch}

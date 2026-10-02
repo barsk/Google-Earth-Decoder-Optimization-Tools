@@ -22,5 +22,5 @@
 # numpy (no Blender scene): the same formulas as the live preview of the viewer (shader nodes, see blender/view.py).
 
 from .colors import (CORRECTION_ORDER, DEFAULTS, HAZE_LEVELS, correct, estimate, haze_veil, is_neutral, parameters_from_settings,
-                     temperature_tint, white_balance_gains)
+                     temperature_tint, white_balance_from_grey, white_balance_gains)
 from .project import correct_textures, measure_textures, original_texture

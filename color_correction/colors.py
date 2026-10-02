@@ -116,6 +116,21 @@ def correct(rgb8: np.ndarray, parameters: dict) -> np.ndarray:
     return out
 
 
+def white_balance_from_grey(rgb8: np.ndarray, parameters: dict) -> dict:
+    """The grey picker: the temperature and the tint that make the mean of rgb8 (uint8 RGB pixels of surfaces known to be grey,
+    from the original textures) grey, after the haze removal of parameters. Brightness, contrast and saturation keep a grey grey.
+    Returns {"temperature", "tint", "before", "after"} (before and after: the mean as sRGB levels, without and with the gains)."""
+    linear = srgb_to_linear(rgb8.reshape(-1, 3).astype(np.float32) / np.float32(255.0))
+    veil = haze_veil(parameters)
+    mean = (np.maximum(linear - veil, np.float32(0.0)) / (np.float32(1.0) - veil)).mean(axis=0).astype(np.float64)
+    if mean.min() < 1e-4:
+        raise ValueError("too dark to measure (after the haze removal)")
+    temperature, tint = temperature_tint(mean[1] / mean)
+    after = mean * white_balance_gains(temperature, tint)
+    return dict(temperature=temperature, tint=tint, before=np.round(linear_to_srgb(mean.astype(np.float32)) * 255).astype(int).tolist(),
+                after=np.round(linear_to_srgb(after.astype(np.float32)) * 255).astype(int).tolist())
+
+
 def estimate(rgb8: np.ndarray) -> dict:
     """Auto: the haze colour and the white balance of sampled pixels (uint8 RGB, N x 3, the original textures). Returns the
     settings (haze 100 %, its colour, temperature, tint) and what was measured ("grey pixels", "grey before", "grey after")."""
