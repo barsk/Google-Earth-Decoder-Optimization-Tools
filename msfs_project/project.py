@@ -435,10 +435,12 @@ class MsfsProject:
             raise ScriptError("Shadow lightening failed on %d tiles (%s), see %s" % (len(failed), ", ".join(failed[:10]), os.path.join(self.project_folder, SHADOW_LIGHTENING_REPORT_FILE)))
 
     def __write_shadow_lightening_report(self, lines):
-        # (the report of step 2b, in the project folder)
+        # (the report of step 2b, in the project folder, with the settings used)
         import time
+        from shadow_lighten import DEFAULT_PARAMETERS
         with open(os.path.join(self.project_folder, SHADOW_LIGHTENING_REPORT_FILE), "w", encoding="utf-8") as f:
             f.write("shadow lightening, %s\n" % time.strftime("%Y-%m-%d %H:%M"))
+            f.write("settings: %s\n" % ", ".join("%s %g" % (name, float(getattr(self.settings, name, default))) for name, default in DEFAULT_PARAMETERS.items()))
             f.write("\n".join(lines) + "\n")
 
     def compress_built_package(self):

@@ -174,7 +174,7 @@ class SettingsOperator(PanelOperator):
             return
         col.label(text="Shadow lightening (hover for details, saved to the project ini)", icon=INFO_ICON)
         col.separator()
-        for name, label in (("wall_gain_cap", "Shaded side: max boost (%)"), ("vegetation_strength", "Shaded side: vegetation (%)"),
+        for name, label in (("wall_gain_cap", "Shaded side: max boost (%)"), ("wall_color", "Shaded side: color fix (%)"), ("vegetation_strength", "Shaded side: vegetation (%)"),
                             ("shadow_strength", "Cast shadows: strength (%)"), ("shadow_color", "Cast shadows: color fix (%)"),
                             ("shadow_gain_cap", "Cast shadows: max boost (%)"), ("shadow_vegetation_strength", "Cast shadows: vegetation (%)")):
             draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)

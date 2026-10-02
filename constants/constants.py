@@ -150,10 +150,12 @@ SHADOW_LIGHTENING_MAX_SUN_TILES = 12
 # out: measured peak 4.5 GB on a 4752 x 4704 LOD00 (Orebro), with a margin for larger textures
 SHADOW_LIGHTENING_TASK_MEMORY_GB = 5.5
 # the default settings (SHADOW_LIGHTENING section), set on the Karlstad test scenery: part 1, the shaded side of walls, roofs and
-# trees brightened up to the lit side, at most x wall_gain_cap, vegetation at vegetation_strength; part 2, the cast shadows lifted
+# trees brightened up to the lit side, its brightness at most x wall_gain_cap, wall_color of its color shift (the warmer sun:
+# all of it turned the shaded sides orange on Orebro, half of it made them about as neutral as the lit side),
+# vegetation at vegetation_strength; part 2, the cast shadows lifted
 # by gain^shadow_strength (a full shadow ~x2.9), shadow_color of the shadow ratio's color shift, at most x shadow_gain_cap,
 # vegetation at shadow_vegetation_strength. sun_candidates: "azimuth/elevation, ..." (empty: estimated from the tiles)
-SHADOW_LIGHTENING_DEFAULTS = {"wall_gain_cap": 3.0, "vegetation_strength": 0.9, "shadow_strength": 0.6, "shadow_color": 0.5,
+SHADOW_LIGHTENING_DEFAULTS = {"wall_gain_cap": 3.0, "wall_color": 0.5, "vegetation_strength": 0.9, "shadow_strength": 0.6, "shadow_color": 0.5,
                               "shadow_gain_cap": 6.0, "shadow_vegetation_strength": 0.5}
 RESIZE_SCENERY_TEXTURES_BACKUP_FOLDER = "resize_scenery_textures"
 

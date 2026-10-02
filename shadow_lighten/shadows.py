@@ -193,7 +193,7 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
             log.append("part 1: too few walls to fit, %s" % ("the median fit of the tiles done" if stored["ratios"] is not None else "no facing correction"))
     for t in textures:
         t["part1"] = correct_facing(t["linear"], t["srgb8"], t.pop("normal_map"), t.pop("smooth_map"), t["covered"], t["blocked"], sun,
-                                    fit["ratios"], fit["knee"], parameters["wall_gain_cap"], parameters["vegetation_strength"])
+                                    fit["ratios"], fit["knee"], parameters["wall_gain_cap"], parameters["vegetation_strength"], parameters["wall_color"])
         # the low resolution texels facing the sun: 3D point, color after part 1, likelihood
         sw, sh = t["size"]
         sys_, sxs = np.nonzero(~np.isnan(t["small_likelihood"]))

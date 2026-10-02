@@ -289,6 +289,9 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     def vegetation_strength_updated(self, context):
         save_percent_setting(self, context, "vegetation_strength")
 
+    def wall_color_updated(self, context):
+        save_percent_setting(self, context, "wall_color")
+
     def shadow_strength_updated(self, context):
         save_percent_setting(self, context, "shadow_strength")
 
@@ -832,14 +835,27 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     wall_gain_cap: FloatProperty(
         name="Wall gain cap",
-        description="The most the shaded side of walls, roofs and trees is brightened towards its lit side (300 % = up to 3 times). Default: 300 %",
+        description="The most the shaded side of walls, roofs and trees is brightened towards its lit side (300 % = up to 3 times; "
+                    "its colour fix is kept, see the color fix). Default: 300 %",
         subtype="NONE",
         min=100.0,
-        max=600.0,
+        max=2000.0,
         step=100,
         precision=0,
         default=100.0 * float(getattr(bpy.types.Scene.project_settings, "wall_gain_cap", 3.0)) if bpy.types.Scene.project_settings is not None else 300.0,
         update=wall_gain_cap_updated
+    )
+    wall_color: FloatProperty(
+        name="Shaded side color fix",
+        description="The share of the color shift of the shaded side that is fixed (it is lit by the bluish sky only, the lit side by the "
+                    "warmer sun too): 0 % = brightness only (stays bluish), 100 % = the full shift of the fit (tends to orange). Default: 50 %",
+        subtype="NONE",
+        min=0.0,
+        max=100.0,
+        step=100,
+        precision=0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "wall_color", 0.5)) if bpy.types.Scene.project_settings is not None else 50.0,
+        update=wall_color_updated
     )
     vegetation_strength: FloatProperty(
         name="Vegetation strength",
@@ -876,10 +892,11 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_gain_cap: FloatProperty(
         name="Shadow gain cap",
-        description="The most a cast shadow is brightened, before the strength is applied (600 % = up to 6 times). Default: 600 %",
+        description="The most a cast shadow is brightened, before the strength is applied (600 % = up to 6 times; the shadows of a "
+                    "sunny capture can be 10 to 20 times darker than the lit ground). Default: 600 %",
         subtype="NONE",
         min=100.0,
-        max=1000.0,
+        max=2500.0,
         step=100,
         precision=0,
         default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_gain_cap", 6.0)) if bpy.types.Scene.project_settings is not None else 600.0,
