@@ -31,9 +31,13 @@ from utils.isolated_print import isolated_print
 KERNEL32_LIB = "kernel32"
 USER32_LIB = "user32"
 SW_HIDE = 0
-SW_MAXIMIZE = 3
+SW_SHOWNORMAL = 1
 SW_SHOW = 5
+SW_RESTORE = 9
 MAX_LINES = 9999
+# the size of the console window in characters (the titles are 100 wide)
+CONSOLE_COLUMNS = 120
+CONSOLE_ROWS = 35
 CONSOLE_CMD = "CONOUT$"
 CONSOLE_TYPE = "CONSOLE"
 TITLE_LENGTH = 100
@@ -41,16 +45,17 @@ TITLE_FILL_CHAR = "-"
 
 kernel32 = ctypes.WinDLL(KERNEL32_LIB, use_last_error=True)
 user32 = ctypes.WinDLL(USER32_LIB, use_last_error=True)
+kernel32.GetConsoleWindow.restype = wintypes.HWND
+kernel32.GetLargestConsoleWindowSize.restype = wintypes._COORD
+kernel32.GetLargestConsoleWindowSize.argtypes = (wintypes.HANDLE,)
+kernel32.SetConsoleScreenBufferSize.argtypes = (wintypes.HANDLE, wintypes._COORD)
+kernel32.SetConsoleWindowInfo.argtypes = (wintypes.HANDLE, wintypes.BOOL, ctypes.POINTER(wintypes.SMALL_RECT))
+user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
 
 
 def open_console():
     # clear the system console
     os.system(CLEAR_CONSOLE_CMD)
-
-    kernel32.GetConsoleWindow.restype = wintypes.HWND
-    kernel32.GetLargestConsoleWindowSize.restype = wintypes._COORD
-    kernel32.GetLargestConsoleWindowSize.argtypes = (wintypes.HANDLE,)
-    user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
 
     get_console_window = windll.kernel32.GetConsoleWindow
     show_window = windll.user32.ShowWindow
@@ -71,27 +76,32 @@ def open_console():
         show_window(hwnd, SW_SHOW)
         switch_to_this_window(hwnd, True)  # display on Top
 
-    maximize_console(MAX_LINES)
+    size_console(CONSOLE_COLUMNS, CONSOLE_ROWS, MAX_LINES)
 
 
-def maximize_console(lines=None):
+def size_console(columns=CONSOLE_COLUMNS, rows=CONSOLE_ROWS, lines=MAX_LINES):
+    # a normal console window (columns x rows characters, not maximized) with a long scroll back (lines)
+    hwnd = kernel32.GetConsoleWindow()
+    if not hwnd:
+        return
+    # out of a maximized window (the earlier GEDOT maximized it), else the window can't get smaller than the screen
+    user32.ShowWindow(hwnd, SW_RESTORE)
     fd = os.open(CONSOLE_CMD, os.O_RDWR)
-
     try:
-        hCon = msvcrt.get_osfhandle(fd)
-        max_size = kernel32.GetLargestConsoleWindowSize(hCon)
-        if max_size.X == 0 and max_size.Y == 0:
+        handle = msvcrt.get_osfhandle(fd)
+        largest = kernel32.GetLargestConsoleWindowSize(handle)
+        if largest.X == 0 and largest.Y == 0:
             raise ctypes.WinError(ctypes.get_last_error())
-        cols = max_size.X
+        columns, rows = min(columns, largest.X), min(rows, largest.Y)
+        window = wintypes.SMALL_RECT(0, 0, columns - 1, rows - 1)
+        # the window first made small (it must fit in the buffer), then the buffer, then the window again (now it fits)
+        kernel32.SetConsoleWindowInfo(handle, True, ctypes.byref(wintypes.SMALL_RECT(0, 0, 0, 0)))
+        kernel32.SetConsoleScreenBufferSize(handle, wintypes._COORD(columns, max(lines, rows)))
+        kernel32.SetConsoleWindowInfo(handle, True, ctypes.byref(window))
     finally:
         os.close(fd)
-
-    hwnd = kernel32.GetConsoleWindow()
-    if cols and hwnd:
-        lines = max_size.Y if lines is None else max(min(lines, MAX_LINES), max_size.Y)
-        subprocess.check_call("mode.com con cols={} lines={}".format(cols, lines))
-        subprocess.check_call("mode.com con cp select=65001")
-        user32.ShowWindow(hwnd, SW_MAXIMIZE)
+    subprocess.check_call("mode.com con cp select=65001")
+    user32.ShowWindow(hwnd, SW_SHOWNORMAL)
 
 
 def print_title(title):
