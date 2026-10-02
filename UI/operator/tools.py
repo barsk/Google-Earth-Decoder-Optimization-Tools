@@ -293,6 +293,14 @@ def reload_shadow_lightening(context):
         context.scene.setting_props.sun_candidates = str(getattr(context.scene.project_settings, "sun_candidates", ""))
 
 
+def reload_color_correction(context):
+    if context.scene.project_settings is not None:
+        props = context.scene.setting_props
+        for name in ("color_temperature", "color_tint", "color_haze", "color_brightness", "color_contrast", "color_saturation"):
+            # shown in percent, stored as a factor; set without the update (no save, no preview update while loading)
+            props[name] = 100.0 * float(getattr(context.scene.project_settings, name, 0.0 if name in ("color_temperature", "color_tint", "color_haze") else 1.0))
+
+
 def reload_view(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.view_lod = getattr(context.scene.project_settings, "view_lod", "finest")
@@ -425,6 +433,7 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_texture_colors(context)
     reload_shadow_lightening(context)
     reload_view(context)
+    reload_color_correction(context)
     reload_build_package_enabled(context)
     reload_python_reload_modules(context)
     reload_project_settings(context)

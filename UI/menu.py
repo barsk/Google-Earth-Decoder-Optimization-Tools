@@ -39,7 +39,8 @@ from .operator import PanelPropertyGroup, OT_ProjectPathOperator, OT_ProjectsPat
     OT_KeepOnlyBuildingsAndRoads3dDataOperator, OT_KeepOnlyBuildingsAndRoads3dDataPanel, OT_RemoveForestsWoodsAndParksFrom3dDataOperator, OT_CreateLandmarkFromGeocodeOperator, OT_CreateLandmarkFromGeocodePanel, \
     OT_Exclude3dDataFromGeocodeOperator, OT_Isolate3dDataFromGeocodeOperator, OT_Exclude3dDataFromGeocodePanel, OT_Isolate3dDataFromGeocodePanel, OT_UpgradeLandmarksOperator, OT_UpgradeLandmarksPanel, OT_AddTileCollidersPanel, OT_RemoveTileCollidersPanel, \
     OT_AddTileCollidersOperator, OT_RemoveTileCollidersOperator, OT_AdjustSceneryAltitudePanel, OT_AdjustSceneryAltitudeOperator, OT_AddLightsToGeocodeOperator, OT_AddLightsToGeocodePanel, OT_Cleanup3dDataPanel, OT_Cleanup3dDataOperator, OT_ResizeSceneryTexturesPanel, OT_ResizeSceneryTexturesOperator, \
-    OT_ShadowLighteningPanel, OT_ShadowLighteningOperator, OT_DisplayTilesPanel, OT_DisplayTilesOperator
+    OT_ShadowLighteningPanel, OT_ShadowLighteningOperator, OT_DisplayTilesPanel, OT_DisplayTilesOperator, OT_ColorCorrectionPanel, \
+    OT_ColorCorrectionOperator, OT_DisplayTilesLiveColorsOperator
 
 
 class TOPBAR_MT_google_earth_optimization_menus(Menu):
@@ -62,6 +63,7 @@ class TOPBAR_MT_google_earth_optimization_menu(Menu):
         layout.separator()
         layout.operator(OT_OptimizeSceneryPanel.bl_idname)
         layout.separator()
+        layout.operator(OT_ColorCorrectionPanel.bl_idname)
         layout.operator(OT_ShadowLighteningPanel.bl_idname)
         layout.operator(OT_DisplayTilesPanel.bl_idname)
         layout.separator()
@@ -174,6 +176,8 @@ classes = (
     OT_Cleanup3dDataOperator,
     OT_ShadowLighteningOperator,
     OT_DisplayTilesOperator,
+    OT_ColorCorrectionOperator,
+    OT_DisplayTilesLiveColorsOperator,
     OT_RemoveWaterFrom3dDataOperator,
     OT_RemoveForestsAndWoodsFrom3dDataOperator,
     OT_RemoveForestsWoodsAndParksFrom3dDataOperator,
@@ -206,6 +210,7 @@ classes = (
     OT_Cleanup3dDataPanel,
     OT_ShadowLighteningPanel,
     OT_DisplayTilesPanel,
+    OT_ColorCorrectionPanel,
     OT_RemoveWaterFrom3dDataPanel,
     OT_RemoveForestsAndWoodsFrom3dDataPanel,
     OT_RemoveForestsWoodsAndParksFrom3dDataPanel,

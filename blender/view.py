@@ -35,6 +35,10 @@ from .scene import msfs_import_hooks_disabled
 VIEW_COLLECTION = "GEDOT tiles"
 VIEW_ROOT = "GEDOT tiles (north up)"
 LANDMARK_PREFIX = "landmark_"
+# the live colour correction (step 2a): a node group shared by the materials of the tiles shown, its settings in Value nodes inside it
+COLOR_GROUP = "GEDOT colour correction"
+COLOR_VALUES = ("gain_r", "gain_g", "gain_b", "haze", "brightness", "contrast", "saturation")
+LUMINANCE = (0.2126, 0.7152, 0.0722)
 
 
 def _model_lods(model_lib_folder, name):
@@ -59,7 +63,7 @@ def _remove_view():
     bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
 
 
-def _import_copy(model_file, texture_folder, work_folder):
+def _import_copy(model_file, texture_folder, work_folder, originals_folder=None):
     # a copy of the model whose buffer and textures point to their files (the models name their textures without folder, MSFS
     # finds them in the texture folder): the importer then loads each texture itself, instead of a shared placeholder
     with open(model_file, encoding="utf-8") as file:
@@ -72,11 +76,124 @@ def _import_copy(model_file, texture_folder, work_folder):
         if "uri" in image and not image["uri"].startswith("data:"):
             name = os.path.basename(image["uri"])
             path = os.path.join(texture_folder, name) if os.path.isfile(os.path.join(texture_folder, name)) else os.path.join(folder, image["uri"])
+            if originals_folder and os.path.isfile(os.path.join(originals_folder, name)) and os.path.isfile(os.path.join(originals_folder, name + ".corrected")):
+                # the live colours: the downloaded texture (the corrected one is in the texture folder)
+                path = os.path.join(originals_folder, name)
             image["uri"] = path.replace("\\", "/")
     copy = os.path.join(work_folder, os.path.basename(model_file))
     with open(copy, "w", encoding="utf-8") as file:
         json.dump(gltf, file)
     return copy
+
+
+class _Nodes:
+    # node building helpers for the colour group (math on single values)
+    def __init__(self, tree):
+        self.tree = tree
+        self.x = 0
+
+    def math(self, operation, a, b=0.0, clamp=False):
+        node = self.tree.nodes.new("ShaderNodeMath")
+        node.operation = operation
+        node.use_clamp = clamp
+        node.location = (self.x, 0)
+        self.x += 20
+        for index, value in enumerate((a, b)):
+            if isinstance(value, (int, float)):
+                node.inputs[index].default_value = float(value)
+            else:
+                self.tree.links.new(value, node.inputs[index])
+        return node.outputs[0]
+
+    def srgb_to_linear(self, c):
+        low = self.math("DIVIDE", c, 12.92)
+        high = self.math("POWER", self.math("DIVIDE", self.math("ADD", c, 0.055), 1.055), 2.4)
+        mask = self.math("LESS_THAN", c, 0.04045 + 1e-7)
+        return self.math("ADD", high, self.math("MULTIPLY", self.math("SUBTRACT", low, high), mask))
+
+    def linear_to_srgb(self, c):
+        c = self.math("MINIMUM", self.math("MAXIMUM", c, 0.0), 1.0)
+        low = self.math("MULTIPLY", c, 12.92)
+        high = self.math("SUBTRACT", self.math("MULTIPLY", self.math("POWER", c, 1.0 / 2.4), 1.055), 0.055)
+        mask = self.math("LESS_THAN", c, 0.0031308 + 1e-9)
+        return self.math("ADD", high, self.math("MULTIPLY", self.math("SUBTRACT", low, high), mask))
+
+
+def _color_group():
+    # the colour correction of color_correction.colors in shader nodes: the input is the texture as stored (Non-Color: the sRGB
+    # values), the output a linear colour for an emission shader (the Standard view transform shows the corrected sRGB values)
+    group = bpy.data.node_groups.get(COLOR_GROUP)
+    if group is not None:
+        return group
+    group = bpy.data.node_groups.new(COLOR_GROUP, "ShaderNodeTree")
+    group.inputs.new("NodeSocketColor", "Color")
+    group.outputs.new("NodeSocketColor", "Color")
+    nodes = _Nodes(group)
+    inputs = group.nodes.new("NodeGroupInput")
+    outputs = group.nodes.new("NodeGroupOutput")
+    values = {}
+    for name in COLOR_VALUES:
+        node = group.nodes.new("ShaderNodeValue")
+        node.name = node.label = name
+        node.outputs[0].default_value = 0.0 if name == "haze" else 1.0
+        values[name] = node.outputs[0]
+    separate = group.nodes.new("ShaderNodeSeparateRGB")
+    group.links.new(inputs.outputs["Color"], separate.inputs[0])
+    channels = []
+    for index, gain in enumerate(("gain_r", "gain_g", "gain_b")):
+        linear = nodes.math("MULTIPLY", nodes.srgb_to_linear(separate.outputs[index]), values[gain])
+        linear = nodes.math("DIVIDE", nodes.math("MAXIMUM", nodes.math("SUBTRACT", linear, values["haze"]), 0.0), nodes.math("SUBTRACT", 1.0, values["haze"]))
+        linear = nodes.math("MULTIPLY", linear, values["brightness"])
+        srgb = nodes.linear_to_srgb(linear)
+        channels.append(nodes.math("ADD", nodes.math("MULTIPLY", nodes.math("SUBTRACT", srgb, 0.5), values["contrast"]), 0.5))
+    luminance = nodes.math("ADD", nodes.math("ADD", nodes.math("MULTIPLY", channels[0], LUMINANCE[0]), nodes.math("MULTIPLY", channels[1], LUMINANCE[1])),
+                           nodes.math("MULTIPLY", channels[2], LUMINANCE[2]))
+    combine = group.nodes.new("ShaderNodeCombineRGB")
+    for index, channel in enumerate(channels):
+        saturated = nodes.math("ADD", luminance, nodes.math("MULTIPLY", nodes.math("SUBTRACT", channel, luminance), values["saturation"]), clamp=True)
+        group.links.new(nodes.srgb_to_linear(saturated), combine.inputs[index])
+    group.links.new(combine.outputs[0], outputs.inputs["Color"])
+    return group
+
+
+def update_live_colors(settings):
+    """The colour settings (a project's settings, COLOR_CORRECTION section) into the colour group of the tiles shown."""
+    group = bpy.data.node_groups.get(COLOR_GROUP)
+    if group is None:
+        return
+    from color_correction import white_balance_gains
+    get = lambda name, default: float(getattr(settings, name, default))
+    gains = white_balance_gains(get("color_temperature", 0.0), get("color_tint", 0.0))
+    values = {"gain_r": float(gains[0]), "gain_g": float(gains[1]), "gain_b": float(gains[2]), "haze": min(max(get("color_haze", 0.0), 0.0), 0.9),
+              "brightness": get("color_brightness", 1.0), "contrast": get("color_contrast", 1.0), "saturation": get("color_saturation", 1.0)}
+    for name, value in values.items():
+        group.nodes[name].outputs[0].default_value = value
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
+
+
+def _live_material(material):
+    # image -> colour group -> emission (unlit): the texture with the colour settings applied
+    image_node = next((node for node in material.node_tree.nodes if node.type == "TEX_IMAGE" and node.image), None) if material.use_nodes else None
+    if image_node is None:
+        return
+    image = image_node.image
+    image.colorspace_settings.name = "Non-Color"
+    tree = material.node_tree
+    uv_links = [link.from_socket for link in tree.links if link.to_node == image_node]
+    tree.nodes.clear()
+    texture = tree.nodes.new("ShaderNodeTexImage")
+    texture.image = image
+    texture.interpolation = image_node.interpolation if hasattr(image_node, "interpolation") else "Linear"
+    group = tree.nodes.new("ShaderNodeGroup")
+    group.node_tree = _color_group()
+    emission = tree.nodes.new("ShaderNodeEmission")
+    output = tree.nodes.new("ShaderNodeOutputMaterial")
+    tree.links.new(texture.outputs["Color"], group.inputs["Color"])
+    tree.links.new(group.outputs["Color"], emission.inputs["Color"])
+    tree.links.new(emission.outputs["Emission"], output.inputs["Surface"])
 
 
 def _textured(obj):
@@ -87,7 +204,7 @@ def _textured(obj):
     return False
 
 
-def _set_views():
+def _set_views(live=False):
     names = [item.identifier for item in bpy.context.scene.view_settings.bl_rna.properties["view_transform"].enum_items]
     if "Standard" in names:
         bpy.context.scene.view_settings.view_transform = "Standard"
@@ -98,7 +215,8 @@ def _set_views():
                 continue
             for space in area.spaces:
                 if space.type == "VIEW_3D":
-                    space.shading.type = "SOLID"
+                    # live colours: the materials (unlit emission) in Material Preview; else the textures in the solid view, flat light
+                    space.shading.type = "MATERIAL" if live else "SOLID"
                     space.shading.light = "FLAT"
                     space.shading.color_type = "TEXTURE"
                     space.clip_end = 100000.0
@@ -108,9 +226,11 @@ def _set_views():
                     bpy.ops.view3d.view_all()
 
 
-def display_tiles(model_lib_folder, objects_xml_path, lod_mode="finest", tile_filter="", log=print):
+def display_tiles(model_lib_folder, objects_xml_path, lod_mode="finest", tile_filter="", log=print, live_colors=None, colors_originals_folder=None):
     """Imports the tiles (and the landmark objects) of a project into the scene. lod_mode: "finest" or "coarsest" LOD of each
-    model; tile_filter: tile names or prefixes separated by commas or spaces (empty: all). Returns the number of models shown."""
+    model; tile_filter: tile names or prefixes separated by commas or spaces (empty: all). live_colors: the project settings, to show
+    the downloaded textures (colors_originals_folder: step 2a's originals) with their colour settings applied live (step 2a).
+    Returns the number of models shown."""
     from shadow_lighten.textures import tile_placements
     from utils.placement import wgs84_to_tile
 
@@ -145,7 +265,8 @@ def display_tiles(model_lib_folder, objects_xml_path, lod_mode="finest", tile_fi
         bpy.ops.object.select_all(action="DESELECT")
         with msfs_import_hooks_disabled():
             # (the images are found after the import, in the texture folder: not packed)
-            bpy.ops.import_scene.gltf(filepath=_import_copy(model_file, texture_folder, work_folder), import_pack_images=False)
+            bpy.ops.import_scene.gltf(filepath=_import_copy(model_file, texture_folder, work_folder, colors_originals_folder if live_colors is not None else None),
+                                      import_pack_images=False)
         imported = list(bpy.context.selected_objects)
         for obj in imported:
             # into the collection of the display (the importer may link them elsewhere)
@@ -176,6 +297,10 @@ def display_tiles(model_lib_folder, objects_xml_path, lod_mode="finest", tile_fi
         if obj.type == "MESH" and not _textured(obj):
             obj.hide_set(True)
             obj.hide_render = True
+    if live_colors is not None:
+        for material in {slot.material for obj in collection.all_objects if obj.type == "MESH" for slot in obj.material_slots if slot.material}:
+            _live_material(material)
+        update_live_colors(live_colors)
     bpy.ops.object.select_all(action="DESELECT")
-    _set_views()
+    _set_views(live_colors is not None)
     return shown

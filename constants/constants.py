@@ -390,6 +390,15 @@ GEOCODE_INI_SECTION = "GEOCODE"
 ALTITUDE_ADJUSTMENT_INI_SECTION = "ALTITUDE_ADJUSTMENT"
 TEXTURES_INI_SECTION = "TEXTURES"
 SHADOW_LIGHTENING_INI_SECTION = "SHADOW_LIGHTENING"
+# step 2a, colour correction (COLOR_CORRECTION section): temperature and tint (white balance, -1 to 1), haze (0 to 0.3), brightness,
+# contrast and saturation (factors); the original textures in the backup folder (colors), the report color_correction.txt
+COLOR_CORRECTION_INI_SECTION = "COLOR_CORRECTION"
+COLOR_CORRECTION_DEFAULTS = {"color_temperature": 0.0, "color_tint": 0.0, "color_haze": 0.0, "color_brightness": 1.0, "color_contrast": 1.0,
+                             "color_saturation": 1.0}
+COLOR_CORRECTION_BACKUP_FOLDER = "colors"
+COLOR_CORRECTION_REPORT_FILE = "color_correction.txt"
+# memory of a colour correction thread (a LOD00 texture of ~22 million pixels in float32)
+COLOR_CORRECTION_TASK_MEMORY_GB = 1.5
 # the tiles shown in Blender (View the tiles): which LOD, which tiles (names or prefixes, empty: all), after steps 2 and 2b
 VIEW_INI_SECTION = "VIEW"
 VIEW_DEFAULTS = {"view_lod": "finest", "view_tiles": "", "view_after_steps": "False"}

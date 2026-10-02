@@ -110,9 +110,30 @@ class SettingsOperator(PanelOperator):
             col.separator()
         if self.operator_name == "wm.shadow_lightening":
             self.draw_shadow_lightening_settings(context, col)
+        if self.operator_name == "wm.color_correction":
+            self.draw_color_correction_settings(context, col)
         if self.operator_name in ("wm.optimize_msfs_scenery", "wm.shadow_lightening", "wm.display_tiles"):
             self.draw_view_settings(context, col, self.operator_name == "wm.display_tiles")
         self.draw_footer(context, self.layout, self.operator_name)
+
+    @staticmethod
+    def draw_color_correction_settings(context, col):
+        # the COLOR_CORRECTION section of the project ini, with the live preview of the tiles in the 3D view
+        if getattr(bpy.types.Scene, "project_settings", None) is None:
+            col.label(text="Colour correction: select a project first", icon=INFO_ICON)
+            return
+        col.label(text="Colours of the downloaded textures (hover for details). Show the tiles to see the changes live, Run to bake them", icon=INFO_ICON)
+        col.separator()
+        for name, label in (("color_temperature", "Temperature (warm +, cool -)"), ("color_tint", "Tint (magenta +, green -)"), ("color_haze", "Haze removal"),
+                            ("color_brightness", "Brightness"), ("color_contrast", "Contrast"), ("color_saturation", "Saturation")):
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label, slider=True)
+            col.separator()
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "view_tiles", "Tiles shown (empty = all)")
+        col.separator()
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "view_lod", "LOD shown")
+        col.separator()
+        col.operator("wm.display_tiles_live_colors", text="Show the tiles with the colours live")
+        col.separator()
 
     @staticmethod
     def draw_view_settings(context, col, full):
@@ -493,6 +514,21 @@ class OT_ShadowLighteningPanel(SettingsOperator):
         PROJECT_INI_SECTION,
         SHADOW_LIGHTENING_INI_SECTION,
         BUILD_INI_SECTION,
+    ]
+
+
+class OT_ColorCorrectionPanel(SettingsOperator):
+    operator_name = "wm.color_correction"
+    id_name = "wm.color_correction_panel"
+    bl_idname = id_name
+    bl_label = "2a. Colour correction"
+    operator_description = """Corrects the colours of the textures, downloaded as they are: white balance (temperature, tint), haze,
+        brightness, contrast, saturation. Show the tiles: the 3D view shows the downloaded textures with the settings applied live
+        (move the sliders). Run: the corrected textures are written (from the originals kept in the backup folder colors: run it
+        again with other settings at any time). Run it after step 2 and the landmarks, before step 2b (run 2b again after a change)."""
+    starting_section = PROJECT_INI_SECTION
+    displayed_sections = [
+        PROJECT_INI_SECTION,
     ]
 
 

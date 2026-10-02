@@ -24,6 +24,7 @@ from constants import MAX_PHOTOGRAMMETRY_LOD, INI_FILE
 from msfs_project.project import MsfsProject
 from scripts.cleanup_3d_data_script import cleanup_3d_data
 from scripts.shadow_lightening_script import shadow_lightening
+from scripts.color_correction_script import color_correction
 from scripts.add_tile_colliders_script import add_tile_colliders
 from scripts.clean_package_files_script import clean_package_files
 from scripts.fix_tiles_lightning_issues_script import fix_tiles_lightning_issues
@@ -180,13 +181,15 @@ class OT_InitMsfsSceneryProjectOperator(ActionOperator):
         return {'FINISHED'}
 
 
-def display_project_tiles(context):
-    # the tiles of the project in the 3D view (View the tiles in Blender)
+def display_project_tiles(context, live_colors=False):
+    # the tiles of the project in the 3D view (View the tiles in Blender); live_colors: the downloaded textures with the colour
+    # settings of step 2a applied live
     from blender.view import display_tiles
     global_settings = context.scene.global_settings
     msfs_project = MsfsProject(global_settings.projects_path, global_settings.project_name, global_settings.definition_file, global_settings.path, global_settings.author_name, fast_init=True)
     settings = msfs_project.settings
-    count = display_tiles(msfs_project.model_lib_folder, msfs_project.scene_objects_xml_file_path, getattr(settings, "view_lod", "finest"), getattr(settings, "view_tiles", ""))
+    count = display_tiles(msfs_project.model_lib_folder, msfs_project.scene_objects_xml_file_path, getattr(settings, "view_lod", "finest"), getattr(settings, "view_tiles", ""),
+                          live_colors=settings if live_colors else None, colors_originals_folder=os.path.join(msfs_project.backup_folder, "colors"))
     print("%d models shown in Blender" % count)
 
 
@@ -208,6 +211,36 @@ class OT_DisplayTilesOperator(ActionOperator):
     def execute(self, context):
         super().execute(context)
         display_project_tiles(context)
+        return {'FINISHED'}
+
+
+class OT_DisplayTilesLiveColorsOperator(ActionOperator):
+    bl_idname = "wm.display_tiles_live_colors"
+    bl_label = "Show the tiles with the colours live..."
+
+    @classmethod
+    def poll(cls, context):
+        msfs_project = super().poll(context)
+        return os.path.isfile(msfs_project.scene_objects_xml_file_path)
+
+    def execute(self, context):
+        super().execute(context)
+        display_project_tiles(context, live_colors=True)
+        return {'FINISHED'}
+
+
+class OT_ColorCorrectionOperator(ActionOperator):
+    bl_idname = "wm.color_correction"
+    bl_label = "Correct the colours of the textures..."
+
+    @classmethod
+    def poll(cls, context):
+        msfs_project = super().poll(context)
+        return os.path.isdir(msfs_project.scene_folder)
+
+    def execute(self, context):
+        super().execute(context)
+        color_correction(context.scene.global_settings)
         return {'FINISHED'}
 
 

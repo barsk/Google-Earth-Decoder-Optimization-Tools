@@ -300,6 +300,17 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.sun_candidates = self.sun_candidates.strip()
         context.scene.project_settings.save()
 
+    def color_setting_updated(self, context):
+        # the colour settings (step 2a): saved, and the live preview of the tiles shown updated
+        for name in ("color_temperature", "color_tint", "color_haze", "color_brightness", "color_contrast", "color_saturation"):
+            setattr(context.scene.project_settings, name, "{:.3f}".format(float(getattr(self, name)) / 100.0).rstrip("0").rstrip("."))
+        context.scene.project_settings.save()
+        try:
+            from blender.view import update_live_colors
+            update_live_colors(context.scene.project_settings)
+        except Exception:
+            pass
+
     def view_lod_updated(self, context):
         context.scene.project_settings.view_lod = self.view_lod
         context.scene.project_settings.save()
@@ -884,6 +895,30 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         default=str(getattr(bpy.types.Scene.project_settings, "sun_candidates", "")) if bpy.types.Scene.project_settings is not None else "",
         update=sun_candidates_updated
     )
+    color_temperature: FloatProperty(
+        name="Temperature", subtype="PERCENTAGE", min=-100.0, max=100.0, step=100, precision=0, default=0.0,
+        description="White balance: warmer (more red, less blue) above 0, cooler below. A bluish download takes a positive temperature. Default: 0 %",
+        update=color_setting_updated)
+    color_tint: FloatProperty(
+        name="Tint", subtype="PERCENTAGE", min=-100.0, max=100.0, step=100, precision=0, default=0.0,
+        description="White balance: magenta (less green) above 0, green below. Default: 0 %",
+        update=color_setting_updated)
+    color_haze: FloatProperty(
+        name="Haze", subtype="PERCENTAGE", min=0.0, max=30.0, step=50, precision=0, default=0.0,
+        description="Removes the pale veil of the atmosphere (the light it adds), which also deepens the colours. Default: 0 %",
+        update=color_setting_updated)
+    color_brightness: FloatProperty(
+        name="Brightness", subtype="PERCENTAGE", min=50.0, max=150.0, step=100, precision=0, default=100.0,
+        description="Exposure of the textures (in linear light). Default: 100 %",
+        update=color_setting_updated)
+    color_contrast: FloatProperty(
+        name="Contrast", subtype="PERCENTAGE", min=50.0, max=150.0, step=100, precision=0, default=100.0,
+        description="Contrast around the middle grey. Default: 100 %",
+        update=color_setting_updated)
+    color_saturation: FloatProperty(
+        name="Saturation", subtype="PERCENTAGE", min=0.0, max=200.0, step=100, precision=0, default=100.0,
+        description="Strength of the colours (0 %: grey). Default: 100 %",
+        update=color_setting_updated)
     view_lod: EnumProperty(
         name="LOD shown",
         description="The LOD of each tile shown in Blender",

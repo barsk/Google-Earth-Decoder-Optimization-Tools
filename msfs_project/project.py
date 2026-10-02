@@ -298,6 +298,30 @@ class MsfsProject:
         for collider in self.colliders.values():
             collider.update_min_size_values(self.settings.target_min_size_values, pbar=pbar)
 
+    def color_correct(self, settings):
+        # step 2a: the textures (tiles and landmark objects) corrected from their originals (backup folder colors), see color_correction
+        from color_correction import correct_textures, parameters_from_settings, is_neutral
+        import time
+
+        parameters = parameters_from_settings(self.settings)
+        free_memory = free_memory_gb()
+        threads = min(int(settings.nb_parallel_blender_tasks), max(1, int(free_memory // COLOR_CORRECTION_TASK_MEMORY_GB)))
+        isolated_print("settings: %s%s, %d threads" % (", ".join("%s %g" % (name[6:], value) for name, value in parameters.items()),
+                                                       " (neutral: the original textures)" if is_neutral(parameters) else "", threads) + EOL)
+        lines = []
+        counts = correct_textures(os.path.join(self.model_lib_folder, TEXTURE_FOLDER), os.path.join(self.backup_folder, COLOR_CORRECTION_BACKUP_FOLDER), parameters,
+                                  step4_texture_folder=os.path.join(self.__find_backup_path(CLEANUP_3D_DATA_BACKUP_FOLDER), TEXTURE_FOLDER),
+                                  shadow_originals_folder=os.path.join(self.backup_folder, SHADOW_LIGHTENING_BACKUP_FOLDER), threads=threads, log=lines.append)
+        for line in lines:
+            isolated_print(line)
+        with open(os.path.join(self.project_folder, COLOR_CORRECTION_REPORT_FILE), "w", encoding="utf-8") as file:
+            file.write("colour correction, %s\n" % time.strftime("%Y-%m-%d %H:%M"))
+            file.write("settings: %s\n" % ", ".join("%s %g" % (name[6:], value) for name, value in parameters.items()))
+            file.write("\n".join(lines) + "\n")
+        if counts["corrected"] and os.path.isdir(os.path.join(self.backup_folder, SHADOW_LIGHTENING_BACKUP_FOLDER)):
+            pr_bg_orange("The colours changed after step 2b: run step 2b again (it starts from the corrected textures)" + EOL + CEND)
+        return counts
+
     def shadow_lighten(self, settings):
         # step 2b, the shadow lightening of the textures (see shadow_lighten/__init__.py): the capture suns of the project, then the
         # textures of every tile (all their LODs) corrected in parallel Blender tasks, the originals kept in the backup folder

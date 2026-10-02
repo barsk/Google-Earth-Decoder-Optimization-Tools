@@ -41,7 +41,8 @@ import shutil
 from utils.settings import Settings
 
 from constants import ENCODING, PNG_TEXTURE_FORMAT, XML_FILE_EXT, LIGHT_COLD_GUID, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE, INI_FILE_EXT, DEFAULT_GROUND_FILTER_SIZE, \
-    SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_DEFAULTS, VIEW_INI_SECTION, VIEW_DEFAULTS
+    SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_DEFAULTS, VIEW_INI_SECTION, VIEW_DEFAULTS, COLOR_CORRECTION_INI_SECTION, \
+    COLOR_CORRECTION_DEFAULTS
 
 
 class ProjectSettings(Settings):
@@ -103,6 +104,12 @@ class ProjectSettings(Settings):
     view_lod: str
     view_tiles: str
     view_after_steps: str
+    color_temperature: float
+    color_tint: float
+    color_haze: float
+    color_brightness: float
+    color_contrast: float
+    color_saturation: float
 
     LODS_SECTION = "LODS"
     SUN_CANDIDATES_SETTING = "sun_candidates"
@@ -175,6 +182,8 @@ class ProjectSettings(Settings):
         self.sun_candidates = str()
         for name, value in VIEW_DEFAULTS.items():
             setattr(self, name, value)
+        for name, value in COLOR_CORRECTION_DEFAULTS.items():
+            setattr(self, name, value)
 
         # the default min size values of the lods, from the most detailed one (the last one) in the template, used when a lod is added
         self.default_target_min_size_values = self.__read_default_target_min_size_values(os.path.join(global_path, CONFIG_TEMPLATES_FOLDER, PROJECT_SETTINGS_TEMPLATE_FILE))
@@ -226,6 +235,8 @@ class ProjectSettings(Settings):
         self.view_lod = self.view_lod if self.view_lod in ("finest", "coarsest") else "finest"
         self.view_tiles = str(self.view_tiles).strip()
         self.view_after_steps = str(self.view_after_steps).lower() == "true"
+        for name in COLOR_CORRECTION_DEFAULTS:
+            setattr(self, name, "{:.3f}".format(float(str(getattr(self, name)))).rstrip("0").rstrip("."))
         # setting section added after the creation of older projects: listed (with its defaults) for the panels, written on save
         if self.sections and SHADOW_LIGHTENING_INI_SECTION not in [section[0] for section in self.sections]:
             self.sections.append((SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION))
@@ -285,6 +296,10 @@ class ProjectSettings(Settings):
         for name in SHADOW_LIGHTENING_DEFAULTS:
             config.set(SHADOW_LIGHTENING_INI_SECTION, name, str(getattr(self, name)))
         config.set(SHADOW_LIGHTENING_INI_SECTION, self.SUN_CANDIDATES_SETTING, str(self.sun_candidates))
+        if not config.has_section(COLOR_CORRECTION_INI_SECTION):
+            config.add_section(COLOR_CORRECTION_INI_SECTION)
+        for name in COLOR_CORRECTION_DEFAULTS:
+            config.set(COLOR_CORRECTION_INI_SECTION, name, str(getattr(self, name)))
         if not config.has_section(VIEW_INI_SECTION):
             config.add_section(VIEW_INI_SECTION)
         for name in VIEW_DEFAULTS:
