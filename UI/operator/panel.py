@@ -110,7 +110,25 @@ class SettingsOperator(PanelOperator):
             col.separator()
         if self.operator_name == "wm.shadow_lightening":
             self.draw_shadow_lightening_settings(context, col)
+        if self.operator_name in ("wm.optimize_msfs_scenery", "wm.shadow_lightening", "wm.display_tiles"):
+            self.draw_view_settings(context, col, self.operator_name == "wm.display_tiles")
         self.draw_footer(context, self.layout, self.operator_name)
+
+    @staticmethod
+    def draw_view_settings(context, col, full):
+        # the tiles shown in Blender (VIEW section of the project ini): all its settings in the viewer's panel, the display after the
+        # step in the panels of steps 2 and 2b
+        if getattr(bpy.types.Scene, "project_settings", None) is None:
+            return
+        if full:
+            col.label(text="The tiles with their textures in the 3D view (flat light, texture colours), north up", icon=INFO_ICON)
+            col.separator()
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "view_tiles", "Tiles (empty = all)")
+            col.separator()
+        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "view_lod", "LOD shown")
+        col.separator()
+        draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "view_after_steps", "Show the tiles in Blender after steps 2 and 2b")
+        col.separator()
 
     @staticmethod
     def draw_shadow_lightening_settings(context, col):
@@ -475,6 +493,20 @@ class OT_ShadowLighteningPanel(SettingsOperator):
         PROJECT_INI_SECTION,
         SHADOW_LIGHTENING_INI_SECTION,
         BUILD_INI_SECTION,
+    ]
+
+
+class OT_DisplayTilesPanel(SettingsOperator):
+    operator_name = "wm.display_tiles"
+    id_name = "wm.display_tiles_panel"
+    bl_idname = id_name
+    bl_label = "View the tiles in Blender (after 2 / 2b)"
+    operator_description = """Shows the tiles of the project in Blender's 3D view, with their textures, as they are now (after step 2: the
+        colours of the download; after step 2b: the shadow lightening). Flat light and the texture colours, north up. Use a small area:
+        every tile is imported. The tiles shown are replaced at each display."""
+    starting_section = PROJECT_INI_SECTION
+    displayed_sections = [
+        PROJECT_INI_SECTION,
     ]
 
 

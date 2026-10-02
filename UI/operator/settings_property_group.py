@@ -300,6 +300,18 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         context.scene.project_settings.sun_candidates = self.sun_candidates.strip()
         context.scene.project_settings.save()
 
+    def view_lod_updated(self, context):
+        context.scene.project_settings.view_lod = self.view_lod
+        context.scene.project_settings.save()
+
+    def view_tiles_updated(self, context):
+        context.scene.project_settings.view_tiles = self.view_tiles.strip()
+        context.scene.project_settings.save()
+
+    def view_after_steps_updated(self, context):
+        context.scene.project_settings.view_after_steps = self.view_after_steps
+        context.scene.project_settings.save()
+
     def build_package_enabled_updated(self, context):
         context.scene.project_settings.build_package_enabled = self.build_package_enabled
         context.scene.project_settings.save()
@@ -871,6 +883,26 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         description="The sun directions when the imagery was captured, as azimuth/elevation in degrees, separated by commas, e.g. 168/34, 150/40. Empty (default): estimated from the shadows in the tiles",
         default=str(getattr(bpy.types.Scene.project_settings, "sun_candidates", "")) if bpy.types.Scene.project_settings is not None else "",
         update=sun_candidates_updated
+    )
+    view_lod: EnumProperty(
+        name="LOD shown",
+        description="The LOD of each tile shown in Blender",
+        items=[("finest", "Most detailed", "The most detailed LOD of each tile (the textures as in the sim up close)"),
+               ("coarsest", "Coarsest", "The coarsest LOD of each tile (quick, for large areas)")],
+        default=getattr(bpy.types.Scene.project_settings, "view_lod", "finest") if bpy.types.Scene.project_settings is not None else "finest",
+        update=view_lod_updated
+    )
+    view_tiles: StringProperty(
+        name="Tiles shown",
+        description="The tiles shown in Blender: tile names or their beginnings (a block, a cell), separated by commas. Empty: all the tiles",
+        default=str(getattr(bpy.types.Scene.project_settings, "view_tiles", "")) if bpy.types.Scene.project_settings is not None else "",
+        update=view_tiles_updated
+    )
+    view_after_steps: BoolProperty(
+        name="Show the tiles after the step",
+        description="Show the tiles in Blender (with their textures) when steps 2 and 2b are done, e.g. to judge the colours of the download or the shadow lightening",
+        default=bool(getattr(bpy.types.Scene.project_settings, "view_after_steps", False)) if bpy.types.Scene.project_settings is not None else False,
+        update=view_after_steps_updated
     )
     msfs_build_exe_path_readonly: StringProperty(
         name="Path to the MSFS bin exe that builds the MSFS packages",

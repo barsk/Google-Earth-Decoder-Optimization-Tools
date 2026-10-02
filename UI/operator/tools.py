@@ -293,6 +293,13 @@ def reload_shadow_lightening(context):
         context.scene.setting_props.sun_candidates = str(getattr(context.scene.project_settings, "sun_candidates", ""))
 
 
+def reload_view(context):
+    if context.scene.project_settings is not None:
+        context.scene.setting_props.view_lod = getattr(context.scene.project_settings, "view_lod", "finest")
+        context.scene.setting_props.view_tiles = str(getattr(context.scene.project_settings, "view_tiles", ""))
+        context.scene.setting_props.view_after_steps = bool(getattr(context.scene.project_settings, "view_after_steps", False))
+
+
 def reload_build_package_enabled(context):
     if context.scene.project_settings is not None:
         context.scene.setting_props.build_package_enabled = context.scene.project_settings.build_package_enabled
@@ -417,6 +424,7 @@ def reload_setting_props(context, reload_settings_file=True):
     reload_resize_ratio(context)
     reload_texture_colors(context)
     reload_shadow_lightening(context)
+    reload_view(context)
     reload_build_package_enabled(context)
     reload_python_reload_modules(context)
     reload_project_settings(context)

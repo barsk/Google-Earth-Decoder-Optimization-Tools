@@ -180,6 +180,37 @@ class OT_InitMsfsSceneryProjectOperator(ActionOperator):
         return {'FINISHED'}
 
 
+def display_project_tiles(context):
+    # the tiles of the project in the 3D view (View the tiles in Blender)
+    from blender.view import display_tiles
+    global_settings = context.scene.global_settings
+    msfs_project = MsfsProject(global_settings.projects_path, global_settings.project_name, global_settings.definition_file, global_settings.path, global_settings.author_name, fast_init=True)
+    settings = msfs_project.settings
+    count = display_tiles(msfs_project.model_lib_folder, msfs_project.scene_objects_xml_file_path, getattr(settings, "view_lod", "finest"), getattr(settings, "view_tiles", ""))
+    print("%d models shown in Blender" % count)
+
+
+def display_after_step(context):
+    project_settings = getattr(context.scene, "project_settings", None)
+    if project_settings is not None and getattr(project_settings, "view_after_steps", False):
+        display_project_tiles(context)
+
+
+class OT_DisplayTilesOperator(ActionOperator):
+    bl_idname = "wm.display_tiles"
+    bl_label = "Show the tiles in Blender..."
+
+    @classmethod
+    def poll(cls, context):
+        msfs_project = super().poll(context)
+        return os.path.isfile(msfs_project.scene_objects_xml_file_path)
+
+    def execute(self, context):
+        super().execute(context)
+        display_project_tiles(context)
+        return {'FINISHED'}
+
+
 class OT_OptimizeMsfsSceneryOperator(ActionOperator):
     bl_idname = "wm.optimize_msfs_scenery"
     bl_label = "Optimize an existing MSFS scenery..."
@@ -192,6 +223,7 @@ class OT_OptimizeMsfsSceneryOperator(ActionOperator):
     def execute(self, context):
         super().execute(context)
         optimize_scenery(context.scene.global_settings)
+        display_after_step(context)
         return {'FINISHED'}
 
 
@@ -322,6 +354,7 @@ class OT_ShadowLighteningOperator(ActionOperator):
     def execute(self, context):
         super().execute(context)
         shadow_lightening(context.scene.global_settings)
+        display_after_step(context)
         return {'FINISHED'}
 
 

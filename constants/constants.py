@@ -390,6 +390,9 @@ GEOCODE_INI_SECTION = "GEOCODE"
 ALTITUDE_ADJUSTMENT_INI_SECTION = "ALTITUDE_ADJUSTMENT"
 TEXTURES_INI_SECTION = "TEXTURES"
 SHADOW_LIGHTENING_INI_SECTION = "SHADOW_LIGHTENING"
+# the tiles shown in Blender (View the tiles): which LOD, which tiles (names or prefixes, empty: all), after steps 2 and 2b
+VIEW_INI_SECTION = "VIEW"
+VIEW_DEFAULTS = {"view_lod": "finest", "view_tiles": "", "view_after_steps": "False"}
 MSFS_SDK_INI_SECTION = "MSFS_SDK"
 BUILD_INI_SECTION = "AUTOMATIC_BUILD"
 COMPRESSONATOR_INI_SECTION = "COMPRESSONATOR"
