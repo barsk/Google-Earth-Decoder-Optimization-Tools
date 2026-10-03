@@ -60,6 +60,18 @@ SMOOTH_CELL = 2.0           # vegetation normals: averaged over the 3 x 3 x 3 ce
 # the work size of the likelihood and the reference per LOD (upsampled), so that their texels are ~0.8 m on every LOD
 # by rank: the most detailed LOD of the tile, the next one, ...
 LOW_SCALES = (4, 2, 1, 1)
+# the fits used: per channel above 0 and at most these (a sun/sky ratio of ~20 and a lit/shadow ratio of ~10-20 are usual; a near
+# black shaded side, e.g. after too strong a haze removal in step 2a, gave negative, undefined or thousands-fold ratios, and
+# channels lost in the texels: blue speckles)
+MAX_SUN_SKY_RATIO = 60.0
+# a texel channel below this (linear) is black (8 bits: level 0): it has no gain of its own
+BLACK_LINEAR = 1e-4
+MAX_LIT_SHADOW_RATIO = 40.0
+
+
+def usable(ratios, maximum, minimum=0.0):
+    ratios = np.asarray(ratios, dtype=np.float64)
+    return bool(np.all(np.isfinite(ratios)) and ratios.min() > minimum and ratios.max() <= maximum)
 FITS_FOLDER = "fits"
 
 DEFAULT_PARAMETERS = dict(SHADOW_LIGHTENING_DEFAULTS)
@@ -152,10 +164,11 @@ def stored_fits(fits_folder):
                 fit = json.load(f)
         except (OSError, ValueError):
             continue
-        if fit.get("ratios") is not None:
+        # (the usable ones only: earlier runs stored any)
+        if fit.get("ratios") is not None and usable(fit["ratios"], MAX_SUN_SKY_RATIO):
             ratios.append(fit["ratios"])
             knees.append(fit["knee"])
-        if fit.get("shadow_ratio_raw") is not None:
+        if fit.get("shadow_ratio_raw") is not None and usable(fit["shadow_ratio_raw"], MAX_LIT_SHADOW_RATIO, 1.0):
             shadow_ratios.append(fit["shadow_ratio_raw"])
     median = lambda rows: [statistics.median(column) for column in zip(*rows)]
     return {"ratios": median(ratios) if ratios else None, "knee": statistics.median(knees) if knees else None,
@@ -184,13 +197,17 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
             colors.append(t["linear"][ys[pick], xs[pick]])
             facings.append(t["normal_map"][ys[pick], xs[pick]].astype(np.float64) @ sun)
         ratios, knee = fit_ratio(np.concatenate(colors), np.concatenate(facings))
+        reason = "too few walls to fit"
+        if ratios is not None and not usable(ratios, MAX_SUN_SKY_RATIO):
+            reason = "unusable fit (sun/sky ratio %s: the shaded side nearly black?)" % " ".join("%.2f" % v for v in ratios)
+            ratios = None
         fit = {"ratios": ratios, "knee": knee, "fitted": ratios is not None}
         if ratios is None:
-            # too few walls in the tile: the median fit of the tiles already done, else no facing correction
+            # too few walls in the tile, or no usable fit: the median fit of the tiles already done, else no facing correction
             stored = stored_fits(fits_folder)
             fit["ratios"] = np.array(stored["ratios"]) if stored["ratios"] is not None else np.zeros(3)
             fit["knee"] = stored["knee"] if stored["knee"] is not None else 0.4
-            log.append("part 1: too few walls to fit, %s" % ("the median fit of the tiles done" if stored["ratios"] is not None else "no facing correction"))
+            log.append("part 1: %s, %s" % (reason, "the median fit of the tiles done" if stored["ratios"] is not None else "no facing correction"))
     for t in textures:
         t["part1"] = correct_facing(t["linear"], t["srgb8"], t.pop("normal_map"), t.pop("smooth_map"), t["covered"], t["blocked"], sun,
                                     fit["ratios"], fit["knee"], parameters["wall_gain_cap"], parameters["vegetation_strength"], parameters["wall_color"])
@@ -231,15 +248,17 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
             pairs = confident.nonzero()[0][darkness < 0.6]
             found.append(reference[pairs] / np.maximum(colors[pairs], 1e-5))
         found = np.concatenate(found)
-        if len(found) >= MIN_SHADOW_PAIRS:
-            ratio = np.median(found, axis=0)
+        ratio = np.median(found, axis=0) if len(found) >= MIN_SHADOW_PAIRS else None
+        if ratio is not None and usable(ratio, MAX_LIT_SHADOW_RATIO, 1.0):
             fit["shadow_fitted"] = True
         else:
-            # too few shadows to measure (water, open ground): the median ratio of the tiles already done, else no brightening
+            # too few shadows to measure (water, open ground), or no usable ratio: the median ratio of the tiles already done, else
+            # no brightening
+            reason = "%d shadow texels only" % len(found) if ratio is None else "unusable lit/shadow ratio %s" % " ".join("%.2f" % v for v in ratio)
             stored = stored_fits(fits_folder)
             ratio = np.array(stored["shadow_ratio_raw"]) if stored["shadow_ratio_raw"] is not None else np.ones(3) * 1.0001
             fit["shadow_fitted"] = False
-            log.append("part 2: %d shadow texels only, %s" % (len(found), "the median ratio of the tiles done" if stored["shadow_ratio_raw"] is not None else "no brightening"))
+            log.append("part 2: %s, %s" % (reason, "the median ratio of the tiles done" if stored["shadow_ratio_raw"] is not None else "no brightening"))
         fit["shadow_ratio_raw"] = ratio
         fit["shadow_ratio"] = ratio * min(1.0, parameters["shadow_gain_cap"] / max(ratio.max(), 1e-6))
         fit["shadow_pairs"] = len(found)
@@ -271,6 +290,19 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
         gain_map[covered] = part1[covered] / np.maximum(linear[covered], 1e-6)
         gain_map[ys, xs] = (part1[ys, xs] * tinted[None, :] ** exponent[:, None]) / np.maximum(linear[ys, xs], 1e-6)
         del part1
+        # a black channel (e.g. after the haze removal of step 2a) has no gain of its own: 0 / 0 gave 0, which the padding spread
+        # into the texels around (the colour ones lost that channel: blue speckles). It takes the brightness gain of its texel,
+        # and a black texel none (padded from the texels around, like the uncovered ones)
+        bys, bxs = np.nonzero(covered & (linear < BLACK_LINEAR).any(axis=2))
+        if len(bys):
+            original = linear[bys, bxs]
+            corrected = gain_map[bys, bxs] * np.maximum(original, 1e-6)
+            brightness = lum(original)
+            texel_gain = lum(corrected) / np.maximum(brightness, 1e-12)
+            gains = np.where(original < BLACK_LINEAR, texel_gain[:, None], gain_map[bys, bxs])
+            gains[brightness < BLACK_LINEAR] = np.nan
+            gain_map[bys, bxs] = gains
+            del original, corrected, gains
         result = pad_gain(gain_map)
         del gain_map
         result *= linear

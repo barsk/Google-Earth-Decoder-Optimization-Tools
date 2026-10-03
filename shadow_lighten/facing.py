@@ -77,6 +77,8 @@ def correction(normals, sun, ratios, knee, weights, gain_cap, color=1.0):
     # place: these arrays have a row per texel of a LOD00 texture)
     facing = np.clip(normals @ sun, 0.0, knee)
     factor = (1.0 + ratios[None, :] * knee) / (1.0 + ratios[None, :] * facing[:, None])
+    # (never darker, never undefined: a fit is checked before, see shadows.usable)
+    factor = np.where(np.isfinite(factor), np.maximum(factor, 1.0), 1.0)
     brightness = factor @ LUMINANCE
     if color == 1.0:
         # (uncapped: the factor exactly as it is)
