@@ -1293,15 +1293,19 @@ def create_water_exclusion_gdf(natural_water, water, sea, roads):
 
 
 def create_ground_exclusion_gdf(landuse, forests, woods, nature_reserves, natural, aeroway, bridges, parks, airport, settings):
+    # the ground whose 3d data is excluded, each kind by its own option (the forests and woods are also prepared for the vegetation
+    # polygons, without being excluded)
     result = create_empty_gdf()
-    result = union_gdf(result, landuse)
-    result = union_gdf(result, forests)
-    result = union_gdf(result, woods)
-    result = union_gdf(result, nature_reserves)
-    result = union_gdf(result, natural)
-    result = union_gdf(result, aeroway)
-    result = union_gdf(result, airport)
-    result = union_gdf(result, parks)
+    if settings.exclude_ground:
+        # the other ground: farmlands, vineyards, allotments, meadows, orchards..., the aeroways and the airport
+        for gdf in (landuse, natural, aeroway, airport):
+            result = union_gdf(result, gdf)
+    for option, gdf in ((settings.exclude_forests, forests), (settings.exclude_woods, woods), (settings.exclude_nature_reserves, nature_reserves),
+                        (settings.exclude_parks, parks)):
+        if option:
+            result = union_gdf(result, gdf)
+    if result.empty:
+        return result
     result = resize_gdf(result, float(settings.ground_exclusion_margin))
 
     if not bridges.empty and BRIDGE_OSM_TAG in bridges:

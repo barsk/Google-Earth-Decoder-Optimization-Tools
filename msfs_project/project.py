@@ -2597,10 +2597,12 @@ class MsfsProject:
         pbar.update("water exclusion geodataframe created")
         # create ground exclusion masks to cleanup 3d data tiles
         pbar.update("creating ground exclusion geodataframe...", stall=True)
-        ground_exclusion = create_ground_exclusion_gdf(landuse, forests, woods, nature_reserves, natural, aeroway, bridges, parks, airport, self.settings) if self.settings.exclude_ground else create_empty_gdf()
+        # (each option on its own: the forests, woods, nature reserves and parks were only excluded with the other ground)
+        settings = self.settings
+        ground_exclusion = create_ground_exclusion_gdf(landuse, forests, woods, nature_reserves, natural, aeroway, bridges, parks, airport, settings)             if settings.exclude_ground or settings.exclude_forests or settings.exclude_woods or settings.exclude_nature_reserves or settings.exclude_parks             else create_empty_gdf()
         pbar.update("ground exclusion geodataframe created")
         pbar.update("creating exclusion geodataframe...", stall=True)
-        exclusion = union_gdf(water_exclusion, ground_exclusion if self.settings.exclude_ground else create_empty_gdf())
+        exclusion = union_gdf(water_exclusion, ground_exclusion)
         pbar.update("exclusion geodataframe created")
         # the water where the tiles are pushed down (the bridges, buildings, breakwaters are kept by their height, see push_down_water_in_mask)
         water_push_down = create_water_push_down_gdf(whole_water, orig_road, orig_railway, orig_man_made, WATER_PUSH_DOWN_BRIDGE_BAND) \
