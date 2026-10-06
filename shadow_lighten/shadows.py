@@ -42,7 +42,7 @@ from mathutils import Vector
 from PIL import Image
 
 from .textures import load_triangles, load_occluders, rasterize, smooth_normals, srgb_from_8bit, srgb_to_linear, linear_to_srgb, lum, \
-    smoothstep, upsample_smooth, box_blur, pad_gain, reference_cells, cell_means
+    smoothstep, upsample_smooth, box_blur, pad_gain, reference_cells, cell_means, textured_faces, straightened_normals
 from .facing import fit_ratio, vegetation, correct_facing, WALL_MAX_UP, FIT_SAMPLES
 from .sun import RAY_OFFSET, RAY_LENGTH
 from constants import SHADOW_LIGHTENING_DEFAULTS
@@ -138,6 +138,9 @@ def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, sc
     # converted where used, the maps freed as soon as they are no longer needed
     srgb8 = np.asarray(Image.open(originals.path(image_name)).convert("RGB"))
     height, width = srgb8.shape[:2]
+    # without the node skirts (see textured_faces)
+    keep = textured_faces(triangles, uvs, width, height)
+    triangles, uvs, normals = triangles[keep], uvs[keep], straightened_normals(triangles[keep], normals[keep])
     smoothed = smooth_normals(triangles, normals, SMOOTH_CELL)
     point_map, (normal_map, smooth_map) = rasterize(triangles, uvs, [normals, smoothed], width, height)
     covered = ~np.isnan(point_map[..., 0])

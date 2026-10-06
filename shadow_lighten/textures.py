@@ -245,6 +245,44 @@ def cell_means(cells, points):
     return sums / np.maximum(counts, 1)[:, None], counts
 
 
+# a face with less than this share of the texture's usual texels per m2 has no texture of its own (a node skirt)
+SKIRT_DENSITY = 0.01
+
+
+def textured_faces(triangles, uvs, width, height):
+    """The faces with texture of their own. Google's nodes have skirts: vertical curtains (~0.5 m) along their edges whose lower
+    corners reuse the texture coordinates of the edge above (39 % of the faces of a LOD01 tile at Jonkoping, < 1/1000 of the
+    texels per m2 of the others). Rasterized, a skirt replaced the ground's normal on the texels of the edge: a "wall" facing
+    away from the sun, brightened by part 1 (pale teeth along the node edges)."""
+    pix = uvs * np.array([width, height])
+    uv_area = np.abs((pix[:, 1, 0] - pix[:, 0, 0]) * (pix[:, 2, 1] - pix[:, 0, 1]) - (pix[:, 2, 0] - pix[:, 0, 0]) * (pix[:, 1, 1] - pix[:, 0, 1])) / 2
+    area = np.linalg.norm(np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]), axis=1) / 2
+    density = uv_area / np.maximum(area, 1e-9)
+    if not uv_area.sum():
+        return np.ones(len(triangles), dtype=bool)
+    # the usual density: the median over the texels (the faces weighted by their texels, the skirts have hardly any)
+    order = np.argsort(density)
+    weights = np.cumsum(uv_area[order])
+    usual = density[order][np.searchsorted(weights, weights[-1] / 2)]
+    return (density >= usual * SKIRT_DENSITY) | (area < 1e-6)
+
+
+# a corner normal further than this from its face's (degrees) is the skirts' (see straightened_normals)
+TILTED_NORMAL_ANGLE = 30.0
+
+
+def straightened_normals(triangles, normals):
+    """The corner normals, those tilted far from their face replaced by the face's. The corners on a node edge are shared with
+    its skirt, whose vertical faces were averaged into their normals: ground facing away from the sun near the node edges
+    (37 degrees on a Jonkoping field), brightened by part 1 as a shaded side."""
+    face = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+    face /= np.maximum(np.linalg.norm(face, axis=1), 1e-12)[:, None]
+    # (the face's side: the one of its corner normals)
+    face *= np.where(np.einsum("ij,ij->i", face, normals.sum(axis=1)) < 0, -1.0, 1.0)[:, None]
+    tilted = np.einsum("ijk,ik->ij", normals, face) < math.cos(math.radians(TILTED_NORMAL_ANGLE))
+    return np.where(tilted[..., None], face[:, None, :], normals)
+
+
 def rasterize(triangles, uvs, normal_sets, width, height):
     # the 3D point of each texel of a (width, height) texture covered by the triangles (NaN elsewhere), and one interpolated
     # normal map per set of vertex normals
