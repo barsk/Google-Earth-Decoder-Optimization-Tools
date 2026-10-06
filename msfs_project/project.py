@@ -214,6 +214,7 @@ class MsfsProject:
 
     def clean(self, remove_tiles=False):
         isolated_print(EOL)
+        self.fix_node_edge_normals()
         tiles_to_remove = []
 
         if not self.colliders:
@@ -321,6 +322,23 @@ class MsfsProject:
         if counts["corrected"] and os.path.isdir(os.path.join(self.backup_folder, SHADOW_LIGHTENING_BACKUP_FOLDER)):
             pr_bg_orange("The colours changed after step 2b: run step 2b again (it starts from the corrected textures)" + EOL + CEND)
         return counts
+
+    def fix_node_edge_normals(self):
+        # the normals of every model (tiles, landmark objects) computed again without the node skirts, which tilted them along the
+        # node edges: dark or bright ramps in the sim (see utils/gltf_normals.py; models without skirts are left as they are)
+        import glob
+        from utils.gltf_normals import fix_skirt_normals
+        model_files = sorted(glob.glob(os.path.join(self.model_lib_folder, "*.gltf")))
+        if not model_files:
+            return
+        pbar = ProgressBar(list(model_files), title="NORMALS ALONG THE NODE EDGES")
+        changed_files = changed_vertices = 0
+        for model_file in model_files:
+            changed = fix_skirt_normals(model_file)
+            changed_files += bool(changed)
+            changed_vertices += changed
+            pbar.update("%s normals fixed" % os.path.basename(model_file))
+        isolated_print("normals along the node edges: %d of %d models, %d vertices" % (changed_files, len(model_files), changed_vertices) + EOL)
 
     def measure_colors(self, prefixes=()):
         # step 2a, Auto: the haze colour and the white balance measured on the original textures (those of the tiles starting
