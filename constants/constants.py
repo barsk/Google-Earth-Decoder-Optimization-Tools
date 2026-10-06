@@ -208,6 +208,11 @@ WATERLINE_SAMPLE_DISTANCE = 6.0
 WATERLINE_PERCENTILE = 5
 WATER_SURFACE_PERCENTILE = 75
 WATERLINE_MIN_SAMPLES = 20
+# a water body whose water surface spreads more than this (10th to 90th percentile, m) slopes (a stream down a hillside): no
+# single level for it (Jonkoping: one level for a stream dropping ~100 m raised the terrain into a cliff), but local levels from
+# the samples within SLOPED_WATER_RADIUS (m) of each point
+SLOPED_WATER_SPREAD = 3.0
+SLOPED_WATER_RADIUS = 30.0
 # the bottom of the water bodies goes down from this depth at the shore (in meters), by this slope, to the water depth setting.
 # The MSFS water is a thin layer (about 0.6 m) on the terrain: its surface follows a sloping bottom, so the default is a flat bottom
 WATER_SHORE_DEPTH = 1.0

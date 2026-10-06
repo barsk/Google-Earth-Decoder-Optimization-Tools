@@ -33,7 +33,7 @@ with warnings.catch_warnings():
     warnings.simplefilter(action="ignore", category=RuntimeWarning, append=True)
     warnings.simplefilter(action="ignore", category=ShapelyDeprecationWarning, append=True)
 
-from constants import BUILDING_EXCLUSION_BORDER_INSET, WATERLINE_SAMPLE_DISTANCE, WATERLINE_PERCENTILE, WATER_SURFACE_PERCENTILE, WATERLINE_MIN_SAMPLES, WATER_EXCLUSION_INSET, NOT_WATER_NATURAL_OSM_TAGS, GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES_FOLDER, OSM_LAND_SHAPEFILE, ROAD_OSM_KEY, BRIDGE_OSM_TAG, SERVICE_OSM_KEY, NOT_SHORE_WATER_OSM_KEY, WATER_OSM_KEY, NATURAL_OSM_KEY, OSM_TAGS, FOOTWAY_OSM_TAG, PATH_OSM_TAG, MAN_MADE_OSM_KEY, PIER_OSM_TAG, GOLF_OSM_KEY, FAIRWAY_OSM_TAG, EOL, CEND, TUNNEL_OSM_TAG, SEAMARK_TYPE_OSM_TAG, BUILDING_OSM_KEY, SHP_FILE_EXT, ELEMENT_TY_OSM_KEY, OSMID_OSM_KEY, RAILWAY_OSM_KEY, LANES_OSM_KEY, ONEWAY_OSM_KEY, ROAD_WITH_BORDERS, \
+from constants import SLOPED_WATER_SPREAD, SLOPED_WATER_RADIUS, BUILDING_EXCLUSION_BORDER_INSET, WATERLINE_SAMPLE_DISTANCE, WATERLINE_PERCENTILE, WATER_SURFACE_PERCENTILE, WATERLINE_MIN_SAMPLES, WATER_EXCLUSION_INSET, NOT_WATER_NATURAL_OSM_TAGS, GEOMETRY_OSM_COLUMN, BOUNDING_BOX_OSM_KEY, SHAPE_TEMPLATES_FOLDER, OSM_LAND_SHAPEFILE, ROAD_OSM_KEY, BRIDGE_OSM_TAG, SERVICE_OSM_KEY, NOT_SHORE_WATER_OSM_KEY, WATER_OSM_KEY, NATURAL_OSM_KEY, OSM_TAGS, FOOTWAY_OSM_TAG, PATH_OSM_TAG, MAN_MADE_OSM_KEY, PIER_OSM_TAG, GOLF_OSM_KEY, FAIRWAY_OSM_TAG, EOL, CEND, TUNNEL_OSM_TAG, SEAMARK_TYPE_OSM_TAG, BUILDING_OSM_KEY, SHP_FILE_EXT, ELEMENT_TY_OSM_KEY, OSMID_OSM_KEY, RAILWAY_OSM_KEY, LANES_OSM_KEY, ONEWAY_OSM_KEY, ROAD_WITH_BORDERS, \
     ROAD_LANE_WIDTH, GEOCODE_OSM_FILE_PREFIX, PEDESTRIAN_ROAD_TYPE, FOOTWAY_ROAD_TYPE, SERVICE_ROAD_TYPE, LANDUSE_OSM_KEY, CONSTRUCTION_OSM_KEY, GDAL_LIB_PREFIX, FIONA_LIB_PREFIX, LAND_MASS_REPO, LAND_MASS_ARCHIVE, LEISURE_OSM_KEY, NETWORKX_LIB, RTREE_LIB, MATPLOTLIB_LIB, PANDAS_LIB, GEOPANDAS_LIB, OSMNX_LIB, SHAPELY_LIB, PATH_ROAD_TYPE, TRACK_ROAD_TYPE, AREA_OSM_TAG, NOT_EXCLUSION_BUILDING_OSM_KEY, WALL_OSM_KEY, WALL_OSM_TAG, CASTLE_WALL_OSM_TAG, CYCLEWAY_ROAD_TYPE, FULL_PREFIX, \
     ROAD_REMOVAL_LANDUSE_OSM_KEY, ROAD_REMOVAL_NATURAL_OSM_KEY, PROPOSED_OSM_TAG, LANDMARK_PREFIX, LON_OSM_KEY, LAT_OSM_KEY, FOREST_OSM_TAG, WOOD_OSM_TAG, SHAPELY_TYPE, OSMNX_LIB_VERSION, DEFAULT_OVERPASS_API_URI
 from utils.colored_print import pr_bg_orange
@@ -1233,8 +1233,33 @@ def flatten_water_height_data(height_maps, samples, water_areas_file_path, level
         if not inside:
             continue
 
-        water_heights = [water_samples[i][2] for i in within(water_samples_gdf, body)]
-        shore_heights = [shore_samples[i][2] for i in within(shore_samples_gdf, body.buffer(WATERLINE_SAMPLE_DISTANCE + 1.0).difference(body))]
+        water_indices = within(water_samples_gdf, body)
+        shore_indices = within(shore_samples_gdf, body.buffer(WATERLINE_SAMPLE_DISTANCE + 1.0).difference(body))
+        water_heights = [water_samples[i][2] for i in water_indices]
+        shore_heights = [shore_samples[i][2] for i in shore_indices]
+        shore_points = within(points_gdf, body.buffer(shore_margin))
+
+        if len(water_heights) >= WATERLINE_MIN_SAMPLES and np.percentile(water_heights, 90) - np.percentile(water_heights, 10) > SLOPED_WATER_SPREAD:
+            # a sloped water body (a stream down a hillside): the level of each point from the samples around it (the median water
+            # surface, not above the median shore ground), the points without samples around left to the tiles' ground
+            from scipy.spatial import cKDTree
+            xy = lambda gdf, indices: np.array([(p.x, p.y) for p in gdf.geometry.iloc[indices]]) if len(indices) else np.empty((0, 2))
+            water_tree = cKDTree(xy(water_samples_gdf, water_indices))
+            shore_tree = cKDTree(xy(shore_samples_gdf, shore_indices)) if shore_indices else None
+            local = {}
+            for i, near in zip(inside + shore_points, water_tree.query_ball_point(xy(points_gdf, inside + shore_points), SLOPED_WATER_RADIUS)):
+                if not near:
+                    continue
+                level = float(np.median([water_heights[k] for k in near]))
+                if shore_tree is not None:
+                    shore_near = shore_tree.query_ball_point(xy(points_gdf, [i])[0], SLOPED_WATER_RADIUS)
+                    if len(shore_near) >= 3:
+                        level = min(level, float(np.median([shore_heights[k] for k in shore_near])))
+                local[i] = level
+            spread = np.percentile(water_heights, 90) - np.percentile(water_heights, 10)
+            body_points.append((None, "sloped (%.1f m spread): local levels, %d water samples" % (spread, len(water_heights)),
+                                [i for i in inside if i in local], [i for i in shore_points if i in local], {}, local))
+            continue
 
         if len(water_heights) >= WATERLINE_MIN_SAMPLES and len(shore_heights) >= WATERLINE_MIN_SAMPLES:
             # the level of the Google Earth water surface, so that what remains of it is under the MSFS water, but not under the waterline,
@@ -1258,20 +1283,20 @@ def flatten_water_height_data(height_maps, samples, water_areas_file_path, level
             distances = points_gdf.geometry.iloc[inside].distance(body.boundary)
             depths = {i: min(max_depth, shore_depth + depth_slope * float(d)) for i, d in zip(inside, distances)}
 
-        body_points.append((level + level_offset, method, inside, within(points_gdf, body.buffer(shore_margin)), depths))
+        body_points.append((level + level_offset, method, inside, shore_points, depths, None))
 
     # the points inside a water body first, then the points on its shore
     assigned = set()
     for key in (2, 3):
         for body in body_points:
-            level, depths = body[0], body[4]
+            level, depths, local = body[0], body[4], body[5]
             for i in body[key]:
                 if i not in assigned:
                     height_map, j, _ = points[i]
-                    height_map["values"][j] = level - depths.get(i, 0.0)
+                    height_map["values"][j] = (local[i] + level_offset) if local is not None else level - depths.get(i, 0.0)
                     assigned.add(i)
 
-    return [(level, len(inside), method) for level, method, inside, _, _ in body_points]
+    return [(level if level is not None else float("nan"), len(inside), method) for level, method, inside, _, _, _ in body_points]
 
 
 def create_whole_water_gdf(natural_water, water, sea):
