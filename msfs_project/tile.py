@@ -75,10 +75,13 @@ class MsfsTile(MsfsSceneObject):
 
     def add_collider(self, collider_as_lower_lod=False):
         new_collider = None
-        for idx, lod in enumerate(self.lods):
-            if idx < (len(self.lods) - 1): continue
+        collider_model_file = self.name + COLLIDER_SUFFIX + GLTF_FILE_EXT
+        # (the collider of a previous step 7, a lower lod of the tile, is not the source of the new one: step 4 run again on a finished
+        # tile copied the collider onto itself)
+        lods = [lod for lod in self.lods if lod.model_file != collider_model_file]
+        for idx, lod in enumerate(lods):
+            if idx < (len(lods) - 1): continue
             if not os.path.isfile(os.path.join(lod.folder, lod.model_file)): continue
-            collider_model_file = self.name + COLLIDER_SUFFIX + GLTF_FILE_EXT
             collider_definition_file_name = self.name + COLLIDER_SUFFIX + XML_FILE_EXT
             lod.create_collider(collider_model_file)
             create_new_definition_file(os.path.join(self.folder, collider_definition_file_name), has_lods=False)

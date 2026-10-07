@@ -81,7 +81,7 @@ from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
 from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material, get_material_output
-from constants import EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, BUILDING_FOOTPRINT_MARGIN, BUILDING_ENCLOSED_OPEN_AREA, BUILDING_GROUND_FILTER_SIZE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
+from constants import SLOPED_WATER_SPREAD, SLOPED_WATER_RADIUS, EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, BUILDING_FOOTPRINT_MARGIN, BUILDING_ENCLOSED_OPEN_AREA, BUILDING_GROUND_FILTER_SIZE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -1121,6 +1121,29 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
         level = min(level, np.percentile(water_heights, 25))
     target = float(level) - depth
     top = float(level) + max_height if max_height is not None else np.inf
+    # sloped water (a stream down a hillside): no single level for the tile (pushed down to its lowest part, the stream cut a
+    # trench of tens of meters, seen at the distances where the sim's terrain doesn't fill it), but the level of each vertex from
+    # the water vertices within SLOPED_WATER_RADIUS, not above the shore ground there
+    local_level = None
+    if len(water_heights) >= 20 and np.percentile(water_heights, 90) - np.percentile(water_heights, 10) > SLOPED_WATER_SPREAD:
+        water_xy = np.concatenate([coords[in_water, :2] for _, coords, in_water, _ in objects_data])
+        shore_xy = np.concatenate([coords[on_shore, :2] for _, coords, _, on_shore in objects_data])
+        water_tree = cKDTree(water_xy)
+        shore_tree = cKDTree(shore_xy) if len(shore_xy) else None
+
+        def local_level(xys):
+            # (on a 2 m grid: the levels change little within it)
+            cells, inverse = np.unique(np.round(xys / 2.0).astype(np.int64), axis=0, return_inverse=True)
+            centers = cells * 2.0
+            levels = []
+            for xy, near in zip(centers, water_tree.query_ball_point(centers, SLOPED_WATER_RADIUS)):
+                local = float(np.percentile(water_heights[near], 25)) if near else float(level)
+                if shore_tree is not None:
+                    shore_near = shore_tree.query_ball_point(xy, SLOPED_WATER_RADIUS)
+                    if len(shore_near) >= 3:
+                        local = min(local, float(np.median(shore_heights[shore_near])))
+                levels.append(local)
+            return np.array(levels)[inverse.ravel()]
     structures = None
     if max_height is not None and structures_file_path and os.path.isfile(structures_file_path) and positioning_file_path and os.path.isfile(positioning_file_path):
         structures, _ = read_areas_in_tile(positioning_file_path, structures_file_path, clip_margin=0.001)
@@ -1133,10 +1156,15 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
     shore = footprint.boundary.difference(geometry.box(minx, miny, maxx, maxy).boundary.buffer(0.5))
     nb_pushed = 0
     for obj, coords, in_water, _ in objects_data:
-        below_top = coords[:, 2] < top
+        targets, tops = np.full(len(coords), target), np.full(len(coords), top)
+        if local_level is not None and in_water.any():
+            levels = local_level(coords[in_water, :2])
+            targets[in_water] = levels - depth
+            tops[in_water] = levels + max_height if np.isfinite(top) else np.inf
+        below_top = coords[:, 2] < tops
         if structures is not None:
             below_top |= ~np.array([structures.contains(geometry.Point(x, y)) for x, y in coords[:, :2]], dtype=bool)
-        indexes = np.where(in_water & (coords[:, 2] > target) & below_top)[0]
+        indexes = np.where(in_water & (coords[:, 2] > targets) & below_top)[0]
         if not len(indexes):
             continue
         # the normals are kept (they turn with the faces when the vertices are moved)
@@ -1146,7 +1174,7 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
             weight = 1.0
             if ramp_distance > 0.0 and not shore.is_empty:
                 weight = min(1.0, shore.distance(geometry.Point(coords[i, 0], coords[i, 1])) / ramp_distance)
-            z = coords[i, 2] - weight * (coords[i, 2] - target)
+            z = coords[i, 2] - weight * (coords[i, 2] - targets[i])
             obj.data.vertices[int(i)].co = inverted_matrix @ mathutils.Vector((coords[i, 0], coords[i, 1], z))
         set_loop_normals(obj, normals)
         nb_pushed += len(indexes)
