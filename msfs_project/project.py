@@ -221,11 +221,18 @@ class MsfsProject:
             lods = [lod for tile in self.tiles.values() for lod in tile.lods]
             pbar = ProgressBar(list(lods), title="PREPARE THE TILES FOR MSFS")
             for tile in self.tiles.values():
+                # a lod without its binaries or textures is removed from the tile, the tile only when none is left (one missing lod,
+                # e.g. a collider lod whose file was removed, removed the whole tile with its good lods and textures)
+                broken = [lod for lod in tile.lods if remove_tiles and (len(lod.binaries) <= 0 or len(lod.textures) <= 0)]
+                if broken and len(broken) == len(tile.lods):
+                    tiles_to_remove.append(tile)
+                    continue
+                for lod in broken:
+                    lod.remove_files(remove_textures=False)
+                    tile.xml.remove_lod(lod.model_file)
+                    tile.lods.remove(lod)
+                    isolated_print("Lod", lod.model_file, "of the tile", tile.name, "is incomplete: removed")
                 for lod in tile.lods:
-                    if len(lod.binaries) <= 0 and remove_tiles:
-                        tiles_to_remove.append(tile)
-                    if len(lod.textures) <= 0 and remove_tiles:
-                        tiles_to_remove.append(tile)
                     lod.optimization_in_progress = False
                     lod.prepare_for_msfs()
                     pbar.update("%s prepared for msfs" % lod.name)
@@ -1528,6 +1535,19 @@ class MsfsProject:
             has_water_mask_file = os.path.isfile(water_mask_file_path)
             has_beach_mask_file = os.path.isfile(beach_mask_file_path)
 
+            # the collider of step 7 (an object of the scene, and the lowest lod of the tile with collider_as_lower_lod) is made again
+            # after the cleanup: both removed first, the collider lod isn't cleaned as a lod of the tile. (Only the object was removed:
+            # the collider made again was not in the scene, the next loading of the project removed its file, still the lowest lod of
+            # the tile, and step 6 then removed the whole tile as broken)
+            collider_model_file = tile.name + COLLIDER_SUFFIX + GLTF_FILE_EXT
+            has_collider_lod = any(lod.model_file == collider_model_file for lod in tile.lods)
+            if (has_collider_lod or self.__get_tile_collider(tile.name) is not None) and                     any(lod.valid and (force_cleanup or not lod.cleaned) for lod in tile.lods if lod.model_file != collider_model_file):
+                if self.__get_tile_collider(tile.name) is not None:
+                    self.__remove_tile_collider(tile.name)
+                if has_collider_lod:
+                    tile.remove_collider_lod()
+                tiles.append(tile)
+
             for lod in tile.lods:
                 if not os.path.isdir(lod.folder):
                     continue
@@ -1545,13 +1565,6 @@ class MsfsProject:
 
                 if lod.cleaned and not force_cleanup:
                     continue
-
-                collider = self.__get_tile_collider(tile.name)
-                has_collider = (collider is not None)
-
-                if has_collider:
-                    self.__remove_tile_collider(tile.name)
-                    tiles.append(tile)
 
                 params = ["--folder", str(lod_folder), "--output_folder", str(lod.folder), "--model_file", str(lod.model_file),
                                                           "--positioning_file_path", str(os.path.join(self.osmfiles_folder, BOUNDING_BOX_OSM_FILE_PREFIX + "_" + tile.name + OSM_FILE_EXT))]
@@ -2290,10 +2303,13 @@ class MsfsProject:
     def __process_lods_3d_data(self, nb_parallel_blender_tasks, process_all=False):
         tiles_with_collider, lods_data = self.__retrieve_lods_to_process(nb_parallel_blender_tasks, force_cleanup=process_all)
         self.__multithread_blender_process_data(lods_data, "cleanup_lod_3d_data.py", "CLEAN LODS 3D DATA TILES", "cleaned", group_by_tile=True)
+        # (the colliders made again as step 7 makes them: lowest lod of the tile per the setting, object in the scene)
         for tile in tiles_with_collider:
             for lod in tile.lods:
                 lod.remove_road_and_collision_tags()
-            tile.add_collider()
+            new_collider = tile.add_collider(collider_as_lower_lod=self.settings.collider_as_lower_lod)
+            if new_collider is not None:
+                self.__add_object_in_objects_xml(tile.xml.guid, new_collider)
 
     def __exclude_lods_3d_data_from_geocode(self, geocode, geocode_gdf, settings):
         modified_tiles, tiles_with_collider, lods_data = self.__retrieve_lods_to_exclude_3d_data_from_geocode(geocode, geocode_gdf, "exclude_3d_data_from_geocode", settings)
