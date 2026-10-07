@@ -217,25 +217,34 @@ class MsfsProject:
         self.fix_node_edge_normals()
         tiles_to_remove = []
 
-        if not self.colliders:
-            lods = [lod for tile in self.tiles.values() for lod in tile.lods]
-            pbar = ProgressBar(list(lods), title="PREPARE THE TILES FOR MSFS")
-            for tile in self.tiles.values():
-                # a lod without its binaries or textures is removed from the tile, the tile only when none is left (one missing lod,
-                # e.g. a collider lod whose file was removed, removed the whole tile with its good lods and textures)
-                broken = [lod for lod in tile.lods if remove_tiles and (len(lod.binaries) <= 0 or len(lod.textures) <= 0)]
-                if broken and len(broken) == len(tile.lods):
-                    tiles_to_remove.append(tile)
+        # (the tiles were only prepared without colliders in the project, as add_asobo_extensions puts the road and collision tags
+        # back on the tiles and takes the invisible material off the colliders: once step 4 run again on a finished cell made the
+        # colliders again, its models kept the metallic material of the export and rendered much darker. Now the colliders are
+        # left as they are, and the road and collision tags are taken off the tiles that have a collider, as step 7 does)
+        lods = [lod for tile in self.tiles.values() for lod in tile.lods]
+        pbar = ProgressBar(list(lods), title="PREPARE THE TILES FOR MSFS")
+        for tile in self.tiles.values():
+            # a lod without its binaries or textures is removed from the tile, the tile only when none is left (one missing lod,
+            # e.g. a collider lod whose file was removed, removed the whole tile with its good lods and textures)
+            broken = [lod for lod in tile.lods if remove_tiles and (len(lod.binaries) <= 0 or len(lod.textures) <= 0)]
+            if broken and len(broken) == len(tile.lods):
+                tiles_to_remove.append(tile)
+                continue
+            for lod in broken:
+                lod.remove_files(remove_textures=False)
+                tile.xml.remove_lod(lod.model_file)
+                tile.lods.remove(lod)
+                isolated_print("Lod", lod.model_file, "of the tile", tile.name, "is incomplete: removed")
+            collider_model_file = tile.name + COLLIDER_SUFFIX + GLTF_FILE_EXT
+            has_collider = self.__get_tile_collider(tile.name) is not None or any(lod.model_file == collider_model_file for lod in tile.lods)
+            for lod in tile.lods:
+                if lod.model_file == collider_model_file:
                     continue
-                for lod in broken:
-                    lod.remove_files(remove_textures=False)
-                    tile.xml.remove_lod(lod.model_file)
-                    tile.lods.remove(lod)
-                    isolated_print("Lod", lod.model_file, "of the tile", tile.name, "is incomplete: removed")
-                for lod in tile.lods:
-                    lod.optimization_in_progress = False
-                    lod.prepare_for_msfs()
-                    pbar.update("%s prepared for msfs" % lod.name)
+                lod.optimization_in_progress = False
+                lod.prepare_for_msfs()
+                if has_collider:
+                    lod.remove_road_and_collision_tags()
+                pbar.update("%s prepared for msfs" % lod.name)
 
         for tile in tiles_to_remove:
             tile.remove_files()
