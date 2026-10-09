@@ -744,14 +744,14 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         update=light_guid_updated
     )
     create_forests_vegetation: BoolProperty(
-        name="Create MSFS vegetation on forests OSM area",
-        description="Create MSFS vegetation on forests OSM area (useful if MSFS forests vegetation is not accurate)",
+        name="Forests vegetation polygons (for the scenery editor)",
+        description="A polygon per OSM forest area, without effect (MSFS's default forest): its vegetation can be set in the scenery editor",
         default=bpy.types.Scene.project_settings.create_forests_vegetation if bpy.types.Scene.project_settings is not None else False,
         update=create_forests_vegetation_updated
     )
     create_woods_vegetation: BoolProperty(
-        name="Create MSFS vegetation on woods OSM area",
-        description="Create MSFS vegetation on woods OSM area (useful if MSFS woods vegetation is not accurate)",
+        name="Woods vegetation polygons (for the scenery editor)",
+        description="A polygon per OSM wood area, without effect (MSFS's default forest): its vegetation can be set in the scenery editor",
         default=bpy.types.Scene.project_settings.create_woods_vegetation if bpy.types.Scene.project_settings is not None else False,
         update=create_woods_vegetation_updated
     )

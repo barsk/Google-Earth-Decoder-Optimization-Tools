@@ -2152,10 +2152,12 @@ class MsfsProject:
             self.shapes[PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=pitch_terraform_polygons, group_display_name=PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 2, name_prefix=PITCH_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=not disable_terraform)
         if not amenity_terraform_polygons.empty:
             self.shapes[AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=amenity_terraform_polygons, group_display_name=AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 3, name_prefix=AMENITY_TERRAFORM_POLYGON_NAME_PREFIX, tiles=self.tiles, flatten=not disable_terraform)
+        # the forests and woods polygons are created without their vegetation attributes: no effect (MSFS's default forest), the
+        # vegetation of each polygon set later in the scenery editor if needed (create_vegetation=True: full scale and density)
         if not forests_vegetation_polygons.empty:
-            self.shapes[FORESTS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=forests_vegetation_polygons, group_display_name=FORESTS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 6, name_prefix=FORESTS_VEGETATION_POLYGON_NAME_PREFIX, tiles=self.tiles, create_vegetation=True)
+            self.shapes[FORESTS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=forests_vegetation_polygons, group_display_name=FORESTS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 6, name_prefix=FORESTS_VEGETATION_POLYGON_NAME_PREFIX, tiles=self.tiles, create_vegetation=False)
         if not woods_vegetation_polygons.empty:
-            self.shapes[WOODS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=woods_vegetation_polygons, group_display_name=WOODS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 7, name_prefix=WOODS_VEGETATION_POLYGON_NAME_PREFIX, tiles=self.tiles, create_vegetation=True)
+            self.shapes[WOODS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME] = MsfsShapes(shape_gdf=woods_vegetation_polygons, group_display_name=WOODS_VEGETATION_POLYGONS_GROUP_DISPLAY_NAME, group_id=new_group_id + 7, name_prefix=WOODS_VEGETATION_POLYGON_NAME_PREFIX, tiles=self.tiles, create_vegetation=False)
 
         # the terraform polygons not created (e.g. from a previous run, or read from the scene) are removed
         for group_name in (PITCH_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME, AMENITY_TERRAFORM_POLYGONS_GROUP_DISPLAY_NAME,

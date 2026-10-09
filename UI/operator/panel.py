@@ -314,9 +314,9 @@ class SettingsOperator(PanelOperator):
             col.separator()
 
         if osm_settings_step:
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_forests_vegetation", "Create MSFS vegetation on forests OSM area")
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_forests_vegetation", "Forests vegetation polygons (for the scenery editor)")
             col.separator()
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_woods_vegetation", "Create MSFS vegetation on woods OSM area")
+            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_woods_vegetation", "Woods vegetation polygons (for the scenery editor)")
             col.separator()
 
         if not osm_settings_from_step_3:
