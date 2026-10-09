@@ -449,7 +449,15 @@ class MsfsProject:
                                                            "--project_sun", format_suns([project_sun]), "--step4_texture_folder", str(step4_texture_folder),
                                                            "--output", os.path.join(results_folder, name + JSON_FILE_EXT), "--context_tile", tile_name] + parameters})
         if landmark_data:
-            self.__multithread_blender_process_data(chunks(landmark_data, nb_tasks), "shadow_lighten_tile.py", "SHADOW LIGHTENING OF THE LANDMARKS", "textures lightened")
+            # the landmark objects of a tile one after the other: their lower lods share the tile's textures (two tasks on a texture
+            # at once: one read it half written and failed, or took the other's corrected texture for the original)
+            self.__multithread_blender_process_data(chunks(landmark_data, nb_tasks), "shadow_lighten_tile.py", "SHADOW LIGHTENING OF THE LANDMARKS",
+                                                    "textures lightened", group_key=lambda name: name.rsplit("_", 1)[-1])
+            retried = [item for item in landmark_data if not os.path.isfile(os.path.join(results_folder, item["name"] + JSON_FILE_EXT))]
+            if retried:
+                isolated_print("%d landmark objects without result, retried one at a time: %s" % (len(retried), ", ".join(item["name"] for item in retried)) + EOL)
+                report.append("landmark objects retried one at a time (no result): %s" % ", ".join(item["name"] for item in retried))
+                self.__multithread_blender_process_data(chunks(retried, 1), "shadow_lighten_tile.py", "SHADOW LIGHTENING OF THE LANDMARKS (RETRY)", "textures lightened")
             tiles = tiles + landmark_objects
         shutil.rmtree(work_folder, ignore_errors=True)
 
@@ -458,7 +466,13 @@ class MsfsProject:
             path = os.path.join(results_folder, name + JSON_FILE_EXT)
             if not os.path.isfile(path):
                 failed.append(name)
-                report.append("tile %s: FAILED (no result)" % name)
+                # (the task's error, see shadow_lighten_tile.py)
+                error = ""
+                if os.path.isfile(path + ".error"):
+                    with open(path + ".error", encoding="utf-8") as f:
+                        lines = [line for line in f.read().splitlines() if line.strip()]
+                    error = ": " + lines[-1].strip() if lines else ""
+                report.append("tile %s: FAILED (no result%s)" % (name, error))
                 continue
             with open(path, encoding="utf-8") as f:
                 result = json.load(f)
@@ -2483,17 +2497,18 @@ class MsfsProject:
         backup_subfolder = os.path.join(self.PACKAGE_SOURCES_FOLDER, os.path.basename(self.model_lib_folder))
         return os.path.join(os.path.join(self.backup_folder, backup_root_folder), backup_subfolder)
 
-    def __multithread_blender_process_data(self, processed_data, script_name, title, update_msg, group_by_tile=False):
+    def __multithread_blender_process_data(self, processed_data, script_name, title, update_msg, group_by_tile=False, group_key=None):
         # group_by_tile: the tasks of the lods of a tile run in one Blender process (run_tasks.py), which starts Blender and loads
-        # the modules once instead of once per lod, when there are enough tiles to keep all the parallel processes busy
+        # the modules once instead of once per lod, when there are enough tiles to keep all the parallel processes busy.
+        # group_key (task name -> key): the tasks of a key always run one after the other in one process (they share files)
         tasks_folder = None
-        if group_by_tile:
+        if group_by_tile or group_key is not None:
             chunks_list = [list(chunk) for chunk in processed_data]
             nb_parallel_tasks = max((len(chunk) for chunk in chunks_list), default=1)
             groups = {}
             for obj in (obj for chunk in chunks_list for obj in chunk):
-                groups.setdefault(re.sub(r"_LOD\d+$", "", obj["name"]), []).append(obj)
-            if len(groups) >= nb_parallel_tasks:
+                groups.setdefault(group_key(obj["name"]) if group_key is not None else re.sub(r"_LOD\d+$", "", obj["name"]), []).append(obj)
+            if group_key is not None or len(groups) >= nb_parallel_tasks:
                 import tempfile
                 tasks_folder = tempfile.mkdtemp(prefix="gedot_tasks_")
                 data = []

@@ -60,13 +60,20 @@ for name, value in DEFAULT_PARAMETERS.items():
 args = parser.parse_args(argv)
 
 start = time.time()
-placements = tile_placements(args.objects_xml, args.folder)
-originals = Originals(os.path.join(args.folder, "texture"), args.originals_folder)
-project_sun = parse_suns(args.project_sun)[0]
-azimuth, elevation, how = choose_sun(args.folder, args.name, placements, originals.path, parse_suns(args.suns), project_sun)
-parameters = {name: getattr(args, name) for name in DEFAULT_PARAMETERS}
-log = lighten_tile(args.folder, args.name, placements, sun_vector(azimuth, elevation), parameters, args.originals_folder, args.work_folder,
-                   args.step4_texture_folder if args.step4_texture_folder and os.path.isdir(args.step4_texture_folder) else None,
-                   args.context_tile or None)
-with open(args.output, "w", encoding="utf-8") as f:
-    json.dump({"tile": args.name, "azimuth": azimuth, "elevation": elevation, "sun": how, "seconds": round(time.time() - start), "log": log}, f)
+try:
+    placements = tile_placements(args.objects_xml, args.folder)
+    originals = Originals(os.path.join(args.folder, "texture"), args.originals_folder)
+    project_sun = parse_suns(args.project_sun)[0]
+    azimuth, elevation, how = choose_sun(args.folder, args.name, placements, originals.path, parse_suns(args.suns), project_sun)
+    parameters = {name: getattr(args, name) for name in DEFAULT_PARAMETERS}
+    log = lighten_tile(args.folder, args.name, placements, sun_vector(azimuth, elevation), parameters, args.originals_folder, args.work_folder,
+                       args.step4_texture_folder if args.step4_texture_folder and os.path.isdir(args.step4_texture_folder) else None,
+                       args.context_tile or None)
+    with open(args.output, "w", encoding="utf-8") as f:
+        json.dump({"tile": args.name, "azimuth": azimuth, "elevation": elevation, "sun": how, "seconds": round(time.time() - start), "log": log}, f)
+except Exception:
+    # (the error for the report: GEDOT's output of the tasks goes nowhere)
+    import traceback
+    with open(args.output + ".error", "w", encoding="utf-8") as f:
+        f.write(traceback.format_exc())
+    raise
