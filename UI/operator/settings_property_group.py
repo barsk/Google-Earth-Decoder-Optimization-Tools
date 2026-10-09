@@ -549,7 +549,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     building_margin: FloatProperty(
         name="Building margin",
-        description="Margin of the around the buildings in order to fix the bias between Google Earth data and OSM data",
+        description="Margin (m) kept around the buildings inside the excluded ground (e.g. a house in an excluded forest), and in the isolate mode: Google Earth's buildings are larger than the OSM footprints",
         soft_min=-10.0,
         soft_max=20.0,
         step=0.1,

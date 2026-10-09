@@ -207,6 +207,17 @@ def resize_gdf(gdf, resize_distance, single_sided=True, keep_points=False):
     return gdf.to_crs(EPSG.key + str(EPSG.WGS84_degree_unit))
 
 
+def grow_gdf(gdf, distance):
+    # the geometries grown on all sides by distance (real meters). (resize_gdf's single sided buffer grows or shrinks a polygon by the
+    # direction of its outline, in Web Mercator units: the buildings' footprints of OpenStreetMap kept no margin in the exclusions)
+    if gdf is None or gdf.empty or distance <= 0:
+        return gdf
+    crs = gdf.crs
+    metric = gdf.to_crs(gdf.estimate_utm_crs())
+    metric[metric.geometry.name] = metric.geometry.buffer(distance, join_style=JOIN_STYLE.mitre)
+    return metric.to_crs(crs)
+
+
 def polygonal_part(geometry):
     # the polygons of a geometry (make_valid can return a collection with lines or points)
     if geometry is None or geometry.is_empty or geometry.geom_type in (SHAPELY_TYPE.polygon, SHAPELY_TYPE.multiPolygon):
