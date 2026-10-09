@@ -278,6 +278,11 @@ class SettingsOperator(PanelOperator):
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "smooth_beaches", "Smooth the beaches")
                 col.separator()
+                if osm_settings_step:
+                    draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "create_forests_vegetation", "Forests vegetation polygons (for the scenery editor)")
+                    col.separator()
+                    draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "create_woods_vegetation", "Woods vegetation polygons (for the scenery editor)")
+                    col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_forests", "Exclude forests 3d data")
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_woods", "Exclude woods 3d data")
@@ -311,12 +316,6 @@ class SettingsOperator(PanelOperator):
 
         if self.operator_name != "wm.generate_height_data" and self.operator_name != "wm.prepare_3d_data" and not osm_settings_step:
             draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "process_all", "Process all the tiles (if unticked, process only the tiles that have not been cleaned)")
-            col.separator()
-
-        if osm_settings_step:
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_forests_vegetation", "Forests vegetation polygons (for the scenery editor)")
-            col.separator()
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "create_woods_vegetation", "Woods vegetation polygons (for the scenery editor)")
             col.separator()
 
         if not osm_settings_from_step_3:
