@@ -856,25 +856,21 @@ def prepare_golf_gdf(gdf):
 
 
 def prepare_forest_gdf(landuse_gdf, natural_gdf):
+    # the forests: landuse=forest, and the rarer natural=forest. (The natural forests were taken only when the landuse data had a
+    # natural column, and only along with landuse forests)
     result = create_empty_gdf()
     natural_forests = create_empty_gdf()
 
-    if landuse_gdf is None and natural_gdf is None:
-        return result
+    if landuse_gdf is not None and LANDUSE_OSM_KEY in landuse_gdf:
+        result = landuse_gdf[(landuse_gdf[LANDUSE_OSM_KEY] == FOREST_OSM_TAG)].copy()
 
-    if landuse_gdf is not None:
-        landuse = landuse_gdf.copy()
-        if LANDUSE_OSM_KEY in landuse_gdf:
-            result = landuse[(landuse[LANDUSE_OSM_KEY] == FOREST_OSM_TAG)]
+    if natural_gdf is not None and NATURAL_OSM_KEY in natural_gdf:
+        natural_forests = natural_gdf[(natural_gdf[NATURAL_OSM_KEY] == FOREST_OSM_TAG)].copy()
 
-    if natural_gdf is not None:
-        natural = natural_gdf.copy()
-        if NATURAL_OSM_KEY in landuse_gdf:
-            natural_forests = natural[(natural[NATURAL_OSM_KEY] == FOREST_OSM_TAG)]
+    if not natural_forests.empty:
+        result = natural_forests if result.empty else result._append(natural_forests)
 
     if not result.empty:
-        if not natural_forests.empty:
-            result = result._append(natural_forests)
         result = result[(result.geom_type == SHAPELY_TYPE.polygon) | (result.geom_type == SHAPELY_TYPE.multiPolygon)]
 
     return result
