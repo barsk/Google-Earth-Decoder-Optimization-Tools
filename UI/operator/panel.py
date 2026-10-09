@@ -246,26 +246,32 @@ class SettingsOperator(PanelOperator):
         osm_settings_from_step_3 = self.operator_name in ["wm.cleanup_3d_data", "wm.generate_height_data"]
         project_settings = getattr(bpy.types.Scene, "project_settings", None)
 
+        # The accurate mode (isolate_3d_data: only the listed data kept) isn't offered: unusable in practice. Its selector and its settings
+        # are commented out (the processing code is kept, to revert: uncomment them); a project whose ini still has it gets a notice
         if osm_settings_from_step_3:
-            col.label(text="OpenStreetMap settings (accuracy, kept and excluded data, airport): set in step 3", icon=INFO_ICON)
+            col.label(text="OpenStreetMap settings (kept and excluded data, airport): set in step 3", icon=INFO_ICON)
             col.separator()
-        else:
-            draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "isolate_3d_data", "OpenStreetMap accuracy")
-            col.separator()
+        # else:
+        #     draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "isolate_3d_data", "OpenStreetMap accuracy")
+        #     col.separator()
 
         if osm_settings_step or self.operator_name in ["wm.keep_only_buildings_3d_data", "wm.keep_only_buildings_and_roads_3d_data"]:
             if project_settings is not None and project_settings.isolate_3d_data:
-                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_buildings", "Keep buildings 3d data", enabled=False)
+                col.label(text="This project uses the accurate OpenStreetMap mode, no longer offered: set isolate_3d_data = False in its ini", icon=INFO_ICON)
                 col.separator()
-                draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "building_margin", "Building margin")
-                col.separator()
-                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_roads", "Keep roads 3d data")
-                col.separator()
-                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_constructions", "Keep construction area 3d data")
-                col.separator()
-                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_residential", "Keep residential area 3d data")
-                col.separator()
-            else:
+            # if project_settings is not None and project_settings.isolate_3d_data:
+            #     draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_buildings", "Keep buildings 3d data", enabled=False)
+            #     col.separator()
+            #     draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "building_margin", "Building margin")
+            #     col.separator()
+            #     draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_roads", "Keep roads 3d data")
+            #     col.separator()
+            #     draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_constructions", "Keep construction area 3d data")
+            #     col.separator()
+            #     draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_residential", "Keep residential area 3d data")
+            #     col.separator()
+            # else:
+            if True:  # (was the else branch above; to revert: the commented if/else)
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_water", "Exclude water 3d data", enabled=False)
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "push_down_water", "Push down the water instead of cutting it")
@@ -281,6 +287,13 @@ class SettingsOperator(PanelOperator):
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_nature_reserves", "Exclude nature reserves 3d data")
                 col.separator()
                 draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "exclude_parks", "Exclude parks 3d data")
+                col.separator()
+                # (these also apply to the excluded ground of the normal mode)
+                draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "building_margin", "Building margin (around the buildings in the excluded ground)")
+                col.separator()
+                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_roads", "Keep the roads and bridges through the excluded ground")
+                col.separator()
+                draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "keep_constructions", "Keep the height data of the construction areas in the excluded ground")
                 col.separator()
             col.separator()
 
