@@ -81,7 +81,7 @@ from blender.blender_gis import import_osm_file, OSM_MATERIAL_NAME
 from blender.image import get_image_node, fix_texture_size_for_package_compilation, pack_textures, list_image_nodes
 from blender.memory import remove_mesh_from_memory
 from blender.material import set_msfs_material, add_new_obj_material, get_material_output
-from constants import SLOPED_WATER_SPREAD, SLOPED_WATER_RADIUS, EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, BUILDING_FOOTPRINT_MARGIN, BUILDING_ENCLOSED_OPEN_AREA, BUILDING_GROUND_FILTER_SIZE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
+from constants import SLOPED_WATER_RADIUS, EOL, GEOIDS_DATASET_FOLDER, EGM2008_5_DATASET, OBJ_FILE_EXT, BOUNDING_BOX_OSM_KEY, LESS_DETAILED_LODS_LIMIT, JPG_FILE_EXT, WATERLINE_SAMPLE_DISTANCE, BUILDING_FOOTPRINT_MARGIN, BUILDING_ENCLOSED_OPEN_AREA, BUILDING_GROUND_FILTER_SIZE, GROUND_FILTER_MARGIN, HEIGHT_MAP_EDGE_BLEND_DISTANCE, HEIGHT_MAP_EDGE_CLEARANCE, HIGH_PRECISION_HEIGHT_OFFSET, LEGACY_TILE_SCALE
 from msfs_project.gltf import MsfsGltf
 from utils import ScriptError, isolated_print
 from utils.progress_bar import ProgressBar
@@ -1124,9 +1124,11 @@ def push_down_water_in_mask(depth=1.5, shore_distance=6.0, ramp_distance=3.0, ma
     # sloped water (a stream down a hillside): no single level for the tile (pushed down to its lowest part, the stream cut a
     # trench of tens of meters, seen at the distances where the sim's terrain doesn't fill it), but the level of each vertex from
     # the water vertices within SLOPED_WATER_RADIUS, not above the shore ground there
+    # (sloped: the typical heights around the places of the water spread, not the heights themselves, see utils/water_levels.py)
+    from utils.water_levels import is_sloped
     local_level = None
-    if len(water_heights) >= 20 and np.percentile(water_heights, 90) - np.percentile(water_heights, 10) > SLOPED_WATER_SPREAD:
-        water_xy = np.concatenate([coords[in_water, :2] for _, coords, in_water, _ in objects_data])
+    water_xy = np.concatenate([coords[in_water, :2] for _, coords, in_water, _ in objects_data]) if objects_data else np.zeros((0, 2))
+    if len(water_heights) >= 20 and is_sloped(water_xy, water_heights):
         shore_xy = np.concatenate([coords[on_shore, :2] for _, coords, _, on_shore in objects_data])
         water_tree = cKDTree(water_xy)
         shore_tree = cKDTree(shore_xy) if len(shore_xy) else None

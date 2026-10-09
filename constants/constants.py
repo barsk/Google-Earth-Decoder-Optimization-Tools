@@ -208,10 +208,13 @@ WATERLINE_SAMPLE_DISTANCE = 6.0
 WATERLINE_PERCENTILE = 5
 WATER_SURFACE_PERCENTILE = 75
 WATERLINE_MIN_SAMPLES = 20
-# a water body whose water surface spreads more than this (10th to 90th percentile, m) slopes (a stream down a hillside): no
-# single level for it (Jonkoping: one level for a stream dropping ~100 m raised the terrain into a cliff), but local levels from
-# the samples within SLOPED_WATER_RADIUS (m) of each point
-SLOPED_WATER_SPREAD = 3.0
+# a water body whose typical heights (a low percentile of its surface within SLOPED_WATER_RADIUS of each place, utils/water_levels.py)
+# spread more than this (10th to 90th percentile, m) slopes (a stream down a hillside): no single level for it (Jonkoping: one
+# level for a stream dropping ~100 m raised the terrain into a cliff), but local levels from the samples within SLOPED_WATER_RADIUS
+# (m) of each point. Not the spread of the surface itself (Google's noise on level water: 4-6 m), and not 3 m: level water spreads
+# up to ~5 m in typical heights too, Google's nodes being at different heights (Sundsta pond 5.1 m, Karlstad lakes 3.2-3.3 m), the
+# streams measured 10.7 m (Jonkoping, a 300 m channel), 11.1 m and 52.5 m
+SLOPED_WATER_SPREAD = 8.0
 SLOPED_WATER_RADIUS = 30.0
 # the bottom of the water bodies goes down from this depth at the shore (in meters), by this slope, to the water depth setting.
 # The MSFS water is a thin layer (about 0.6 m) on the terrain: its surface follows a sloping bottom, so the default is a flat bottom
