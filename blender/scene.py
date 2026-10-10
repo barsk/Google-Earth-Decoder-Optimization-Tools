@@ -1319,6 +1319,9 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
     depsgraph = bpy.context.evaluated_depsgraph_get()
     depsgraph.update()
     hmatrix = calculate_height_map_from_coords_from_bottom(tile, grid_dimension, coords, depsgraph, lat, lon, altitude, height_adjustment)
+    # the original tile's surface seen from below and from above (absolute heights), for the floor under the excluded ground (the tile
+    # is cut to the masks later)
+    surface = surface_samples(tile, depsgraph, hmatrix, altitude + get_geoid_height(lat, lon))
 
     if high_precision:
         hmatrix = calculate_height_map_from_coords_from_top(tile, coords, depsgraph, lat, lon, altitude, hmatrix)
@@ -1331,11 +1334,13 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
         hmatrix = fix_height_data_on_buildings(tile, depsgraph, lat, lon, altitude, hmatrix)
 
     # fix wrong height data for ground tiles
+    excluded_floor = {}
     if os.path.exists(positioning_file_path) and os.path.exists(ground_mask_file_path):
         align_model_with_mask(model_file_path, positioning_file_path, ground_mask_file_path, objects_to_keep=[grid, height_grid])
+        ground_area = get_mask_footprint()
         process_3d_data(model_file_path=model_file_path, intersect=True, no_bounding_box=True)
         tile = get_tile_for_ray_cast(model_file_path, imported=False, objects_to_keep=[grid, height_grid])
-        hmatrix = adjust_height_data_on_ground_exclusion(tile, depsgraph, lat, lon, altitude, hmatrix)
+        hmatrix, excluded_floor = estimate_height_data_on_ground_exclusion(tile, depsgraph, lat, lon, altitude, hmatrix, ground_area, surface, height_adjustment)
 
     # fix wrong height data for rock parts of the tiles
     if os.path.exists(positioning_file_path) and os.path.exists(rocks_mask_file_path):
@@ -1369,7 +1374,13 @@ def generate_model_height_data(model_file_path, lat, lon, altitude, height_adjus
                 json.dump(samples, waterline_file)
 
     if ground_filter_size > 0.0:
-        hmatrix = filter_ground_height_data(hmatrix, ground_filter_size, height_adjustment=height_adjustment, high_precision=high_precision, outer_edges=outer_edges, water_keys=water_keys)
+        hmatrix = filter_ground_height_data(hmatrix, ground_filter_size, height_adjustment=height_adjustment, high_precision=high_precision, outer_edges=outer_edges, water_keys=water_keys,
+                                            excluded_floor=excluded_floor)
+    else:
+        # the excluded ground shows the MSFS terrain: at its floor, just under the Google ground (see filter_ground_height_data)
+        for (y, x), height in excluded_floor.items():
+            if (y, x) not in water_keys and y in hmatrix and x in hmatrix[y]:
+                hmatrix[y][x] = height - HEIGHT_MAP_EDGE_CLEARANCE
 
     inverted_hmatrix = defaultdict(dict)
 
@@ -1542,13 +1553,15 @@ def find_height_data_on_water(hmatrix, positioning_file_path, areas_file_path, s
     return water_keys, shore_keys, to_lon_lat
 
 
-def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_precision=False, outer_edges=str(), water_keys=frozenset()):
+def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_precision=False, outer_edges=str(), water_keys=frozenset(), excluded_floor=None):
     # the rays hit the top of the buildings and trees, as the Google Earth tiles have no ground under them.
     # A morphological opening (minimum, then maximum over the filter window) removes everything narrower than the window,
     # then the result is smoothed and kept under the tile surface, so that the MSFS terrain does not go through the tiles.
     # On the outer edges of the scenery (N, S, E, W letters), the ground is raised up to the tiles ground, to avoid a step
     # between the border of the tiles and the MSFS terrain.
-    # The water points (water_keys) keep the height data of the water calculation, and the shores are raised like the outer edges
+    # The water points (water_keys) keep the height data of the water calculation, and the shores are raised like the outer edges.
+    # The excluded ground (excluded_floor: {(y, x): the floor's height}) shows the MSFS terrain: at its floor, and the ground around it
+    # raised like the outer edges, so that the terrain meets the Google ground at the edge of the cut (not ~5 m under it)
     ys = sorted(hmatrix.keys())
     xs = sorted({x for heights in hmatrix.values() for x in heights})
     if len(xs) < 3 or len(ys) < 3:
@@ -1600,12 +1613,22 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
         # the MSFS water does not follow the osm water exactly: a lowered shore shows as shallow water
         blend_distances.append(ndimage.distance_transform_edt(~water, sampling=(float(np.median(np.abs(np.diff(ys)))), cell_size)))
 
+    excluded = np.zeros(heights.shape, dtype=bool)
+    floors = np.full(heights.shape, np.nan)
+    for (y, x), height in (excluded_floor or {}).items():
+        if y in y_index and x in x_index and not water[y_index[y], x_index[x]]:
+            excluded[y_index[y], x_index[x]] = True
+            floors[y_index[y], x_index[x]] = height
+    if excluded.any():
+        blend_distances.append(ndimage.distance_transform_edt(~excluded, sampling=(float(np.median(np.abs(np.diff(ys)))), cell_size)))
+
     if blend_distances:
         weight = np.clip(1.0 - np.min(blend_distances, axis=0) / HEIGHT_MAP_EDGE_BLEND_DISTANCE, 0.0, 1.0)
         weight = weight * weight * (3.0 - 2.0 * weight)
         edge_ground = tiles_ground - HEIGHT_MAP_EDGE_CLEARANCE
         ground = ground + weight * np.maximum(edge_ground - ground, 0.0)
 
+    ground = np.where(excluded, floors - HEIGHT_MAP_EDGE_CLEARANCE, ground)
     ground = np.where(water, heights, ground)
 
     results = defaultdict(dict)
@@ -1971,6 +1994,59 @@ def fix_bridge_height_data_on_water(tile, depsgraph, lat, lon, altitude, hmatrix
 
 def fix_height_data_on_buildings(tile, depsgraph, lat, lon, altitude, hmatrix_base):
     return adjust_height_data_on_exclusion_area(tile, depsgraph, lat, lon, altitude, EXCLUSION_TYPE.BUILDING, hmatrix_base)
+
+
+def surface_samples(tile, depsgraph, hmatrix, offset, rays_per_side=3):
+    # (low, high): the surface of the tile seen from below and from above, rays_per_side x rays_per_side rays per cell of the grid,
+    # (n, 3) arrays with the heights plus offset. (Rays, not the vertices: the skirts of Google's nodes hang metres under the ground)
+    xs = sorted({x for heights in hmatrix.values() for x in heights})
+    cell = float(np.median(np.diff(xs))) if len(xs) > 1 else 5.0
+    steps = (np.arange(rays_per_side) - (rays_per_side - 1) / 2.0) * cell / rays_per_side
+    corners = [tile.matrix_world @ mathutils.Vector(corner) for corner in tile.bound_box]
+    bottom, top = min(c.z for c in corners) - 100.0, max(c.z for c in corners) + 100.0
+    evaluated = tile.evaluated_get(depsgraph)
+    low, high = [], []
+    for y in hmatrix:
+        for x in hmatrix[y]:
+            for dy in steps:
+                for dx in steps:
+                    hit = evaluated.ray_cast(mathutils.Vector((x + dx, y + dy, bottom)), (0, 0, 1), distance=top - bottom)
+                    if hit[0]:
+                        low.append((x + dx, y + dy, hit[1].z + offset))
+                    hit = evaluated.ray_cast(mathutils.Vector((x + dx, y + dy, top)), (0, 0, -1), distance=top - bottom)
+                    if hit[0]:
+                        high.append((x + dx, y + dy, hit[1].z + offset))
+    return np.array(low).reshape(-1, 3), np.array(high).reshape(-1, 3)
+
+
+def estimate_height_data_on_ground_exclusion(tile, depsgraph, lat, lon, altitude, hmatrix, ground_area, surface, height_adjustment):
+    # the excluded ground (forests...): the floor under it (utils/forest_floor.py) as its height data, with the height adjustment of the
+    # rest of the grid (the ground filter takes the whole grid as the tiles' ground plus the adjustment). Without the area or the
+    # vertices, or if the estimation fails, the former method: the surface seen from the top, 1 m above it
+    from shapely.prepared import prep
+    from utils.forest_floor import forest_floor
+
+    # -> (hmatrix, {(y, x): the floor's absolute height}: set again after the ground filter)
+    keys = [(y, x) for y in hmatrix for x in hmatrix[y]]
+    try:
+        if ground_area is None or ground_area.is_empty or len(keys) < 9 or min(len(surface[0]), len(surface[1])) < 10:
+            raise ValueError("no excluded ground or no surface")
+        area = prep(ground_area)
+        points = np.array([(x, y) for y, x in keys])
+        inside = np.array([area.contains(geometry.Point(x, y)) for x, y in points], dtype=bool)
+        if not inside.any():
+            return hmatrix, {}
+        xs = sorted({x for _, x in keys})
+        cell = float(np.median(np.diff(xs)))
+        floor, report = forest_floor(points, inside, surface[0], surface[1], cell)
+        excluded_floor = {}
+        for i in np.flatnonzero(inside & ~np.isnan(floor)):
+            y, x = keys[i]
+            hmatrix[y][x] = float(floor[i]) + height_adjustment
+            excluded_floor[(y, x)] = float(floor[i])
+        return hmatrix, excluded_floor
+    except Exception:
+        return adjust_height_data_on_ground_exclusion(tile, depsgraph, lat, lon, altitude, hmatrix), {}
 
 
 def adjust_height_data_on_ground_exclusion(tile, depsgraph, lat, lon, altitude, hmatrix_base):
