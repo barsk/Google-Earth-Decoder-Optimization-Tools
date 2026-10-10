@@ -1619,8 +1619,6 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
         if y in y_index and x in x_index and not water[y_index[y], x_index[x]]:
             excluded[y_index[y], x_index[x]] = True
             floors[y_index[y], x_index[x]] = height
-    if excluded.any():
-        blend_distances.append(ndimage.distance_transform_edt(~excluded, sampling=(float(np.median(np.abs(np.diff(ys)))), cell_size)))
 
     if blend_distances:
         weight = np.clip(1.0 - np.min(blend_distances, axis=0) / HEIGHT_MAP_EDGE_BLEND_DISTANCE, 0.0, 1.0)
@@ -1628,6 +1626,18 @@ def filter_ground_height_data(hmatrix, filter_size, height_adjustment=0.0, high_
         edge_ground = tiles_ground - HEIGHT_MAP_EDGE_CLEARANCE
         ground = ground + weight * np.maximum(edge_ground - ground, 0.0)
 
+    if excluded.any():
+        # around the excluded ground, the ground the 3d data keeps there comes up to its edge: the ground before the filter (its
+        # minimum over the cell and its neighbours, the excluded ground and the water left out, so that the terrain stays under the
+        # 3d data). The filter's opening erased the small kept areas (a building with its margin in a forest: 4.7 m under its
+        # ground, a moat around it) and pulled the edges down to the floor (Karlstad tile 30606160516271535)
+        kept = np.where(excluded | water | ~known, np.inf, filled)
+        local = ndimage.minimum_filter(kept, size=3, mode="nearest")
+        local = np.where(np.isfinite(local), local, filled) - (HIGH_PRECISION_HEIGHT_OFFSET if high_precision else height_adjustment)
+        distance = ndimage.distance_transform_edt(~excluded, sampling=(float(np.median(np.abs(np.diff(ys)))), cell_size))
+        weight = np.clip(1.0 - distance / HEIGHT_MAP_EDGE_BLEND_DISTANCE, 0.0, 1.0)
+        weight = weight * weight * (3.0 - 2.0 * weight)
+        ground = ground + weight * np.maximum(local - HEIGHT_MAP_EDGE_CLEARANCE - ground, 0.0)
     ground = np.where(excluded, floors - HEIGHT_MAP_EDGE_CLEARANCE, ground)
     ground = np.where(water, heights, ground)
 
