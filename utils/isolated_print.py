@@ -21,8 +21,14 @@ import os
 import warnings
 
 
+# one null device for the whole process, never closed. (A new one opened at each print freed the previous one while another thread
+# still wrote to it: the output of the parallel tasks, __multithread_process_data's reader. An access violation in python310.dll
+# killed Blender: Orebro cell 30606161417041, step 5)
+DEVNULL = open(os.devnull, 'w')
+
+
 def isolated_print(*args, **kwargs):
     warnings.simplefilter("ignore", ResourceWarning, append=True)
     sys.stdout = sys.__stdout__
     print(*args, **kwargs)
-    sys.stdout = open(os.devnull, 'w')
+    sys.stdout = DEVNULL

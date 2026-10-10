@@ -2735,9 +2735,13 @@ class MsfsProject:
             input_fd, output_fd = os.pipe()
 
             def print_output():
-                with io.open(input_fd, "r", buffering=1) as file:
-                    for line in file:
-                        print(line, end=str())
+                # the output of the tasks is read (the pipe never fills, the tasks never wait) and dropped. Printed by this thread into
+                # sys.stdout, it went to the null device but for the moments the main thread printed (a progress bar), and two threads
+                # writing to one stream at once crashed Blender: an access violation in python310.dll (Orebro cell 30606161417041,
+                # step 5). The tasks report their errors in their own files (e.g. shadow_lighten_tile.py)
+                with io.open(input_fd, "r", buffering=1, errors="replace") as file:
+                    for _ in file:
+                        pass
 
             reader = threading.Thread(target=print_output, daemon=True)
             reader.start()

@@ -25,7 +25,7 @@ from types import GeneratorType
 
 from constants import EOL, CRED, CORANGE, CGREEN, CEND
 from utils.console import print_title
-from utils.isolated_print import isolated_print
+from utils.isolated_print import isolated_print, DEVNULL
 
 MSG_LENGTH = 160
 PROGRESS_BAR_LENGTH = 50
@@ -79,13 +79,12 @@ class ProgressBar:
         description = DONE_PROCESS if progress >= 1 else description
         msg = self.__get_color(progress) + "\r[{0}] {1}{2}".format("\u25A0" * block + "-" * (self.length - block), str(round(progress * 100, 2)) + "%: " if progress > 0 else str(), description + CEND)
 
-        if progress is None:
-            sys.stdout.close()
+        # (the shared null device, see isolated_print: never closed or replaced while another thread may write to it)
         warnings.simplefilter("ignore", ResourceWarning, append=True)
         sys.stdout = sys.__stdout__
         sys.stdout.write(msg.ljust(MSG_LENGTH))
         sys.stdout.flush()
-        sys.stdout = open(os.devnull, 'w')
+        sys.stdout = DEVNULL
         time.sleep(self.sleep)
 
         if progress >= 1:
