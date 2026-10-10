@@ -131,14 +131,22 @@ MSFS_2024_SDK_PATH_HINT = "2024"
 # package order hint of the created projects (MSFS 2024 only)
 PACKAGE_ORDER_HINT = "CUSTOM_WORLD_SCENERY"
 
-# landmarks: buildings (OSM ids listed in the project landmarks file) keeping more detailed LODs than the tiles
-LANDMARKS_FILE = "landmarks.txt"
+# landmarks: buildings (OSM ids, landmark column of the project landmarks file) keeping more detailed LODs than the tiles
+LANDMARKS_FILE = "landmarks.csv"
 # tiles downloaded to a more detailed lod level than the others (e.g. LOD 20 areas of a LOD 17-19 project, one tile name per
 # line): the landmark tool keeps their lods and skips the landmarks inside them
 UPGRADE_TILES_FILE = "upgrade_tiles.txt"
 LANDMARK_OBJECT_PREFIX = "landmark_"
 DEFAULT_TILES_MAX_LOD_LEVEL = 19
 LANDMARK_MIN_SCORE = 3
+# the landmarks file candidates shown as points of interest in MSFS by default (poi column): the named ones with this score
+POI_MIN_SCORE = 10
+# the marker of a point of interest above the top of its building (m)
+POI_MARKER_CLEARANCE = 2.0
+# the top of the building of a point of interest in the tiles: within its OSM outline enlarged by this margin (m), without
+# outline within the circle of its footprint area (or of this radius, m)
+POI_OUTLINE_MARGIN = 3.0
+POI_DEFAULT_RADIUS = 8.0
 CLEANUP_3D_DATA_BACKUP_FOLDER = "cleanup_3d_data"
 # shadow lightening (step 2b): the original textures, the fits, the results and the work files of the step, in the backup folder
 SHADOW_LIGHTENING_BACKUP_FOLDER = "shadow_lightening"

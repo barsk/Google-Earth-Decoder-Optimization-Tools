@@ -39,6 +39,7 @@ from constants import SLOPED_WATER_RADIUS, BUILDING_EXCLUSION_BORDER_INSET, WATE
 from utils.colored_print import pr_bg_orange
 from utils.install_lib import install_python_lib, install_alternate_python_lib, install_shapefile_resource
 from utils.script_errors import ScriptError
+import re
 import time
 import requests
 
@@ -411,8 +412,11 @@ def load_gdf_from_geocode(geocode, overpass_api_uri, geocode_margin=5.0, preserv
     return result.dissolve().assign(boundary=BOUNDING_BOX_OSM_KEY)
 
 
-OVERPASS_RETRIES = 4
+OVERPASS_RETRIES = 8
 OVERPASS_RETRY_PAUSE = 30
+# the errors of a busy server answered as an html page (status 200): the same query again within minutes of the last one
+# (duplicate_query, e.g. a step run again soon after), too many queries (rate_limited)
+OVERPASS_BUSY_ERRORS = ("duplicate_query", "rate_limited")
 
 
 def overpass_query(overpass_api_uri, query):
@@ -422,13 +426,19 @@ def overpass_query(overpass_api_uri, query):
             response = requests.post(overpass_api_uri.rstrip("/") + "/interpreter", data={"data": query}, headers={"User-Agent": ox.settings.default_user_agent}, timeout=180)
         except requests.exceptions.ConnectionError as ex:
             raise overpass_connection_error(ex)
-        if response.status_code not in (429, 504):
+        busy = response.status_code in (429, 504) or (response.status_code == 200 and response.text.lstrip().startswith("<")
+                                                      and any(error in response.text for error in OVERPASS_BUSY_ERRORS))
+        if not busy:
             break
-        pr_bg_orange("Overpass API server busy (%d), retrying in %d s" % (response.status_code, OVERPASS_RETRY_PAUSE) + EOL + CEND)
+        pr_bg_orange("Overpass API server busy (%s), retrying in %d s" % (response.status_code if response.status_code != 200 else "duplicate query", OVERPASS_RETRY_PAUSE) + EOL + CEND)
         time.sleep(OVERPASS_RETRY_PAUSE)
     if response.status_code != 200:
         raise ScriptError("Overpass API query failed (" + str(response.status_code) + "), try again later or choose another Overpass API server in the addon preferences" + EOL)
-    return response.json()
+    try:
+        return response.json()
+    except ValueError:
+        error = re.search(r"Error</strong>:\s*([^<]*)", response.text)
+        raise ScriptError("Overpass API query failed (" + (error.group(1).strip() if error else response.text[:200]) + "), try again later" + EOL)
 
 
 OSM_API_URI = "https://api.openstreetmap.org/api/0.6"

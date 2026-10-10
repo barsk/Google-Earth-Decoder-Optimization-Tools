@@ -17,6 +17,7 @@
 #  <pep8 compliant>
 
 import copy
+import math
 import json
 import re
 import itertools
@@ -29,6 +30,7 @@ import shutil
 import os
 import subprocess
 
+import numpy as np
 from shapely.errors import ShapelyDeprecationWarning
 from shapely.ops import unary_union
 
@@ -54,7 +56,9 @@ from osmnx.utils_geo import bbox_to_poly
 
 import bpy
 from msfs_project.project_settings import ProjectSettings
-from msfs_project.landmark import MsfsLandmarks
+from msfs_project.landmark import MsfsLandmarks, MsfsLandmarkLocation
+from msfs_project.position import MsfsPosition
+from msfs_project.geoid import get_geoid_height
 from msfs_project.height_map_xml import HeightMapXml
 from msfs_project.height_map import MsfsHeightMaps
 from msfs_project.osm_xml import OsmXml
@@ -66,7 +70,8 @@ from msfs_project.scene_object import MsfsSceneObject
 from msfs_project.collider import MsfsCollider
 from msfs_project.tile import MsfsTile
 from msfs_project.lod import MsfsLod
-from utils.landmarks import read_landmarks, write_landmark_candidates
+from utils.landmarks import read_landmarks, read_landmark_rows, write_landmark_candidates, poi_instance_id, is_poi_instance_id, gltf_vertices, \
+    landmark_outlines, query_landmark_elements
 from utils.geo_pandas import grow_gdf, load_gdf_from_osm_id, create_water_push_down_gdf, create_water_structures_gdf, write_water_areas_file, write_building_footprints_file, flatten_water_height_data, remove_not_water_natural_gdf
 from utils.octant import get_coords_from_file_name
 from utils.placement import fit_tiles_placement, save_tiles_placement, DownloadFrame, wgs84_meters_per_degree
@@ -338,6 +343,115 @@ class MsfsProject:
         if counts["corrected"] and os.path.isdir(os.path.join(self.backup_folder, SHADOW_LIGHTENING_BACKUP_FOLDER)):
             pr_bg_orange("The colours changed after step 2b: run step 2b again (it starts from the corrected textures)" + EOL + CEND)
         return counts
+
+    def update_points_of_interest(self, overpass_api_uri):
+        # The rows of the landmarks file with poi true are points of interest in MSFS: a POI LandmarkLocation at the building
+        # (lat, lon of the row) named after the name column, its marker above the top of the building (alt 0: the offset is the
+        # height above the ground, the height map of step 5). The cells of a city share the buildings of their edges: each
+        # point of interest is written by the cell whose tiles contain it. The points of interest of the file are made again at
+        # each run (found by their instance id, made from the OSM id): the rows changed, turned off or removed are updated
+        landmarks_file = os.path.join(self.project_folder, LANDMARKS_FILE)
+        removed = [elem for elem in self.objects_xml.find_landmarks() if is_poi_instance_id(elem.get(self.objects_xml.INSTANCE_ID_ATTR))]
+        for elem in removed:
+            self.objects_xml.root.remove(elem)
+        rows = [row for row in read_landmark_rows(landmarks_file) if row["poi"]] if os.path.isfile(landmarks_file) else []
+        if not rows and not removed:
+            return
+
+        print_title("POINTS OF INTEREST")
+        valid, elsewhere = [], 0
+        for row in rows:
+            if not row["name"] or row["lat"] is None or row["lon"] is None:
+                pr_bg_orange("Point of interest %s (row %d of %s) without %s: skipped" % (row["osm_id"], row["line"], LANDMARKS_FILE, "name" if not row["name"] else "lat, lon") + EOL + CEND)
+            elif any(tile.contains((row["lat"], row["lat"], row["lon"], row["lon"])) for tile in self.tiles.values()):
+                valid.append(row)
+            else:
+                elsewhere += 1
+        # the outlines of the buildings (their top in the tiles), else the circle of their footprint area
+        try:
+            outlines = landmark_outlines(query_landmark_elements(overpass_api_uri, [row["osm_id"] for row in valid]))
+        except Exception as ex:
+            pr_bg_orange("Building outlines not retrieved from OpenStreetMap (%s): the top of the buildings searched around their centre" % ex + EOL + CEND)
+            outlines = {}
+
+        for row in valid:
+            location = MsfsLandmarkLocation()
+            location.instance_id = poi_instance_id(row["osm_id"])
+            location.name = row["name"]
+            location.owner = self.author_name
+            location.pos = MsfsPosition("%.8f" % row["lat"], "%.8f" % row["lon"], "0.000000")
+            location.offset = "%.1f" % self.__poi_offset(row["osm_id"], row["lat"], row["lon"], row["area_m2"], outlines.get(row["osm_id"]))
+            self.objects_xml.add_landmark_location(location)
+            isolated_print("%s (%s): marker %s m above the ground" % (row["name"], row["osm_id"], location.offset))
+        self.objects_xml.save()
+        isolated_print("%d points of interest%s" % (len(valid), ", %d in the other cells (outside the tiles of this one)" % elsewhere if elsewhere else str()))
+
+    def __poi_offset(self, osm_id, lat, lon, area, outline):
+        # the height of the marker of a point of interest above the ground: the top of its building above the height map. The
+        # top: its landmark objects (the building isolated from the tiles), else the tiles containing it within its outline
+        # (enlarged by POI_OUTLINE_MARGIN), or within the circle of its footprint area (the most detailed lods)
+        import shapely
+        from shapely.ops import transform
+
+        m_lat, m_lon = wgs84_meters_per_degree(lat)
+        radius = math.sqrt(area / math.pi) if area else POI_DEFAULT_RADIUS
+        prefix = LANDMARK_OBJECT_PREFIX + osm_id + "_"
+        tops = [self.__model_vertices(scene_object, lat, lon)[:, 2] for scene_object in self.objects.values() if scene_object.name.startswith(prefix)]
+        tops = [heights for heights in tops if len(heights)]
+        tiles = [tile for tile in self.tiles.values() if tile.contains((lat, lat, lon, lon))]
+        tile_vertices = [vertices for vertices in (self.__model_vertices(tile, lat, lon) for tile in tiles) if len(vertices)]
+        tile_vertices = np.concatenate(tile_vertices) if tile_vertices else np.empty((0, 3))
+        if not tops and len(tile_vertices):
+            if outline is not None:
+                outline = transform(lambda x, y: ((np.asarray(x) - lon) * m_lon, (np.asarray(y) - lat) * m_lat), outline).buffer(POI_OUTLINE_MARGIN)
+                inside = shapely.contains_xy(outline, tile_vertices[:, 0], tile_vertices[:, 1])
+            else:
+                inside = np.hypot(tile_vertices[:, 0], tile_vertices[:, 1]) <= radius
+            tops = [tile_vertices[inside, 2]]
+        tops = [float(heights.max()) for heights in tops if len(heights)]
+        if not tops:
+            return 0.0
+        terrain = self.__height_map_terrain(lat, lon)
+        if terrain is not None:
+            ground = terrain - get_geoid_height(self.sources_folder, lat, lon)
+        else:
+            # (no height map: the low ground around the building in the tile)
+            around = tile_vertices[np.hypot(tile_vertices[:, 0], tile_vertices[:, 1]) <= 2 * radius, 2]
+            if not len(around):
+                return 0.0
+            ground = float(np.percentile(around, 10))
+        return max(0.0, max(tops) - ground + POI_MARKER_CLEARANCE)
+
+    def __model_vertices(self, model, lat, lon):
+        # the vertices of the most detailed lod of a tile or a scene object: east, north of a point (m), up as the altitude of
+        # the objects (without the geoid)
+        elems = self.objects_xml.find_scenery_objects(model.xml.guid)
+        lods = [lod for lod in model.lods if COLLIDER_SUFFIX not in lod.model_file]
+        if not elems or not lods:
+            return np.empty((0, 3))
+        origin_lat, origin_lon, origin_alt = (float(elems[0].get(attr)) for attr in (self.objects_xml.LAT_ATTR, self.objects_xml.LON_ATTR, self.objects_xml.ALT_ATTR))
+        m_lat, m_lon = wgs84_meters_per_degree(lat)
+        return gltf_vertices(os.path.join(lods[0].folder, lods[0].model_file)) + ((origin_lon - lon) * m_lon, (origin_lat - lat) * m_lat, origin_alt)
+
+    def __height_map_terrain(self, lat, lon):
+        # the height map of step 5 at a point (its grid spans the inner 95 % of its rectangle, the south row first)
+        m_lat, m_lon = wgs84_meters_per_degree(lat)
+        xml = self.objects_xml
+        for rect in xml.find_rectangles():
+            if not str(rect.get(xml.DISPLAY_NAME_ATTR)).startswith(HEIGHT_MAP_GROUP_DISPLAY_NAME):
+                continue
+            south, north = float(rect.get(xml.LATITUDE_ATTR)), float(rect.get(xml.LATITUDE2_ATTR))
+            half_width = float(rect.get(xml.WIDTH_ATTR)) / 2 / m_lon
+            west, east = float(rect.get(xml.LONGITUDE_ATTR)) - half_width, float(rect.get(xml.LONGITUDE_ATTR)) + half_width
+            height_data = xml.find_rectangle_height_data(rect)
+            if not (south <= lat <= north and west <= lon <= east) or not height_data:
+                continue
+            columns = int(height_data[0].get(xml.WIDTH_ATTR))
+            grid = np.array(height_data[0].get(xml.DATA_ATTR).split(), dtype=float).reshape(-1, columns)
+            row = int(round(np.clip(((lat - south) / (north - south) - 0.025) / 0.95, 0, 1) * (grid.shape[0] - 1)))
+            column = int(round(np.clip(((lon - west) / (east - west) - 0.025) / 0.95, 0, 1) * (columns - 1)))
+            return float(grid[row, column])
+        return None
 
     def fix_node_edge_normals(self):
         # the normals of every model (tiles, landmark objects) computed again without the node skirts, which tilted them along the
@@ -616,8 +730,9 @@ class MsfsProject:
         # are removed. Without landmarks file, it is created with the candidates suggested from OpenStreetMap
         landmarks_file = os.path.join(self.project_folder, LANDMARKS_FILE)
         if not os.path.isfile(landmarks_file):
-            nb_candidates, nb_active = write_landmark_candidates(landmarks_file, self.coords, settings.overpass_api_uri, self.project_name, LANDMARK_MIN_SCORE)
-            pr_bg_orange("%d landmark candidates found, %d suggested: review the list in %s, then run this tool again" % (nb_candidates, nb_active, landmarks_file) + EOL + CEND)
+            nb_candidates, nb_landmarks, nb_pois = write_landmark_candidates(landmarks_file, self.coords, settings.overpass_api_uri, LANDMARK_MIN_SCORE, POI_MIN_SCORE)
+            pr_bg_orange("%d landmark candidates found, %d suggested as landmarks, %d as points of interest: review the list in %s, then run this tool again"
+                         % (nb_candidates, nb_landmarks, nb_pois, landmarks_file) + EOL + CEND)
             return False
 
         max_level = int(getattr(self.settings, "tiles_max_lod_level", DEFAULT_TILES_MAX_LOD_LEVEL))

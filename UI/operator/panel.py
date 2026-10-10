@@ -876,8 +876,9 @@ class OT_UpgradeLandmarksPanel(SettingsOperator):
     bl_idname = id_name
     bl_label = "Upgrade the landmarks of the scenery (more detailed lods than the tiles)"
     operator_description = """Keeps the most detailed lods (e.g. LOD 20) for some buildings, while the tiles keep less detailed lods (e.g. up to LOD 19).
-        The buildings are listed in the landmarks.txt file of the project folder, as OpenStreetMap ids (W for a way, R for a relation, e.g. W96307473).
+        The buildings are the rows of the landmarks.csv file of the project folder (';' separated) with true in the landmark column, by their OpenStreetMap id (W for a way, R for a relation, e.g. W96307473).
         If this file does not exist, it is created with candidates suggested from OpenStreetMap (churches, notable, historic, public or large buildings): review it, then run this script again.
+        The rows with true in the poi column are points of interest in MSFS, named after the name column: written by the clean package files script.
         Each building is isolated from the tiles as separate objects (named landmark_<id>_<tile>), then removed from the tiles.
         Then the tile lods more detailed than the tiles_max_lod_level value ([LANDMARKS] section of the project ini file, 19 by default) are removed,
         and the textures of the landmarks are repacked to keep only the parts they use.

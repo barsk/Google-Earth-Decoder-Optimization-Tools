@@ -44,6 +44,8 @@ def clean_package_files(global_settings):
         print_title("CLEAN PACKAGE FILES")
 
         msfs_project.clean(remove_tiles=True)
+        # the points of interest of the landmarks file (poi column)
+        msfs_project.update_points_of_interest(global_settings.overpass_api_uri)
 
         if msfs_project.settings.build_package_enabled:
             build_package(msfs_project)
