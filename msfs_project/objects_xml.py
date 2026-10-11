@@ -495,7 +495,8 @@ class ObjectsXml(Xml):
             self.TYPE_ATTR: str(landmark_location.type)
         }
 
-        if landmark_location.type == landmark_location.LANDMARK_LOCATION_TYPE.city:
+        # (required by MSFS for each type, not only the cities)
+        if landmark_location.owner:
             attrib[self.OWNER_ATTR] = str(landmark_location.owner)
 
         return Et.SubElement(self.root, self.LANDMARK_LOCATION_TAG, attrib=attrib)

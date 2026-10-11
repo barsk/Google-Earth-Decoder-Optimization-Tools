@@ -58,7 +58,6 @@ import bpy
 from msfs_project.project_settings import ProjectSettings
 from msfs_project.landmark import MsfsLandmarks, MsfsLandmarkLocation
 from msfs_project.position import MsfsPosition
-from msfs_project.geoid import get_geoid_height
 from msfs_project.height_map_xml import HeightMapXml
 from msfs_project.height_map import MsfsHeightMaps
 from msfs_project.osm_xml import OsmXml
@@ -346,8 +345,9 @@ class MsfsProject:
 
     def update_points_of_interest(self, overpass_api_uri):
         # The rows of the landmarks file with poi true are points of interest in MSFS: a POI LandmarkLocation at the building
-        # (lat, lon of the row) named after the name column, its marker above the top of the building (alt 0: the offset is the
-        # height above the ground, the height map of step 5). The cells of a city share the buildings of their edges: each
+        # (lat, lon of the row) named after the name column, its marker POI_MARKER_CLEARANCE (offset) above the top of the
+        # building (alt: an altitude like the scenery objects', not above the ground: alt 0 put the markers at the sea level,
+        # under the ground of the city; owner: required by MSFS). The cells of a city share the buildings of their edges: each
         # point of interest is written by the cell whose tiles contain it. The points of interest of the file are made again at
         # each run (found by their instance id, made from the OSM id): the rows changed, turned off or removed are updated
         landmarks_file = os.path.join(self.project_folder, LANDMARKS_FILE)
@@ -375,21 +375,26 @@ class MsfsProject:
             outlines = {}
 
         for row in valid:
+            top, ground = self.__poi_top(row["osm_id"], row["lat"], row["lon"], row["area_m2"], outlines.get(row["osm_id"]))
+            if top is None:
+                pr_bg_orange("Point of interest %s (%s): no tile vertex around it: skipped" % (row["name"], row["osm_id"]) + EOL + CEND)
+                continue
             location = MsfsLandmarkLocation()
             location.instance_id = poi_instance_id(row["osm_id"])
             location.name = row["name"]
             location.owner = self.author_name
-            location.pos = MsfsPosition("%.8f" % row["lat"], "%.8f" % row["lon"], "0.000000")
-            location.offset = "%.1f" % self.__poi_offset(row["osm_id"], row["lat"], row["lon"], row["area_m2"], outlines.get(row["osm_id"]))
+            location.pos = MsfsPosition("%.8f" % row["lat"], "%.8f" % row["lon"], "%.2f" % top)
+            location.offset = "%.1f" % POI_MARKER_CLEARANCE
             self.objects_xml.add_landmark_location(location)
-            isolated_print("%s (%s): marker %s m above the ground" % (row["name"], row["osm_id"], location.offset))
+            isolated_print("%s (%s): marker at %.1f m, %.1f m above the ground" % (row["name"], row["osm_id"], top + POI_MARKER_CLEARANCE, top + POI_MARKER_CLEARANCE - ground))
         self.objects_xml.save()
         isolated_print("%d points of interest%s" % (len(valid), ", %d in the other cells (outside the tiles of this one)" % elsewhere if elsewhere else str()))
 
-    def __poi_offset(self, osm_id, lat, lon, area, outline):
-        # the height of the marker of a point of interest above the ground: the top of its building above the height map. The
-        # top: its landmark objects (the building isolated from the tiles), else the tiles containing it within its outline
-        # (enlarged by POI_OUTLINE_MARGIN), or within the circle of its footprint area (the most detailed lods)
+    def __poi_top(self, osm_id, lat, lon, area, outline):
+        # (the top of the building of a point of interest, the ground around it) as altitudes like the scenery objects' (their
+        # alt + the height in the model), None without tile around it. The top: its landmark objects (the building isolated
+        # from the tiles), else the tiles containing it within its outline (enlarged by POI_OUTLINE_MARGIN), or within the
+        # circle of its footprint area (the most detailed lods). The ground: the low vertices of the tiles around it (the log)
         import shapely
         from shapely.ops import transform
 
@@ -400,31 +405,24 @@ class MsfsProject:
         tops = [heights for heights in tops if len(heights)]
         tiles = [tile for tile in self.tiles.values() if tile.contains((lat, lat, lon, lon))]
         tile_vertices = [vertices for vertices in (self.__model_vertices(tile, lat, lon) for tile in tiles) if len(vertices)]
-        tile_vertices = np.concatenate(tile_vertices) if tile_vertices else np.empty((0, 3))
-        if not tops and len(tile_vertices):
+        if not tile_vertices:
+            return None, None
+        tile_vertices = np.concatenate(tile_vertices)
+        if not tops:
             if outline is not None:
                 outline = transform(lambda x, y: ((np.asarray(x) - lon) * m_lon, (np.asarray(y) - lat) * m_lat), outline).buffer(POI_OUTLINE_MARGIN)
                 inside = shapely.contains_xy(outline, tile_vertices[:, 0], tile_vertices[:, 1])
             else:
                 inside = np.hypot(tile_vertices[:, 0], tile_vertices[:, 1]) <= radius
             tops = [tile_vertices[inside, 2]]
+        around = tile_vertices[np.hypot(tile_vertices[:, 0], tile_vertices[:, 1]) <= 2 * radius, 2]
+        ground = float(np.percentile(around if len(around) else tile_vertices[:, 2], 10))
         tops = [float(heights.max()) for heights in tops if len(heights)]
-        if not tops:
-            return 0.0
-        terrain = self.__height_map_terrain(lat, lon)
-        if terrain is not None:
-            ground = terrain - get_geoid_height(self.sources_folder, lat, lon)
-        else:
-            # (no height map: the low ground around the building in the tile)
-            around = tile_vertices[np.hypot(tile_vertices[:, 0], tile_vertices[:, 1]) <= 2 * radius, 2]
-            if not len(around):
-                return 0.0
-            ground = float(np.percentile(around, 10))
-        return max(0.0, max(tops) - ground + POI_MARKER_CLEARANCE)
+        return (max(tops) if tops else ground), ground
 
     def __model_vertices(self, model, lat, lon):
         # the vertices of the most detailed lod of a tile or a scene object: east, north of a point (m), up as the altitude of
-        # the objects (without the geoid)
+        # the scenery objects (their alt + the height in the model)
         elems = self.objects_xml.find_scenery_objects(model.xml.guid)
         lods = [lod for lod in model.lods if COLLIDER_SUFFIX not in lod.model_file]
         if not elems or not lods:
@@ -432,26 +430,6 @@ class MsfsProject:
         origin_lat, origin_lon, origin_alt = (float(elems[0].get(attr)) for attr in (self.objects_xml.LAT_ATTR, self.objects_xml.LON_ATTR, self.objects_xml.ALT_ATTR))
         m_lat, m_lon = wgs84_meters_per_degree(lat)
         return gltf_vertices(os.path.join(lods[0].folder, lods[0].model_file)) + ((origin_lon - lon) * m_lon, (origin_lat - lat) * m_lat, origin_alt)
-
-    def __height_map_terrain(self, lat, lon):
-        # the height map of step 5 at a point (its grid spans the inner 95 % of its rectangle, the south row first)
-        m_lat, m_lon = wgs84_meters_per_degree(lat)
-        xml = self.objects_xml
-        for rect in xml.find_rectangles():
-            if not str(rect.get(xml.DISPLAY_NAME_ATTR)).startswith(HEIGHT_MAP_GROUP_DISPLAY_NAME):
-                continue
-            south, north = float(rect.get(xml.LATITUDE_ATTR)), float(rect.get(xml.LATITUDE2_ATTR))
-            half_width = float(rect.get(xml.WIDTH_ATTR)) / 2 / m_lon
-            west, east = float(rect.get(xml.LONGITUDE_ATTR)) - half_width, float(rect.get(xml.LONGITUDE_ATTR)) + half_width
-            height_data = xml.find_rectangle_height_data(rect)
-            if not (south <= lat <= north and west <= lon <= east) or not height_data:
-                continue
-            columns = int(height_data[0].get(xml.WIDTH_ATTR))
-            grid = np.array(height_data[0].get(xml.DATA_ATTR).split(), dtype=float).reshape(-1, columns)
-            row = int(round(np.clip(((lat - south) / (north - south) - 0.025) / 0.95, 0, 1) * (grid.shape[0] - 1)))
-            column = int(round(np.clip(((lon - west) / (east - west) - 0.025) / 0.95, 0, 1) * (columns - 1)))
-            return float(grid[row, column])
-        return None
 
     def fix_node_edge_normals(self):
         # the normals of every model (tiles, landmark objects) computed again without the node skirts, which tilted them along the
