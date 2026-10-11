@@ -16,8 +16,8 @@
 #
 #  <pep8 compliant>
 
-# Landmarks file of a project (landmarks.csv, ';' separated, for a spreadsheet): one row per building suggested from OpenStreetMap,
-# scored on notability signals (wikidata, historic, place of worship, public buildings, size...). The columns:
+# Landmarks file of a project (landmarks.csv, ';' separated, windows-1252, for a spreadsheet): one row per building suggested
+# from OpenStreetMap, scored on notability signals (wikidata, historic, place of worship, public buildings, size...). The columns:
 #   landmark  true: the building keeps more detailed lods than the tiles (the landmarks step)
 #   poi       true: the building is a point of interest in MSFS, named after the name column (step 6)
 #   name      the name of the point of interest (from OpenStreetMap, editable)
@@ -37,6 +37,8 @@ from utils.script_errors import ScriptError
 LANDMARK_ID = re.compile(r"^([WRwr]?)(\d+)$")
 LANDMARKS_COLUMNS = ("landmark", "poi", "name", "osm_id", "score", "building", "area_m2", "lat", "lon", "reasons")
 DELIMITER = ";"
+# what a spreadsheet saves a CSV file back as (e.g. Excel 2010, which reads UTF-8 but writes windows-1252)
+ENCODING = "cp1252"
 # (also the values of a spreadsheet that saved the column as booleans, e.g. a Swedish Excel)
 TRUE_VALUES = {"true", "yes", "y", "1", "x", "sant", "ja", "j"}
 FALSE_VALUES = {"false", "no", "n", "0", "", "falskt", "nej"}
@@ -61,12 +63,12 @@ def normalize_osm_id(value, file_path=str()):
 
 def read_landmark_rows(file_path):
     # the rows of the landmarks file: {landmark, poi (bools), name, osm_id, lat, lon, area_m2 (floats or None), line}
+    # (UTF-8 first: the files written before windows-1252, or saved as UTF-8 by a spreadsheet; windows-1252 text is not valid UTF-8)
     try:
         with open(file_path, encoding="utf-8-sig") as file:
             text = file.read()
     except UnicodeDecodeError:
-        # (saved as "CSV (semicolon separated)" by a spreadsheet)
-        with open(file_path, encoding="cp1252") as file:
+        with open(file_path, encoding=ENCODING) as file:
             text = file.read()
     lines = text.splitlines()
     if not lines:
@@ -159,7 +161,8 @@ def landmark_candidates(elements, min_score, poi_min_score, keep_ids=()):
 
 
 def write_landmarks_file(file_path, candidates):
-    with open(file_path, "w", encoding="utf-8-sig", newline="") as file:
+    # (a character outside windows-1252 becomes '?', as when a spreadsheet saves the file back)
+    with open(file_path, "w", encoding=ENCODING, errors="replace", newline="") as file:
         writer = csv.writer(file, delimiter=DELIMITER)
         writer.writerow(LANDMARKS_COLUMNS)
         for c in candidates:
