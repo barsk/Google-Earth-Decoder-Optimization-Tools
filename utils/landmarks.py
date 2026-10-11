@@ -23,19 +23,27 @@
 #   name      the name of the point of interest (from OpenStreetMap, editable)
 #   osm_id    W<id> (way) or R<id> (relation)
 #   lat, lon  the place of the point of interest (the centre of the building)
-#   the others are informative (score, building, area_m2, reasons). Rows can be added, removed or reordered, the columns are
-#   found by their name in the first row
+#   the others are informative (score, wikipedias, building, area_m2, reasons). Rows can be added, removed or reordered, the
+#   columns are found by their name in the first row
+# wikipedias: the number of Wikipedia languages with an article on the building (Wikidata), its notability beyond the city. Most
+# churches have one (a Swedish article on each church): a place of worship is a point of interest by default only when it is a
+# cathedral or has articles in POI_WORSHIP_MIN_WIKIPEDIAS languages
 
 import csv
 import math
 import re
+import time
 import uuid
 
+import requests
+
+from constants import POI_WORSHIP_MIN_WIKIPEDIAS, EOL, CEND
+from utils.colored_print import pr_bg_orange
 from utils.geo_pandas import overpass_query
 from utils.script_errors import ScriptError
 
 LANDMARK_ID = re.compile(r"^([WRwr]?)(\d+)$")
-LANDMARKS_COLUMNS = ("landmark", "poi", "name", "osm_id", "score", "building", "area_m2", "lat", "lon", "reasons")
+LANDMARKS_COLUMNS = ("landmark", "poi", "name", "osm_id", "score", "wikipedias", "building", "area_m2", "lat", "lon", "reasons")
 DELIMITER = ";"
 # what a spreadsheet saves a CSV file back as (e.g. Excel 2010, which reads UTF-8 but writes windows-1252)
 ENCODING = "cp1252"
@@ -51,6 +59,15 @@ NOTABLE_BUILDINGS = {"cathedral", "church", "chapel", "mosque", "synagogue", "te
                      "palace", "theatre", "hotel", "grandstand", "tower", "fire_station", "library", "school"}
 PLACES_OF_WORSHIP = {"cathedral", "church", "chapel", "mosque", "synagogue", "temple"}
 STRUCTURES = {"tower", "water_tower", "lighthouse", "chimney", "silo", "storage_tank"}
+WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+WIKIDATA_BATCH = 50
+WIKIDATA_RETRIES = 4
+WIKIDATA_RETRY_PAUSE = 15
+# the sitelinks of Wikidata that are not Wikipedias (the other projects end with their own name, e.g. svwikivoyage)
+NOT_WIKIPEDIAS = {"commonswiki", "specieswiki", "metawiki", "wikidatawiki", "mediawikiwiki", "sourceswiki", "outreachwiki",
+                  "wikimaniawiki", "incubatorwiki", "wikifunctionswiki", "abstractwiki"}
+# a cathedral: its name (the languages around), or its Wikidata class (e.g. "Lutheran cathedral", "co-cathedral")
+CATHEDRAL_NAME = re.compile(r"domkyrka|domkirke|domkirkja|tuomiokirkko|cathedral|cathédrale|catedral|cattedrale|kathedrale|katedral", re.IGNORECASE)
 
 
 def normalize_osm_id(value, file_path=str()):
@@ -130,9 +147,45 @@ def is_poi_instance_id(instance_id):
     return str(instance_id).upper().startswith("{" + POI_INSTANCE_ID_PREFIX + "-")
 
 
-def landmark_candidates(elements, min_score, poi_min_score, keep_ids=()):
+def wikidata_notability(qids):
+    """{Wikidata id: (number of Wikipedia languages, a cathedral)} of the ids (Wikidata unreachable: {} and a warning)."""
+    qids = sorted({qid for qid in qids if re.match(r"^Q\d+$", str(qid))})
+    entities = {}
+    try:
+        for i in range(0, len(qids), WIKIDATA_BATCH):
+            entities.update(__wikidata_entities(qids[i:i + WIKIDATA_BATCH], "sitelinks|claims"))
+        classes = sorted({c for entity in entities.values() for c in __claim_ids(entity, "P31")})
+        labels = {}
+        for i in range(0, len(classes), WIKIDATA_BATCH):
+            labels.update({qid: entity.get("labels", {}).get("en", {}).get("value", "") for qid, entity in __wikidata_entities(classes[i:i + WIKIDATA_BATCH], "labels").items()})
+    except (requests.exceptions.RequestException, ValueError, KeyError) as ex:
+        pr_bg_orange("Wikidata not reachable (%s): no wikipedias column, a place of worship is a point of interest only as a cathedral by its name" % ex + EOL + CEND)
+        return {}
+    return {qid: (len([site for site in entity.get("sitelinks", {}) if site.endswith("wiki") and site not in NOT_WIKIPEDIAS]),
+                  any("cathedral" in labels.get(c, "").lower() for c in __claim_ids(entity, "P31")))
+            for qid, entity in entities.items() if "missing" not in entity}
+
+
+def is_place_of_worship(tags):
+    return tags.get("amenity") == "place_of_worship" or tags.get("building") in PLACES_OF_WORSHIP
+
+
+def default_poi(tags, score, poi_min_score, notability):
+    # named, and for a place of worship a cathedral or an article in POI_WORSHIP_MIN_WIKIPEDIAS languages (most churches have one,
+    # the cathedral of a city many), else a score from poi_min_score
+    if "name" not in tags:
+        return False
+    if not is_place_of_worship(tags):
+        return score >= poi_min_score
+    wikipedias, cathedral = notability.get(tags.get("wikidata"), (0, False))
+    return cathedral or tags.get("building") == "cathedral" or bool(CATHEDRAL_NAME.search(tags["name"])) or wikipedias >= POI_WORSHIP_MIN_WIKIPEDIAS
+
+
+def landmark_candidates(elements, min_score, poi_min_score, keep_ids=(), notability=None):
     # the rows of the OSM elements (out tags geom) scoring at least one point (or in keep_ids), the best first: landmark true
-    # from min_score, poi true from poi_min_score with a name
+    # from min_score, poi true as default_poi. notability: wikidata_notability of their wikidata tags (None: fetched)
+    if notability is None:
+        notability = wikidata_notability(element.get("tags", {}).get("wikidata") for element in elements)
     candidates = []
     for element in elements:
         osm_id = element["type"][0].upper() + str(element["id"])
@@ -142,8 +195,9 @@ def landmark_candidates(elements, min_score, poi_min_score, keep_ids=()):
         if points == 0 and osm_id not in keep_ids:
             continue
         name = tags.get("name") or (tags.get("addr:street", "") + " " + tags.get("addr:housenumber", "")).strip() or UNNAMED
-        candidates.append({"score": points, "osm_id": osm_id, "name": name, "named": "name" in tags, "building": tags.get("building") or tags.get("man_made", ""),
-                           "area_m2": area, "lat": lat, "lon": lon, "reasons": reasons})
+        candidates.append({"score": points, "osm_id": osm_id, "name": name, "building": tags.get("building") or tags.get("man_made", ""),
+                           "area_m2": area, "lat": lat, "lon": lon, "reasons": reasons, "wikipedias": notability.get(tags.get("wikidata"), (None,))[0],
+                           "poi": default_poi(tags, points, poi_min_score, notability)})
     candidates.sort(key=lambda c: (-c["score"], -c["area_m2"]))
 
     # unnamed candidates next to a named one are usually a part of it (e.g. a church annex)
@@ -156,7 +210,6 @@ def landmark_candidates(elements, min_score, poi_min_score, keep_ids=()):
 
     for candidate in candidates:
         candidate["landmark"] = candidate["score"] >= min_score
-        candidate["poi"] = candidate["score"] >= poi_min_score and candidate["named"]
     return candidates
 
 
@@ -167,7 +220,8 @@ def write_landmarks_file(file_path, candidates):
         writer.writerow(LANDMARKS_COLUMNS)
         for c in candidates:
             writer.writerow(["true" if c["landmark"] else "false", "true" if c["poi"] else "false", c["name"], c["osm_id"], c["score"],
-                             c["building"], "%.0f" % c["area_m2"], "%.6f" % c["lat"], "%.6f" % c["lon"], ", ".join(c["reasons"])])
+                             "" if c.get("wikipedias") is None else c["wikipedias"], c["building"], "%.0f" % c["area_m2"], "%.6f" % c["lat"],
+                             "%.6f" % c["lon"], ", ".join(c["reasons"])])
 
 
 def write_landmark_candidates(file_path, coords, overpass_api_uri, min_score, poi_min_score):
@@ -239,6 +293,25 @@ def gltf_vertices(gltf_path):
             positions = np.lib.stride_tricks.as_strided(raw, shape=(accessor["count"], 12), strides=(stride, 1)).copy().view(np.float32).reshape(-1, 3)
             vertices.append(np.column_stack([-positions[:, 0], positions[:, 2], positions[:, 1]]))
     return np.concatenate(vertices).astype(np.float64) if vertices else np.empty((0, 3))
+
+
+def __wikidata_entities(qids, props):
+    # (tried again after a pause: a busy server, or a short network failure, made a whole city fall back to the cathedral names)
+    for attempt in range(WIKIDATA_RETRIES):
+        try:
+            response = requests.get(WIKIDATA_API, params={"action": "wbgetentities", "ids": "|".join(qids), "props": props, "languages": "en", "format": "json"},
+                                    headers={"User-Agent": "GEDOT-landmarks/1.0 (MSFS scenery tool)"}, timeout=60)
+            response.raise_for_status()
+            return response.json()["entities"]
+        except (requests.exceptions.RequestException, ValueError, KeyError):
+            if attempt == WIKIDATA_RETRIES - 1:
+                raise
+            time.sleep(WIKIDATA_RETRY_PAUSE)
+
+
+def __claim_ids(entity, prop):
+    return [claim["mainsnak"].get("datavalue", {}).get("value", {}).get("id") for claim in entity.get("claims", {}).get(prop, [])
+            if isinstance(claim["mainsnak"].get("datavalue", {}).get("value"), dict)]
 
 
 def __footprint(element):

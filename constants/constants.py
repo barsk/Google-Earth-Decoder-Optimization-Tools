@@ -141,6 +141,9 @@ DEFAULT_TILES_MAX_LOD_LEVEL = 19
 LANDMARK_MIN_SCORE = 3
 # the landmarks file candidates shown as points of interest in MSFS by default (poi column): the named ones with this score
 POI_MIN_SCORE = 10
+# a place of worship is a point of interest by default only as a cathedral or with Wikipedia articles in this number of
+# languages (most churches have one; Karlstad's and Linkoping's cathedrals 16 and 21)
+POI_WORSHIP_MIN_WIKIPEDIAS = 5
 # the marker of a point of interest above the top of its building (m)
 POI_MARKER_CLEARANCE = 2.0
 # the top of the building of a point of interest in the tiles: within its OSM outline enlarged by this margin (m), without
