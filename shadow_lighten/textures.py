@@ -329,6 +329,15 @@ def linear_to_srgb(c):
     return np.where(c <= 0.0031308, c * 12.92, 1.055 * c ** (1 / 2.4) - 0.055)
 
 
+def fit_in_range(linear):
+    # the colors brighter than white brought back into range as a whole, their hue kept (in place, on the last axis): clipping each
+    # channel on its own turned the overbright greys of the shaded sides yellow, then green with higher gains
+    peak = linear.max(axis=-1)
+    over = peak > 1.0
+    linear[over] /= peak[over][:, None]
+    return linear
+
+
 def lum(linear):
     return linear @ LUMINANCE
 

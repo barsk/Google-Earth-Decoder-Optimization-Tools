@@ -42,7 +42,7 @@ from mathutils import Vector
 from PIL import Image
 
 from .textures import load_triangles, load_occluders, rasterize, smooth_normals, srgb_from_8bit, srgb_to_linear, linear_to_srgb, lum, \
-    smoothstep, upsample_smooth, box_blur, pad_gain, reference_cells, cell_means, textured_faces, straightened_normals
+    smoothstep, upsample_smooth, box_blur, pad_gain, reference_cells, cell_means, textured_faces, straightened_normals, fit_in_range
 from .facing import fit_ratio, vegetation, correct_facing, WALL_MAX_UP, FIT_SAMPLES
 from .sun import RAY_OFFSET, RAY_LENGTH
 from constants import SHADOW_LIGHTENING_DEFAULTS
@@ -67,6 +67,11 @@ MAX_SUN_SKY_RATIO = 60.0
 # a texel channel below this (linear) is black (8 bits: level 0): it has no gain of its own
 BLACK_LINEAR = 1e-4
 MAX_LIT_SHADOW_RATIO = 40.0
+# part 1 never brightens a texel above this times the sunlit surfaces of its kind around it (walls against walls, the others against
+# the others: the texels facing the sun by the mesh, out of the cast shadows, over the cells of the lit reference): the mesh normals of
+# round or lumpy shapes (tanks, silos, roofs) don't follow the photo, texels in the sun taken for the shaded side got the whole gain
+SUNLIT_HEADROOM = 1.0
+SUNLIT_LEVEL_PERCENTILE = 90  # where none is around: this percentile of the tile's sunlit texels
 
 
 def usable(ratios, maximum, minimum=0.0):
@@ -155,7 +160,62 @@ def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, sc
     # edges (dark "cracks" along the triangle edges in the sim)
     likelihood = np.nan_to_num(upsample_smooth(small_likelihood, height, width, valid=~np.isnan(small_likelihood)), nan=0.0)
     return {"name": image_name, "srgb8": srgb8, "linear": linear, "normal_map": normal_map, "smooth_map": smooth_map, "small_points": small_points,
-            "small_likelihood": small_likelihood, "likelihood": likelihood, "covered": covered, "blocked": likelihood >= 0.5, "size": (sw, sh)}
+            "small_normals": small_normals, "small_likelihood": small_likelihood, "likelihood": likelihood, "covered": covered,
+            "blocked": likelihood >= 0.5, "size": (sw, sh)}
+
+
+def sunlit_texels(t, sun, knee):
+    # the low resolution texels of a texture facing the sun (by the mesh, at least up to the knee) out of the cast shadows: their 3D
+    # points, original colors and whether they are walls
+    sw, sh = t["size"]
+    normals = t["small_normals"].astype(np.float64)
+    facing = np.nan_to_num(normals @ sun, nan=-1.0)
+    likelihood = t["small_likelihood"]
+    sys_, sxs = np.nonzero(~np.isnan(likelihood) & (facing >= knee) & (np.nan_to_num(likelihood, nan=1.0) < 0.2))
+    small = srgb_to_linear(np.asarray(Image.fromarray(t["srgb8"]).resize((sw, sh), Image.BOX), dtype=np.float64) / 255.0)
+    return t["small_points"][sys_, sxs].astype(np.float64), small[sys_, sxs], np.abs(normals[sys_, sxs, 2]) < WALL_MAX_UP
+
+
+def sunlit_references(textures, sun, knee):
+    # the sunlit surfaces of a LOD (all its textures, in 3D), the walls and the others (roofs, ground) apart: the most part 1 may
+    # brighten the texels around them (a wall against the sunlit walls: a bright roof next to it let grey walls turn yellow)
+    found = [sunlit_texels(t, sun, knee) for t in textures]
+    points, colors, walls = (np.concatenate([f[k] for f in found]) for k in range(3))
+    references = {}
+    for kind, selected in (("wall", walls), ("other", ~walls)):
+        references[kind] = (reference_cells(points[selected], colors[selected], REFERENCE_CELL), reference_cells(points[selected], colors[selected], FALLBACK_CELL))
+    level = float(np.percentile(lum(colors), SUNLIT_LEVEL_PERCENTILE)) if len(colors) else None
+    return references, level
+
+
+def facing_limits(t, fit):
+    # the most the brightness of each texel may gain in part 1: SUNLIT_HEADROOM times the sunlit surfaces of its kind (walls, others)
+    # around it (the lit reference cells, the larger ones where too few, else the tile's level) over its own brightness (lightly
+    # blurred, like the darkness of part 2). None without sunlit texels in the tile
+    if fit.get("sunlit_level") is None:
+        return None
+    sw, sh = t["size"]
+    sys_, sxs = np.nonzero(~np.isnan(t["small_points"][..., 0]))
+    height, width = t["covered"].shape
+    points = t["small_points"][sys_, sxs].astype(np.float64)
+    wall = np.abs(t["normal_map"][..., 2]) < WALL_MAX_UP
+    sunlit = np.empty((height, width))
+    for kind, selected in (("wall", wall), ("other", ~wall)):
+        cells, fallback_cells = fit["sunlit"][kind]
+        reference, counts = cell_means(cells, points)
+        fallback, fallback_counts = cell_means(fallback_cells, points)
+        level = np.where(counts >= MIN_REFERENCE, lum(reference), np.where(fallback_counts >= MIN_REFERENCE, lum(fallback), fit["sunlit_level"]))
+        small = np.full((sh, sw), np.nan)
+        small[sys_, sxs] = level
+        big = upsample_smooth(small, height, width, valid=~np.isnan(small))
+        sunlit[selected] = big[selected]
+        del small, big
+    del wall
+    sunlit = np.where(np.isnan(sunlit), fit["sunlit_level"], sunlit)
+    blurred = box_blur(lum(t["linear"]), t["covered"], DARKNESS_BLUR)
+    limit = np.maximum(1.0, SUNLIT_HEADROOM * sunlit / np.maximum(blurred, 1e-6)).astype(np.float32)
+    del sunlit, blurred
+    return limit
 
 
 def stored_fits(fits_folder):
@@ -211,9 +271,16 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
             fit["ratios"] = np.array(stored["ratios"]) if stored["ratios"] is not None else np.zeros(3)
             fit["knee"] = stored["knee"] if stored["knee"] is not None else 0.4
             log.append("part 1: %s, %s" % (reason, "the median fit of the tiles done" if stored["ratios"] is not None else "no facing correction"))
+    # the sunlit surfaces of LOD00 (all its textures, in 3D): the most part 1 may brighten the texels around them, on every LOD
+    if "sunlit_level" not in fit:
+        fit["sunlit"], fit["sunlit_level"] = sunlit_references(textures, sun, fit["knee"])
     for t in textures:
+        limit_map = facing_limits(t, fit)
         t["part1"] = correct_facing(t["linear"], t["srgb8"], t.pop("normal_map"), t.pop("smooth_map"), t["covered"], t["blocked"], sun,
-                                    fit["ratios"], fit["knee"], parameters["wall_gain_cap"], parameters["vegetation_strength"], parameters["wall_color"])
+                                    fit["ratios"], fit["knee"], parameters["wall_gain_cap"], parameters["vegetation_strength"], parameters["wall_color"],
+                                    limit_map)
+        del limit_map
+        t.pop("small_normals")
         # the low resolution texels facing the sun: 3D point, color after part 1, likelihood
         sw, sh = t["size"]
         sys_, sxs = np.nonzero(~np.isnan(t["small_likelihood"]))
@@ -310,6 +377,7 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
         del gain_map
         result *= linear
         del linear
+        fit_in_range(result)
         for c in range(3):
             result[..., c] = linear_to_srgb(result[..., c])
         log.append("%s %s: %dx%d, predicted shadow %.0f%%, brightened as shadow %.0f%%, mean brightness %.4f -> %.4f -> %.4f" % (
