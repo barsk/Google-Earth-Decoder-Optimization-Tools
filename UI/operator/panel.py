@@ -577,9 +577,11 @@ class OT_CleanPackageFilesPanel(SettingsOperator):
     operator_name = "wm.clean_package_files"
     id_name = "wm.clean_package_files_panel"
     bl_idname = id_name
-    bl_label = "6. Clean the unused files of the msfs project"
-    operator_description = """This script clean the unused files of the MSFS scenery project.
-        Once you removed some tiles of a project, use this script to clean the gltf, bin and texture files associated to those tiles."""
+    bl_label = "6. Finalize the tiles for MSFS (points of interest, unused files)"
+    operator_description = """Finalizes the MSFS scenery project before its build.
+        The tiles are prepared for MSFS (non-metallic materials, MSFS extensions, road and collision tags) and the normals along the edges of their nodes are computed again (no dark ramps).
+        The rows of the landmarks.csv file with true in the poi column become points of interest, above the top of their building.
+        The broken lods and the unused gltf, bin and texture files (e.g. of removed tiles) are removed."""
     starting_section = PROJECT_INI_SECTION
     displayed_sections = [
         PROJECT_INI_SECTION,
@@ -878,7 +880,7 @@ class OT_UpgradeLandmarksPanel(SettingsOperator):
     operator_description = """Keeps the most detailed lods (e.g. LOD 20) for some buildings, while the tiles keep less detailed lods (e.g. up to LOD 19).
         The buildings are the rows of the landmarks.csv file of the project folder (';' separated) with true in the landmark column, by their OpenStreetMap id (W for a way, R for a relation, e.g. W96307473).
         If this file does not exist, it is created with candidates suggested from OpenStreetMap (churches, notable, historic, public or large buildings): review it, then run this script again.
-        The rows with true in the poi column are points of interest in MSFS, named after the name column: written by the clean package files script.
+        The rows with true in the poi column are points of interest in MSFS, named after the name column: written by step 6 (Finalize).
         Each building is isolated from the tiles as separate objects (named landmark_<id>_<tile>), then removed from the tiles.
         Then the tile lods more detailed than the tiles_max_lod_level value ([LANDMARKS] section of the project ini file, 19 by default) are removed,
         and the textures of the landmarks are repacked to keep only the parts they use.

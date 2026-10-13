@@ -41,7 +41,8 @@ def clean_package_files(global_settings):
             msfs_project.backup(Path(os.path.abspath(__file__)).stem.replace(SCRIPT_PREFIX, str()))
 
         isolated_print(EOL)
-        print_title("CLEAN PACKAGE FILES")
+        # (step 6, Finalize: the tiles prepared for MSFS, the points of interest, the unused files removed)
+        print_title("FINALIZE THE TILES FOR MSFS")
 
         msfs_project.clean(remove_tiles=True)
         # the points of interest of the landmarks file (poi column)

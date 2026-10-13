@@ -405,7 +405,7 @@ class OT_OptimizeMsfsSceneryOperator(ActionOperator):
 
 class OT_CleanPackageFilesOperator(ActionOperator):
     bl_idname = "wm.clean_package_files"
-    bl_label = "Clean the unused files of the msfs project..."
+    bl_label = "Finalize the tiles for MSFS..."
 
     @classmethod
     def poll(cls, context):
