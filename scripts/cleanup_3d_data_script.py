@@ -47,7 +47,8 @@ def cleanup_3d_data(global_settings):
         msfs_project.backup(os.path.join(msfs_project.backup_folder, CLEANUP_3D_DATA_BACKUP_FOLDER))
 
         isolated_print(EOL)
-        print_title("CLEANUP 3D DATA")
+        # (step 4, Trim: overlaps, excluded ground and water)
+        print_title("TRIM THE GOOGLE EARTH TILES")
 
         msfs_project.settings.save()
         msfs_project.prepare_3d_data(global_settings, generate_height_data=False, process_3d_data=True, create_polygons=False, process_all=msfs_project.settings.process_all)

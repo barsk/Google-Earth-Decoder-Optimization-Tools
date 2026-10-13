@@ -536,7 +536,7 @@ class OT_ShadowLighteningOperator(ActionOperator):
 
 class OT_Cleanup3dDataOperator(ActionOperator):
     bl_idname = "wm.cleanup_3d_data"
-    bl_label = "Cleanup 3d data from Google Earth tiles"
+    bl_label = "Trim the Google Earth tiles"
 
     @classmethod
     def poll(cls, context):

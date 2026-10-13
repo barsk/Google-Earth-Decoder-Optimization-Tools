@@ -679,9 +679,12 @@ class OT_Cleanup3dDataPanel(SettingsOperator):
     operator_name = "wm.cleanup_3d_data"
     id_name = "wm.cleanup_3d_data_panel"
     bl_idname = id_name
-    bl_label = "4. Cleanup 3d data from Google Earth tiles"
-    operator_description = """Automatically cleans 3d data from the Google Earth tiles, based on the OpenStreetMap data.
-        The OpenStreetMap settings (accuracy, kept and excluded data, airport city) are set in step 3.
+    bl_label = "4. Trim the Google Earth tiles (overlaps, excluded ground, water)"
+    operator_description = """Trims the 3d data of the Google Earth tiles, based on the OpenStreetMap data.
+        The nodes are clipped to their octree cells and the ground duplicated between the octants is removed (no overlapping tiles).
+        The excluded ground (forests, woods, nature reserves, parks... as set in step 3) is cut out, keeping the buildings with their margin and the roads.
+        The water surface is pushed down under the MSFS water (local levels on sloped streams), and the tiles covering only water are removed.
+        The OpenStreetMap settings (kept and excluded data, airport city) are set in step 3.
         Notice: this method can produce some visual artifacts, and buildings that are not included in OpenStreetMap data may be removed"""
     starting_section = OSM_INI_SECTION
     displayed_sections = [
