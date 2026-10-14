@@ -260,7 +260,7 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
     triangles, uvs, normals, images, owners = load_triangles(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, lod)))
     if not len(triangles):
         return [], fit
-    bvh = load_occluders(model_lib_folder, tile, placements, triangles, context=context)
+    bvh = load_occluders(model_lib_folder, tile, placements, triangles, context=context, own_lod=lod)
     shared = shared_textures(model_lib_folder, tile, lod, context)
     textures = [prepare_texture(originals, name, triangles[owners == k], uvs[owners == k], normals[owners == k], bvh, sun, LOW_SCALES[min(rank, len(LOW_SCALES) - 1)],
                                 shared.get(name, ()))

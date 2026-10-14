@@ -179,16 +179,30 @@ def neighbours(tile, tiles):
     return result
 
 
-def load_occluders(model_lib_folder, tile, placements, triangles, lod="LOD02", context=None):
+def load_occluders(model_lib_folder, tile, placements, triangles, lod="LOD02", context=None, own_lod=None):
     # the ray casting structure of the tile and its neighbours (their coarse LOD), placed in the tile frame: the shadows cast
     # across the tile edges. context: the tile of a model that isn't a tile (a landmark object, placed like its tile): the
-    # neighbours of that tile, and the tile itself
+    # neighbours of that tile, and the tile itself. With the landmark objects cut out of these tiles (the tile's own ones at
+    # own_lod, the LOD of the triangles), the model excepted: without them a landmark cast no shadow on the tiles, its shadow
+    # around it stayed dark beyond its own piece of ground (Umea's Avion: a dark band along its cut line)
     base = context or tile
     lat, lon, alt = placements[base]
     occluders = [triangles]
     tiles = sorted(name for name in placements if name.isdigit())
+    landmarks = {}
+    for name in placements:
+        if name.startswith(LANDMARK_OBJECT_PREFIX) and name != tile:
+            landmarks.setdefault(name.rsplit("_", 1)[-1], []).append(name)
+    models = []
     for other in neighbours(base, tiles) + ([base] if context else []):
-        path = os.path.join(model_lib_folder, "%s_%s.gltf" % (other, lod))
+        models.append((other, lod))
+        models += [(name, lod) for name in sorted(landmarks.get(other, []))]
+    if not context:
+        models += [(name, own_lod or lod) for name in sorted(landmarks.get(base, []))]
+    for other, other_lod in models:
+        path = os.path.join(model_lib_folder, "%s_%s.gltf" % (other, other_lod))
+        if not os.path.isfile(path) and other_lod != lod:
+            path = os.path.join(model_lib_folder, "%s_%s.gltf" % (other, lod))
         if os.path.isfile(path):
             tris = load_triangles(path)[0]
             east, north, up = wgs84_to_tile(*placements[other], lat, lon, alt)
