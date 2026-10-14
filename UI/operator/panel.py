@@ -18,7 +18,7 @@
 
 import bpy
 from bpy_types import Operator
-from constants import MAX_PHOTOGRAMMETRY_LOD, PROJECT_INI_SECTION, TILE_INI_SECTION, LODS_INI_SECTION, OSM_INI_SECTION, GEOCODE_INI_SECTION, ALTITUDE_ADJUSTMENT_INI_SECTION, COMPRESSONATOR_INI_SECTION, BUILD_INI_SECTION, MERGE_INI_SECTION, BACKUP_INI_SECTION, NONE_ICON, FILE_FOLDER_ICON, FILE_REFRESH_ICON, FILE_TICK_ICON, INFO_ICON, ADD_ICON, REMOVE_ICON, TEXTURES_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION
+from constants import MAX_PHOTOGRAMMETRY_LOD, PROJECT_INI_SECTION, TILE_INI_SECTION, LODS_INI_SECTION, OSM_INI_SECTION, GEOCODE_INI_SECTION, ALTITUDE_ADJUSTMENT_INI_SECTION, BUILD_INI_SECTION, MERGE_INI_SECTION, BACKUP_INI_SECTION, NONE_ICON, FILE_FOLDER_ICON, FILE_REFRESH_ICON, FILE_TICK_ICON, INFO_ICON, ADD_ICON, REMOVE_ICON, TEXTURES_INI_SECTION, SHADOW_LIGHTENING_INI_SECTION
 from .operator import OT_ProjectPathOperator, OT_ReloadSettingsOperator, \
     OT_SaveSettingsOperator, OT_ProjectsPathOperator, OT_ProjectPathToMergeOperator, OT_addLodOperator, OT_removeLowerLodOperator, OT_openSettingsFileOperator
 from .tools import reload_setting_props
@@ -394,14 +394,6 @@ class SettingsOperator(PanelOperator):
         col = self.draw_header(split)
         col.separator()
         draw_splitted_prop(context.scene.setting_props, col, ALTERNATE_SPLIT_LABEL_FACTOR, "python_reload_modules", "Reload python modules (for dev purpose)")
-        col.separator()
-        self.draw_footer(context, self.layout, self.operator_name)
-
-    def draw_compressonator_panel(self, context):
-        split = self.draw_setting_sections_panel(context)
-        col = self.draw_header(split)
-        col.separator()
-        draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, "compressonator_exe_path_readonly", "Compressonator bin exe path", enabled=False)
         col.separator()
         self.draw_footer(context, self.layout, self.operator_name)
 
@@ -954,19 +946,4 @@ class OT_ResizeSceneryTexturesPanel(SettingsOperator):
         PROJECT_INI_SECTION,
         TEXTURES_INI_SECTION,
         BUILD_INI_SECTION,
-    ]
-
-
-class OT_CompressBuiltPackagePanel(SettingsOperator):
-    operator_name = "wm.compress_built_package"
-    id_name = "wm.compress_built_package_panel"
-    bl_idname = id_name
-    bl_label = "8. Optimize the built package by compressing the texture files"
-    operator_description = """This script optimizes the built package of a MSFS scenery project by compressing the DDS texture files.
-        For the script to process correctly, the package must have been successfully built prior to executing the script."""
-    starting_section = PROJECT_INI_SECTION
-    displayed_sections = [
-        PROJECT_INI_SECTION,
-        COMPRESSONATOR_INI_SECTION,
-        BACKUP_INI_SECTION,
     ]

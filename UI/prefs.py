@@ -82,17 +82,6 @@ class GEDOT_PREFS(AddonPreferences):
     )
 
     ########################################################################
-    # Compressonator
-    ########################################################################
-
-    compressonator_exe_path: StringProperty(
-        subtype="FILE_PATH",
-        name="Path to the compressonator bin exe",
-        description="Select the path to the compressonator bin exe that compresses the package texture file",
-        maxlen=1024,
-    )
-
-    ########################################################################
     # Tile downloader (optional)
     ########################################################################
 
@@ -184,11 +173,6 @@ class GEDOT_PREFS(AddonPreferences):
         box = layout.box()
         box.label(text="Tile downloader (optional)")
         box.prop(self, "tile_downloader_exe_path")
-        row = box.row()
-
-        box = layout.box()
-        box.label(text="Compressonator")
-        box.prop(self, "compressonator_exe_path")
         row = box.row()
 
         box = layout.box()

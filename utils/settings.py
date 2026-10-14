@@ -66,8 +66,9 @@ class Settings:
         super().__setattr__(attr, value)
 
     def __rename_and_reorder_sections(self, config):
+        # (the section of the removed texture compression: no longer one of the sections shown)
+        config.remove_section(COMPRESSONATOR_INI_SECTION)
         config = self.rename_section(config, MSFS_SDK_INI_SECTION, BUILD_INI_SECTION)
-        config = self.rename_section(config, COMPRESSONATOR_INI_SECTION, COMPRESSONATOR_INI_SECTION)
         config = self.rename_section(config, BACKUP_INI_SECTION, BACKUP_INI_SECTION)
         config = self.rename_section(config, PYTHON_INI_SECTION, PYTHON_INI_SECTION)
 

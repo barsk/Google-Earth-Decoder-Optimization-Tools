@@ -34,7 +34,6 @@ from scripts.optimize_scenery_script import optimize_scenery
 from scripts.remove_tile_colliders_script import remove_tile_colliders
 from scripts.resize_scenery_textures_script import resize_scenery_textures
 from scripts.update_min_size_values_script import update_min_size_values
-from scripts.compress_built_package_script import compress_built_package
 from scripts.update_tiles_position_script import update_tiles_position
 from scripts.create_terraform_and_exclusion_polygons_script import create_terraform_and_exclusion_polygons
 from scripts.generate_height_data_script import generate_height_data
@@ -756,21 +755,6 @@ class OT_ResizeSceneryTexturesOperator(ActionOperator):
     def execute(self, context):
         super().execute(context)
         resize_scenery_textures(context.scene.global_settings)
-        return {'FINISHED'}
-
-
-class OT_CompressBuiltPackageOperator(ActionOperator):
-    bl_idname = "wm.compress_built_package"
-    bl_label = "Optimize the built package by compressing the texture files..."
-
-    @classmethod
-    def poll(cls, context):
-        msfs_project = super().poll(context)
-        return os.path.isdir(msfs_project.model_lib_output_folder)
-
-    def execute(self, context):
-        super().execute(context)
-        compress_built_package(context.scene.global_settings)
         return {'FINISHED'}
 
 

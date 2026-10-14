@@ -81,7 +81,6 @@ from utils import replace_in_file, is_octant, backup_file, ScriptError, print_ti
     prepare_sea_gdf, prepare_bbox_gdf, prepare_gdf, create_exclusion_vegetation_polygons_gdf, load_gdf_from_geocode, difference_gdf, create_shore_water_gdf, resize_gdf, pr_bg_orange, load_json_file, prepare_park_gdf, prepare_building_gdf, create_empty_gdf, union_gdf, prepare_roads_gdf, MapBoxDownloader
 from pathlib import Path
 
-from utils.compressonator import Compressonator
 from utils.msfs_sdk import is_msfs_2024_target
 from utils.system_memory import free_memory_gb
 from utils.minidom_xml import add_scenery_object, create_new_definition_file, add_new_lod
@@ -259,11 +258,6 @@ class MsfsProject:
         self.__clean_objects(self.objects)
 
         self.__update_texture_configuration_files(is_msfs_2024_target())
-
-        # from UI.prefs import get_prefs
-        # prefs = get_prefs()
-        # compressonator = Compressonator(prefs.compressonator_exe_path, package_sources_folder=os.path.join(self.package_sources_folder, os.path.basename(self.model_lib_folder)))
-        # compressonator.compress_gltf_files()
 
     def optimize(self, settings):
         isolated_print(EOL)
@@ -582,12 +576,6 @@ class MsfsProject:
             f.write("shadow lightening, %s\n" % time.strftime("%Y-%m-%d %H:%M"))
             f.write("settings: %s\n" % ", ".join("%s %g" % (name, float(getattr(self.settings, name, default))) for name, default in DEFAULT_PARAMETERS.items()))
             f.write("\n".join(lines) + "\n")
-
-    def compress_built_package(self):
-        from UI.prefs import get_prefs
-        prefs = get_prefs()
-        compressonator = Compressonator(prefs.compressonator_exe_path, model_lib_folder=self.model_lib_output_folder)
-        compressonator.compress_texture_files()
 
     def merge(self, project_to_merge):
         if self.objects_xml and project_to_merge.objects_xml:
@@ -1170,8 +1158,6 @@ class MsfsProject:
         if init_structure:
             self.__create_project_file(sources_path, THUMBNAIL_PICTURE_TEMPLATE_PATH, self.thumbnail_picture_path)
 
-        self.model_lib_output_folder = self.__get_model_lib_output_folder()
-
         if not fast_init:
             try:
                 # create the osm folder if it does not exist
@@ -1480,12 +1466,6 @@ class MsfsProject:
             pbar.display_title("Create optimization folders")
             for parent_tile, tiles in link_tiles_by_position.items():
                 parent_tile.create_optimization_folders(tiles, dry_mode=False, pbar=pbar)
-
-    def __get_model_lib_output_folder(self):
-        if not os.path.isfile(os.path.join(self.package_definitions_folder, self.package_definitions_xml)):
-            return str()
-        xml = MsfsPackageDefinitionsXml(self.package_definitions_folder, self.package_definitions_xml)
-        return os.path.join(self.built_project_package_folder, xml.find_model_lib_asset_group(self.project_name.lower() + "-" + self.MODEL_LIB_FOLDER))
 
     def __retrieve_lods_to_optimize(self, nb_parallel_blender_tasks):
         data = []

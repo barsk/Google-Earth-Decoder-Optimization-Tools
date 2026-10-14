@@ -427,6 +427,7 @@ VIEW_INI_SECTION = "VIEW"
 VIEW_DEFAULTS = {"view_lod": "finest", "view_tiles": "", "view_after_steps": "False"}
 MSFS_SDK_INI_SECTION = "MSFS_SDK"
 BUILD_INI_SECTION = "AUTOMATIC_BUILD"
+# section of the removed texture compression of the built packages (Compressonator, MSFS 2020 only): skipped when an ini file is read
 COMPRESSONATOR_INI_SECTION = "COMPRESSONATOR"
 BACKUP_INI_SECTION = "BACKUP"
 PYTHON_INI_SECTION = "PYTHON"

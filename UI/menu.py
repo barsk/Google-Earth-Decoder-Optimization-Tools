@@ -30,8 +30,8 @@ bpy.types.Scene.project_settings = None
 from .operator.tools import *
 from .operator import PanelPropertyGroup, OT_ProjectPathOperator, OT_ProjectsPathOperator, \
     OT_InitMsfsSceneryProjectOperator, OT_OptimizeMsfsSceneryOperator, OT_UpdateTilesPositionOperator, \
-    OT_UpdateMinSizeValuesOperator, OT_CompressBuiltPackageOperator, OT_SaveSettingsOperator, OT_ReloadSettingsOperator, OT_InitMsfsSceneryPanel, \
-    OT_OptimizeSceneryPanel, OT_UpdateTilesPositionPanel, OT_UpdateMinSizeValuesPanel, OT_CompressBuiltPackagePanel, OT_ProjectPathToMergeOperator, \
+    OT_UpdateMinSizeValuesOperator, OT_SaveSettingsOperator, OT_ReloadSettingsOperator, OT_InitMsfsSceneryPanel, \
+    OT_OptimizeSceneryPanel, OT_UpdateTilesPositionPanel, OT_UpdateMinSizeValuesPanel, OT_ProjectPathToMergeOperator, \
     OT_MergeSceneriesPanel, OT_MergeSceneriesOperator, OT_CleanPackageFilesOperator, OT_CleanPackageFilesPanel, OT_FixTilesLightningIssuesPanel, \
     OT_FixTilesLightningIssuesOperator, OT_addLodOperator, OT_removeLowerLodOperator, OT_openSettingsFileOperator, OT_CreateTerraformAndExclusionPolygonsPanel, \
     OT_CreateTerraformAndExclusionPolygonsOperator, OT_GenerateHeightDataPanel, OT_GenerateHeightDataOperator, OT_RemoveWaterFrom3dDataPanel, OT_RemoveWaterFrom3dDataOperator, \
@@ -80,8 +80,6 @@ class TOPBAR_MT_google_earth_optimization_menu(Menu):
         layout.operator(OT_CleanPackageFilesPanel.bl_idname)
         layout.separator()
         layout.operator(OT_AddTileCollidersPanel.bl_idname)
-        layout.separator()
-        layout.operator(OT_CompressBuiltPackagePanel.bl_idname)
         # layout.separator()
         # layout.menu(TOPBAR_MT_edit_tiles_menu.bl_idname)
         layout.separator()
@@ -97,8 +95,6 @@ class TOPBAR_MT_finalization_menu(Menu):
     def draw(self, context):
         layout = self.layout
         layout.operator(OT_AddTileCollidersPanel.bl_idname)
-        layout.separator()
-        layout.operator(OT_CompressBuiltPackagePanel.bl_idname)
 
 
 class TOPBAR_MT_edit_tiles_menu(Menu):
@@ -193,7 +189,6 @@ classes = (
     OT_UpgradeLandmarksOperator,
     OT_AddTileCollidersOperator,
     OT_RemoveTileCollidersOperator,
-    OT_CompressBuiltPackageOperator,
     OT_openSettingsFileOperator,
     OT_addLodOperator,
     OT_removeLowerLodOperator,
@@ -226,7 +221,6 @@ classes = (
     OT_UpgradeLandmarksPanel,
     OT_AddTileCollidersPanel,
     OT_RemoveTileCollidersPanel,
-    OT_CompressBuiltPackagePanel,
     OT_AdjustSceneryAltitudePanel,
     OT_AddLightsToGeocodePanel,
     OT_ResizeSceneryTexturesPanel

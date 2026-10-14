@@ -352,15 +352,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
 
         return str()
 
-    def get_compressonator_exe_path(self):
-        from UI.prefs import get_prefs
-        prefs = get_prefs()
-
-        if prefs is not None:
-            return prefs.compressonator_exe_path
-
-        return str()
-
     def get_overpass_api_uri(self):
         from UI.prefs import get_prefs
         prefs = get_prefs()
@@ -987,11 +978,6 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
         description="Enable the package compilation when the script has finished",
         default=bpy.types.Scene.project_settings.build_package_enabled if bpy.types.Scene.project_settings is not None else False,
         update=build_package_enabled_updated
-    )
-    compressonator_exe_path_readonly: StringProperty(
-        name="Path to the compressonator bin exe that compresses the package texture files",
-        description="Select the path to the compressonator bin exe that compresses the package texture file",
-        get=get_compressonator_exe_path
     )
     python_reload_modules: BoolProperty(
         name="Reload python modules (for dev purpose)",

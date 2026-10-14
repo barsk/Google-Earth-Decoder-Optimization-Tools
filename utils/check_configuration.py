@@ -31,7 +31,7 @@ RESULT_MSG_LENGTH = 40
 ######################################################
 # check configuration methods
 ######################################################
-def check_configuration(settings, msfs_project, check_optimization=False, check_built_package=False, check_compressonator=False, check_description_file=True, check_blendergis_addon=False):
+def check_configuration(settings, msfs_project, check_optimization=False, check_description_file=True, check_blendergis_addon=False):
     error_msg = "Configuration error found ! "
     warning_msg = "Configuration warning ! "
     from UI.prefs import get_prefs
@@ -192,23 +192,3 @@ def check_configuration(settings, msfs_project, check_optimization=False, check_
             raise ScriptError(error_msg + "Pygeodesy python lib is not correctly installed. Please check what can prevent this library to be installed correctly")
     pr_ok_green(str("Pygeodesy lib installation").ljust(RESULT_MSG_LENGTH))
 
-    if check_built_package:
-        # check if the folder containing project package exists
-        if not os.path.isdir(msfs_project.built_project_package_folder):
-            pr_ko_red(str("built_project_package_folder value").ljust(RESULT_MSG_LENGTH))
-            raise ScriptError(error_msg + "The folder containing built package of the project (" + msfs_project.built_project_package_folder + ") was not found. Please check the built_project_package_folder value")
-        pr_ok_green(str("built_project_package_folder value").ljust(RESULT_MSG_LENGTH))
-
-    if check_compressonator:
-        compressonator_exe_path_check = False
-        compressonator_exe_path = "compressonator exe path"
-        if prefs is not None:
-            compressonator_exe_path_check = os.path.isfile(prefs.compressonator_exe_path)
-            compressonator_exe_path = prefs.compressonator_exe_path
-
-        # check if the compressonatorcli.exe file is reachable
-        if not compressonator_exe_path_check:
-            pr_ko_red(str("compressonator_exe_path value").ljust(RESULT_MSG_LENGTH))
-            raise ScriptError(error_msg + compressonator_exe_path + "file was not found. Please check the compressonator_exe_path value or install compressonator")
-        else:
-            pr_ok_green(str("compressonator_exe_path value").ljust(RESULT_MSG_LENGTH))

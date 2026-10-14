@@ -60,7 +60,6 @@ from .isolated_print import *
 from .json import *
 from .chunks import *
 from .progress_bar import *
-from .compressonator import *
 from .script import *
 from .geo_pandas import *
 from .geometry import *
