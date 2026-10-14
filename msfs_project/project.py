@@ -846,8 +846,10 @@ class MsfsProject:
             if value != neutral:
                 command.extend([option, "%g" % value])
         isolated_print(" ".join(command))
-        result = subprocess.run(command, capture_output=True, text=True)
-        for line in (result.stdout + result.stderr).splitlines():
+        # (its output only logged, decoded whatever its encoding: a path with an "å" printed in windows-1252 couldn't be decoded as
+        # UTF-8 and the step failed after a good download, Umea cell 362)
+        result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        for line in ((result.stdout or "") + (result.stderr or "")).splitlines():
             isolated_print(line)
         download_folder = os.path.join(folder, self.MODEL_LIB_FOLDER)
         objects_file_path = os.path.join(folder, self.SCENE_FOLDER, self.SCENE_OBJECTS_FILE)
