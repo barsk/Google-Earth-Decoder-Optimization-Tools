@@ -41,7 +41,7 @@ import numpy as np
 from mathutils import Vector
 from PIL import Image
 
-from .textures import load_triangles, load_occluders, rasterize, smooth_normals, srgb_from_8bit, srgb_to_linear, linear_to_srgb, lum, \
+from .textures import load_triangles, load_occluders, rasterize, coverage, shared_textures, smooth_normals, srgb_from_8bit, srgb_to_linear, linear_to_srgb, lum, \
     smoothstep, upsample_smooth, box_blur, pad_gain, reference_cells, cell_means, textured_faces, straightened_normals, fit_in_range
 from .facing import fit_ratio, vegetation, correct_facing, WALL_MAX_UP, FIT_SAMPLES
 from .sun import RAY_OFFSET, RAY_LENGTH
@@ -137,10 +137,11 @@ def shadow_likelihood(bvh, point_map, normal_map, sun):
     return likelihood
 
 
-def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, scale):
+def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, scale, others=()):
     # the maps of one texture from its own triangles: the texels covered by the mesh, normals, smoothed normals, the shadow likelihood.
     # A LOD00 texture has ~22 million texels (each float map of it 0.5 GB per 64 bits channel): the colors are kept as 8 bits and
-    # converted where used, the maps freed as soon as they are no longer needed
+    # converted where used, the maps freed as soon as they are no longer needed. others: [(triangles, uvs)] of the other models on
+    # the texture (see shared_textures)
     srgb8 = np.asarray(Image.open(originals.path(image_name)).convert("RGB"))
     height, width = srgb8.shape[:2]
     # without the node skirts (see textured_faces)
@@ -150,6 +151,21 @@ def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, sc
     point_map, (normal_map, smooth_map) = rasterize(triangles, uvs, [normals, smoothed], width, height)
     covered = ~np.isnan(point_map[..., 0])
     del point_map
+    # the texels of the other models on the texture, with their installed colors (linear): kept as they are, each model's own
+    # pass corrects its texels (see correct_lod)
+    kept = None
+    if others:
+        theirs = np.zeros((height, width), dtype=bool)
+        for other_triangles, other_uvs in others:
+            theirs |= coverage(other_uvs[textured_faces(other_triangles, other_uvs, width, height)], width, height)
+        kys, kxs = np.nonzero(theirs & ~covered)
+        del theirs
+        installed = os.path.join(originals.texture_folder, image_name)
+        current8 = srgb8 if os.path.normcase(installed) == os.path.normcase(originals.path(image_name)) else np.asarray(Image.open(installed).convert("RGB"))
+        if current8.shape != srgb8.shape:
+            current8 = srgb8
+        kept = (kys, kxs, srgb_to_linear(srgb_from_8bit(current8[kys, kxs]).astype(np.float64)))
+        del current8
     linear = np.empty((height, width, 3))
     for c in range(3):
         linear[..., c] = srgb_to_linear(srgb_from_8bit(srgb8[..., c]).astype(np.float64))
@@ -161,7 +177,7 @@ def prepare_texture(originals, image_name, triangles, uvs, normals, bvh, sun, sc
     likelihood = np.nan_to_num(upsample_smooth(small_likelihood, height, width, valid=~np.isnan(small_likelihood)), nan=0.0)
     return {"name": image_name, "srgb8": srgb8, "linear": linear, "normal_map": normal_map, "smooth_map": smooth_map, "small_points": small_points,
             "small_normals": small_normals, "small_likelihood": small_likelihood, "likelihood": likelihood, "covered": covered,
-            "blocked": likelihood >= 0.5, "size": (sw, sh)}
+            "blocked": likelihood >= 0.5, "size": (sw, sh), "kept": kept}
 
 
 def sunlit_texels(t, sun, knee):
@@ -245,7 +261,9 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
     if not len(triangles):
         return [], fit
     bvh = load_occluders(model_lib_folder, tile, placements, triangles, context=context)
-    textures = [prepare_texture(originals, name, triangles[owners == k], uvs[owners == k], normals[owners == k], bvh, sun, LOW_SCALES[min(rank, len(LOW_SCALES) - 1)])
+    shared = shared_textures(model_lib_folder, tile, lod, context)
+    textures = [prepare_texture(originals, name, triangles[owners == k], uvs[owners == k], normals[owners == k], bvh, sun, LOW_SCALES[min(rank, len(LOW_SCALES) - 1)],
+                                shared.get(name, ()))
                 for k, name in enumerate(images) if (owners == k).any()]
     if not textures:
         return [], fit
@@ -360,10 +378,17 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
         gain_map[covered] = part1[covered] / np.maximum(linear[covered], 1e-6)
         gain_map[ys, xs] = (part1[ys, xs] * tinted[None, :] ** exponent[:, None]) / np.maximum(linear[ys, xs], 1e-6)
         del part1
+        # the texels of the other models on the texture (a tile and its landmark objects share the tile's LOD01-03 textures) as
+        # installed: each pass writes the whole texture, the landmark's (run after its tile) undid the tile's correction and padded
+        # its own gain into the tile's texels next to its pieces (Umea tile 30606353425362737: pale triangles and strips)
+        if t["kept"] is not None:
+            kys, kxs, current = t.pop("kept")
+            gain_map[kys, kxs] = current / np.maximum(linear[kys, kxs], 1e-6)
+            del kys, kxs, current
         # a black channel (e.g. after the haze removal of step 2a) has no gain of its own: 0 / 0 gave 0, which the padding spread
         # into the texels around (the colour ones lost that channel: blue speckles). It takes the brightness gain of its texel,
         # and a black texel none (padded from the texels around, like the uncovered ones)
-        bys, bxs = np.nonzero(covered & (linear < BLACK_LINEAR).any(axis=2))
+        bys, bxs = np.nonzero(~np.isnan(gain_map[..., 0]) & (linear < BLACK_LINEAR).any(axis=2))
         if len(bys):
             original = linear[bys, bxs]
             corrected = gain_map[bys, bxs] * np.maximum(original, 1e-6)
@@ -391,6 +416,24 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
     return results, fit
 
 
+def tile_fit(fits_folder, tile, parameters):
+    # the fits a tile measured (see lighten_tile) as the starting fit of correct_lod: part 1, and part 2 if measured (else the model
+    # measures its own); None without a measured part 1. Not stored again as measured ("fitted" false)
+    try:
+        with open(os.path.join(fits_folder, tile + ".json"), encoding="utf-8") as f:
+            stored = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if stored.get("ratios") is None or not usable(stored["ratios"], MAX_SUN_SKY_RATIO):
+        return None
+    fit = {"ratios": np.array(stored["ratios"]), "knee": stored["knee"], "fitted": False, "of_tile": tile}
+    if stored.get("shadow_ratio_raw") is not None and usable(stored["shadow_ratio_raw"], MAX_LIT_SHADOW_RATIO, 1.0):
+        ratio = np.array(stored["shadow_ratio_raw"])
+        fit.update(shadow_ratio_raw=ratio, shadow_ratio=ratio * min(1.0, parameters["shadow_gain_cap"] / max(ratio.max(), 1e-6)), shadow_fitted=False,
+                   shadow_pairs=0)
+    return fit
+
+
 def lighten_tile(model_lib_folder, tile, placements, sun, parameters, originals_folder, work_folder, step4_texture_folder=None,
                  context_tile=None):
     # parts 1 and 2 on every texture of every LOD of a tile, installed (the originals kept). Returns the log lines. context_tile:
@@ -401,6 +444,10 @@ def lighten_tile(model_lib_folder, tile, placements, sun, parameters, originals_
     os.makedirs(fits_folder, exist_ok=True)
     os.makedirs(work_folder, exist_ok=True)
     log, fit, corrected = [], None, []
+    # a landmark object: the fits of its tile (cut out of it: the same photo and sun, and the two meet). Its own walls gave knees up
+    # to 0.75 (Umea's Avion, its tile 0.20): its flat roofs (facing 0.52) taken for shaded sides, brightened in patches, face by face
+    if context_tile:
+        fit = tile_fit(fits_folder, context_tile, parameters)
     rank = 0  # the LODs present, from the most detailed (it may be LOD01, see finest_lod)
     for lod in LODS:
         if not os.path.isfile(os.path.join(model_lib_folder, "%s_%s.gltf" % (tile, lod))):
@@ -416,8 +463,9 @@ def lighten_tile(model_lib_folder, tile, placements, sun, parameters, originals_
         originals.install(name, path)
         os.remove(path)
     if fit is not None:
-        log.insert(0, "part 1: fully lit from facing %.2f, sun/sky ratio R %.2f G %.2f B %.2f; part 2: lit/shadow ratio R %.2f G %.2f B %.2f (measured %.2f %.2f %.2f) from %d texels" % (
-            fit["knee"], *fit["ratios"], *fit["shadow_ratio"], *fit["shadow_ratio_raw"], fit["shadow_pairs"]))
+        log.insert(0, "part 1: fully lit from facing %.2f, sun/sky ratio R %.2f G %.2f B %.2f%s; part 2: lit/shadow ratio R %.2f G %.2f B %.2f (measured %.2f %.2f %.2f) %s" % (
+            fit["knee"], *fit["ratios"], " (its tile's)" if fit.get("of_tile") else "", *fit["shadow_ratio"], *fit["shadow_ratio_raw"],
+            "(its tile's)" if fit.get("of_tile") and not fit["shadow_pairs"] else "from %d texels" % fit["shadow_pairs"]))
         # the fits of the tile, for the tiles with too few walls or shadows (only the measured ones)
         with open(os.path.join(fits_folder, tile + ".json"), "w", encoding="utf-8") as f:
             json.dump({"ratios": [float(v) for v in fit["ratios"]] if fit.get("fitted") else None, "knee": fit["knee"] if fit.get("fitted") else None,

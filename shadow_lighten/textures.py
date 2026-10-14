@@ -30,6 +30,7 @@ import numpy as np
 from mathutils.bvhtree import BVHTree
 from PIL import Image
 
+from constants import LANDMARK_OBJECT_PREFIX
 from utils.octant import get_coords_from_file_name
 from utils.placement import wgs84_to_tile
 
@@ -102,6 +103,12 @@ def load_triangles(gltf_path):
     images = [image["uri"] for image in gltf.get("images", [])]
     positions, uvs, normals, owners = [], [], [], []
     for node, world in mesh_nodes(gltf):
+        # (not the MSFS bounding box of a tile, "final_bbox_<tile>", that the tiles cut by the landmark tool or step 4 keep: a box
+        # around the whole tile, it cast its shadow on nearly every texel, Umea tile 30606353425362737 "predicted shadow 90 %",
+        # and part 1 then brightened only the few texels left out of it: speckles; loaded as a neighbour's occluder, on the tiles
+        # around too)
+        if "bbox" in node.get("name", "").lower():
+            continue
         # the node transforms (GEDOT's placed tiles have translations only; the models exported by Blender, e.g. the landmark
         # objects and the tiles they were cut from, can have rotations and scales); normals by the inverse transpose
         linear = world[:3, :3]
@@ -283,6 +290,65 @@ def straightened_normals(triangles, normals):
     return np.where(tilted[..., None], face[:, None, :], normals)
 
 
+def triangle_texels(corners, width, height):
+    # the texels (rows, columns) of a (width, height) texture whose centres are inside a triangle (its corners in texels), with
+    # their barycentric weights; None if none
+    a, b, c = corners
+    x0, x1 = int(max(math.floor(min(a[0], b[0], c[0])), 0)), int(min(math.ceil(max(a[0], b[0], c[0])), width - 1))
+    y0, y1 = int(max(math.floor(min(a[1], b[1], c[1])), 0)), int(min(math.ceil(max(a[1], b[1], c[1])), height - 1))
+    if x1 < x0 or y1 < y0:
+        return None
+    det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+    if abs(det) < 1e-12:
+        return None
+    xs, ys = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
+    l1 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / det
+    l2 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / det
+    l3 = 1 - l1 - l2
+    inside = (l1 >= -1e-6) & (l2 >= -1e-6) & (l3 >= -1e-6)
+    if not inside.any():
+        return None
+    return (ys[inside] - 0.5).astype(int), (xs[inside] - 0.5).astype(int), np.column_stack([l1[inside], l2[inside], l3[inside]])
+
+
+def coverage(uvs, width, height):
+    # the texels of a (width, height) texture covered by the triangles (their uvs), as rasterize finds them
+    covered = np.zeros((height, width), dtype=bool)
+    pix = uvs * np.array([width, height])
+    for t in range(len(uvs)):
+        texels = triangle_texels(pix[t], width, height)
+        if texels is not None:
+            covered[texels[0], texels[1]] = True
+    return covered
+
+
+def gltf_images(gltf_path):
+    # the image files of a model
+    with open(gltf_path, encoding="utf-8") as f:
+        return [image["uri"] for image in json.load(f).get("images", [])]
+
+
+def shared_textures(model_lib_folder, model, lod, context=None):
+    """The other models on the textures of a model's LOD: {image name: [(triangles, uvs) of each one's faces on it]}. A tile's LOD01 to LOD03
+    textures are shared with its landmark objects (the faces the landmark tool cut out of the tile keep their texture), and the
+    landmark objects of a tile with one another. context: the tile of a model that isn't a tile (a landmark object)."""
+    tile = context or model
+    own_path = os.path.join(model_lib_folder, "%s_%s.gltf" % (model, lod))
+    own_images = set(gltf_images(own_path))
+    candidates = ["%s_%s.gltf" % (tile, lod)] + sorted(name for name in os.listdir(model_lib_folder)
+                                                      if name.startswith(LANDMARK_OBJECT_PREFIX) and name.endswith("_%s_%s.gltf" % (tile, lod)))
+    shared = {}
+    for name in candidates:
+        path = os.path.join(model_lib_folder, name)
+        if os.path.normcase(path) == os.path.normcase(own_path) or not os.path.isfile(path) or not own_images & set(gltf_images(path)):
+            continue
+        triangles, uvs, normals, images, owners = load_triangles(path)
+        for k, image in enumerate(images):
+            if image in own_images and (owners == k).any():
+                shared.setdefault(image, []).append((triangles[owners == k], uvs[owners == k]))
+    return shared
+
+
 def rasterize(triangles, uvs, normal_sets, width, height):
     # the 3D point of each texel of a (width, height) texture covered by the triangles (NaN elsewhere), and one interpolated
     # normal map per set of vertex normals
@@ -290,23 +356,10 @@ def rasterize(triangles, uvs, normal_sets, width, height):
     normal_maps = [np.zeros((height, width, 3), dtype=np.float32) for _ in normal_sets]
     pix = uvs * np.array([width, height])
     for t in range(len(triangles)):
-        a, b, c = pix[t]
-        x0, x1 = int(max(math.floor(min(a[0], b[0], c[0])), 0)), int(min(math.ceil(max(a[0], b[0], c[0])), width - 1))
-        y0, y1 = int(max(math.floor(min(a[1], b[1], c[1])), 0)), int(min(math.ceil(max(a[1], b[1], c[1])), height - 1))
-        if x1 < x0 or y1 < y0:
+        texels = triangle_texels(pix[t], width, height)
+        if texels is None:
             continue
-        det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
-        if abs(det) < 1e-12:
-            continue
-        xs, ys = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
-        l1 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / det
-        l2 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / det
-        l3 = 1 - l1 - l2
-        inside = (l1 >= -1e-6) & (l2 >= -1e-6) & (l3 >= -1e-6)
-        if not inside.any():
-            continue
-        w = np.column_stack([l1[inside], l2[inside], l3[inside]])
-        yy, xx = (ys[inside] - 0.5).astype(int), (xs[inside] - 0.5).astype(int)
+        yy, xx, w = texels
         point_map[yy, xx] = w @ triangles[t]
         for normal_map, normals in zip(normal_maps, normal_sets):
             n = w @ normals[t]
