@@ -7,7 +7,8 @@ data and settings, so set them before running step 3.
 ## OpenStreetMap data
 
 All the data the enabled options need comes in a single query to the Overpass server (*Uri of the Overpass API*, set in
-the addon preferences), clipped a little beyond the border of the scenery. It is kept in the `osm` and `shp` folders
+the addon preferences; a [local server](../installation/openstreetmap-server.md) is recommended), clipped a little
+beyond the border of the scenery. It is kept in the `osm` and `shp` folders
 of the project and reused by steps 4 and 5. *Force openStreetMap data download* downloads it again (e.g. after the
 OpenStreetMap data has changed).
 

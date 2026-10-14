@@ -129,6 +129,7 @@ nav:
   - Getting started:
     - Prerequisites: installation/prerequisites.md
     - Installation: installation/installation.md
+    - Local OpenStreetMap server: installation/openstreetmap-server.md
     - Workflow: workflow.md
   - Steps:
     - 1. Initialize: steps/1-initialize.md

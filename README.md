@@ -24,14 +24,14 @@ steps, each with a settings window:
 | Step | Menu entry | Result |
 |---|---|---|
 | 1 | Initialize a new MSFS scenery project | The MSFS 2024 project structure (project, package definition, asset groups). |
-| 2 | Optimize an existing MSFS scenery project | The tiles placed exactly in their octree cells, their textures packed per tile LOD, the LOD sizes set. |
-| | Upgrade the landmarks of the scenery | Chosen buildings kept as separate objects in more detail (e.g. LOD 20) than the tiles; `landmarks.csv` also lists the points of interest. |
+| 2 | Optimize an existing MSFS scenery project | The tiles placed exactly, their textures packed per tile LOD (no external addon needed), the LOD sizes set. |
+| | Upgrade the landmarks of the scenery | Chosen buildings upgraded to higher detail (e.g. LOD 20) than the tiles; `landmarks.csv` also lists POI (points of interest) that will create markers in sim. |
 | 2a | Colour correction | Haze, white balance, brightness, contrast and saturation of the textures, with a live preview. |
-| 2b | Shadow lightening | The shadows baked into the textures lightened, since MSFS lights the tiles again. |
+| 2b | Shadow lightening | The shadows baked into the downloaded textures is *lightened* to prepare for MSFS own lighting on top that would otherwise create too deep shadows.  |
 | 3 | Create the terraform and exclusion polygons | Building and vegetation exclusions, terraform polygons, optional vegetation polygons, from OpenStreetMap. |
-| 4 | Trim the Google Earth tiles | Overlaps between nodes removed, excluded ground cut out, the water pushed under the MSFS water. |
+| 4 | Trim the Google Earth tiles | Overlaps between nodes removed, excluded ground (forests) cut out, the water pushed under the MSFS water. |
 | 5 | Generate height data | The MSFS terrain under the tiles, flat water levels, the floor under cut-out forests. |
-| 6 | Finalize the tiles for MSFS | Materials and normals for MSFS, points of interest, unused files removed. |
+| 6 | Finalize the tiles for MSFS | Materials and normals for MSFS, POI markers, unused files removed. |
 | 7 | Add a collider for each tile | Collision and road traffic in one light collider per tile. |
 
 Then the package is built with the MSFS 2024 SDK. See [Workflow](docs/workflow.md) for the complete walkthrough.
@@ -48,7 +48,7 @@ Then the package is built with the MSFS 2024 SDK. See [Workflow](docs/workflow.m
   LOD than the tiles. Rows marked as points of interest become MSFS POIs above their roof. The more detailed level can be
   fetched for the landmarks only (optional, see [The optional tile downloader](docs/tile-downloader.md)).
 * **Step 2a, colour correction,** with automatic haze and white balance measurement, a grey picker and a live preview.
-* **Step 2b, shadow lightening:** the sun of the capture is estimated from the shadows, the shaded sides of walls,
+* **Step 2b, shadow lightening:** the sun direction of the capture is estimated from the shadows, the shaded sides of walls,
   roofs and trees are brightened, and cast shadows are lifted, with the originals kept.
 * **OpenStreetMap:** a single Overpass query per step, any Overpass server (e.g. a local one), the settings set once
   in step 3 for steps 3 to 5, exclusions of forests, woods, other ground, nature reserves and parks on their own.
@@ -64,6 +64,8 @@ Then the package is built with the MSFS 2024 SDK. See [Workflow](docs/workflow.m
   limited by the free memory. Steps 4 and 5 are about three times faster.
 * Many fixes: reruns of steps on finished projects, invalid OpenStreetMap geometries, collider handling, panel settings
   saved before each step.
+* **Removed:** the Compressonator step (step 8, texture compression of MSFS 2020 packages). The MSFS 2024 package
+  builder compresses the textures itself.
 
 ## Requirements
 
@@ -71,8 +73,10 @@ Then the package is built with the MSFS 2024 SDK. See [Workflow](docs/workflow.m
 * **Microsoft Flight Simulator 2024** and its **SDK** (the package builder, `fspackagetool.exe`)
 * **Google Earth photogrammetry tiles as glTF**, in the layout of an Earth2MSFS download. Using Google's 3D tiles is
   subject to Google's terms; make sure you have the right to use the tiles you process.
-* **Internet access** for OpenStreetMap: an Overpass server (public, or a local one for large sceneries), the
-  OpenStreetMap API and Nominatim. The addon installs its Python libraries on first use.
+* **Internet access** for OpenStreetMap: an Overpass server, the OpenStreetMap API and Nominatim. The addon installs
+  its Python libraries on first use.
+* **Recommended:** a [local Overpass server in Docker](docs/installation/openstreetmap-server.md). The public Overpass
+  servers throttle or block the many queries of a large scenery.
 
 See [Prerequisites](docs/installation/prerequisites.md) and [Installation](docs/installation/installation.md).
 

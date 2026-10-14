@@ -32,8 +32,5 @@ folder into the Community folder, or link it there with a directory junction.
   files written by steps 2 and 4 make the builder convert them.
 * **Test points of interest from the Community folder,** not with the package loaded in devmode.
 
-## Step 8: Compress the built package (MSFS 2020 only)
-
-*8. Optimize the built package by compressing the texture files* compresses the DDS textures of a package built for
-MSFS 2020 with the Compressonator CLI (its path in the addon preferences). MSFS 2024 already builds compressed KTX2
-textures, so it isn't needed there.
+The builder compresses the textures itself (KTX2). The original GEDOT's step 8, which compressed the DDS textures of
+MSFS 2020 packages with Compressonator, has been removed.

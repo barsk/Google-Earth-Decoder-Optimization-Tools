@@ -9,14 +9,15 @@ busy until the step is over.
 
 1. Run [step 1, Initialize](steps/1-initialize.md): choose the parent folder, the project name and the author. The
    project folder is `<parent folder>\<Name>`.
-2. Copy the `modelLib` and `scene` folders of the tiles' download into the project's `PackageSources` folder. GEDOT
-   renames `modelLib` to `<name>-modelLib` the next time it opens the project.
+2. Copy the `modelLib` and `scene` folders of the tiles' download (tool not part of this repo) into the project's `PackageSources` folder. GEDOT
+   renames `modelLib` to `<name>-modelLib` the next time it opens the project. GEDOT for MS2024 expects **LOD 17-19** to be downloaded.
+
 
 Keep the paths free of characters outside ASCII (å, ä, ö, é...): the MSFS 2024 package builder crashes on them.
 
 ## 2. Prepare the tiles
 
-3. [Step 2, Optimize](steps/2-optimize.md) places the tiles exactly and packs their textures.
+3. [Step 2, Optimize](steps/2-optimize.md) places the tiles exactly and packs their textures. Previously an extra addon was needed fro texture packing, this is now built-in.
 4. Optional: [Landmarks](steps/landmarks.md). The first run writes `landmarks.csv` with suggested buildings: review it
    (which buildings keep more detail, which become points of interest), then run it again. Define all the landmarks
    before that second run: the tile LODs it removes can't be used afterwards.
@@ -76,8 +77,8 @@ Keep the paths free of characters outside ASCII (å, ä, ö, é...): the MSFS 20
 
 * **Parallel tasks:** set *Number of parallel Blender tasks* (PROJECT section) up to the number of logical processors.
   Step 2b needs up to about 4.5 GB of memory per task on the most detailed LODs and limits its tasks to the free memory.
-* **Overpass:** a scenery of a whole city makes many OpenStreetMap queries. A local Overpass server avoids being
-  blocked by the public one.
+* **Overpass:** a scenery of a whole city makes many OpenStreetMap queries. A
+  [local Overpass server](installation/openstreetmap-server.md) avoids being blocked by the public one.
 * **Splitting:** a big area can be made of several projects (e.g. one per octree cell, all in the same parent folder)
   built into one package, or merged with *Merge an existing MSFS scenery project into another one* (see
   [Other tools](tools.md)). Step 5 blends the terrain into the tiles at the outer border of each project. To blend only

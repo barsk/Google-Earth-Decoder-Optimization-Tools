@@ -21,7 +21,9 @@ scene\objects.xml                                    the scenery objects (one pe
 * A tile is an octree node of Google's globe, named by its octree path (e.g. `30606160516243707`, level 17). Its LODs
   hold the nodes of the more detailed levels, as glTF nodes named after their octree paths, so that GEDOT can place
   them exactly.
-* Typical sceneries use tiles of level 17 with LODs down to level 19 or 20.
+* Download the tiles at level 17 with their LODs down to level 19. Level 20 is meant for the landmark buildings only:
+  either download 17–20 and let the [landmarks tool](../steps/landmarks.md) remove level 20 from the other tiles, or
+  download 17–19 and fetch level 20 for the landmarks with the [optional tile downloader](../tile-downloader.md).
 * Older tiles without these node names (e.g. from the Google Earth Decoder tool) are still placed by their bounding
   box, the old way, with gaps between the tiles.
 
@@ -30,9 +32,8 @@ Using Google's 3D tiles is subject to Google's terms. Make sure you have the rig
 ## Network services
 
 * **Overpass API** (OpenStreetMap data), for steps 3 to 5 and the landmarks. The default is the public server
-  `https://overpass-api.de/api`. Large sceneries can hit its limits: a local Overpass server (e.g. the
-  `wiktorn/overpass-api` Docker image with an extract of your country) avoids them. Set its address in the addon
-  preferences.
+  `https://overpass-api.de/api`, which throttles or blocks large sceneries. **Recommended:** a local Overpass server in
+  Docker with an extract of your country, see [Local OpenStreetMap server](openstreetmap-server.md).
 * **OpenStreetMap API** (the outlines of the landmark buildings) and **Nominatim** (the geocode tools and the airport
   city). Light use, the public servers are fine.
 * **Wikidata** (the notability of the landmark candidates, by their Wikipedia articles).
@@ -42,5 +43,5 @@ Using Google's 3D tiles is subject to Google's terms. Make sure you have the rig
 
 * **A tile downloader**, only to fetch the more detailed level of the landmarks: see
   [The optional tile downloader](../tile-downloader.md).
-* **Compressonator CLI**, only for MSFS 2020 packages ([step 8](../steps/build.md#step-8-compress-the-built-package-msfs-2020-only)).
-  MSFS 2024 compresses the textures itself.
+
+No texture compression tool is needed: the MSFS 2024 package builder compresses the textures itself (KTX2).

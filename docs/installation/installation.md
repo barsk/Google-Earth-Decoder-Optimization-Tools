@@ -46,9 +46,8 @@ The console window shows the progress and the result of each check.
 | **Path to the MSFS bin exe that builds the MSFS packages** | The SDK's `fspackagetool.exe` (e.g. `C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe`). Only needed if the steps should build the package themselves (*Build package enabled*). |
 | **Target simulator** | *Automatic* (MSFS 2024, unless the builder's path doesn't contain "2024"), *MSFS 2020* or *MSFS 2024*. Decides the form of the project files, the texture configuration files and the package order hint. |
 | **Msfs Steam version** | Tick it for the Steam version of the sim: the builder is started with `-forcesteam`. |
-| **Uri of the Overpass API** | The OpenStreetMap server for steps 3 to 5 and the landmarks, e.g. `https://overpass-api.de/api` or a local server such as `http://localhost:12345/api`. |
+| **Uri of the Overpass API** | The OpenStreetMap server for steps 3 to 5 and the landmarks, e.g. `https://overpass-api.de/api`, or a [local server](openstreetmap-server.md) such as `http://localhost:12345/api` (recommended). |
 | **Path to the tile downloader** | Optional, see [The optional tile downloader](../tile-downloader.md). |
-| **Path to the compressonator bin exe** | Only for step 8 (MSFS 2020 packages). |
 | **GDAL and FIONA libraries** | The wheel repository and versions used for the first installation (defaults for Blender 3.5's Python 3.10). |
 | **BLENDER GIS addon**, **Landmass shapefile** | Where these are downloaded from. |
 
