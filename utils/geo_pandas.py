@@ -130,33 +130,40 @@ class PRESERVE_HOLES_METHOD:
     derivation_split = 2
 
 
+def overlay_gdf(gdf1, gdf2, how):
+    # the overlay of two geodataframes, without their indexes (the result has an index of its own): the OSM data downloaded has a
+    # (element, id) index, loaded from the shapefiles a plain one, and geopandas joined the indexes of the two even without
+    # intersection ("cannot join with no overlapping index names": Norrkoping cell 072, the water and the sea on its first step 3)
+    return gdf1.reset_index(drop=True).overlay(gdf2.reset_index(drop=True), how=how, keep_geom_type=True)
+
+
 def union_gdf(gdf1, gdf2):
     if gdf1.empty and not gdf2.empty:
         return gdf2.copy()
 
     if not gdf1.empty and not gdf2.empty:
-        return gdf1.overlay(gdf2, how=OVERLAY_OPERATOR.union, keep_geom_type=True)
+        return overlay_gdf(gdf1, gdf2, OVERLAY_OPERATOR.union)
 
     return gdf1
 
 
 def difference_gdf(gdf1, gdf2):
     if not gdf1.empty and not gdf2.empty:
-        return gdf1.overlay(gdf2, how=OVERLAY_OPERATOR.difference, keep_geom_type=True)
+        return overlay_gdf(gdf1, gdf2, OVERLAY_OPERATOR.difference)
 
     return gdf1
 
 
 def symmetric_difference_gdf(gdf1, gdf2):
     if not gdf1.empty and not gdf2.empty:
-        return gdf1.overlay(gdf2, how=OVERLAY_OPERATOR.symmetric_difference, keep_geom_type=True)
+        return overlay_gdf(gdf1, gdf2, OVERLAY_OPERATOR.symmetric_difference)
 
     return gdf1
 
 
 def intersect_gdf(gdf1, gdf2):
     if not gdf1.empty and not gdf2.empty:
-        return gdf1.overlay(gdf2, how=OVERLAY_OPERATOR.intersection, keep_geom_type=True)
+        return overlay_gdf(gdf1, gdf2, OVERLAY_OPERATOR.intersection)
 
     return gdf1
 
