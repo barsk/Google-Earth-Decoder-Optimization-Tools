@@ -1,38 +1,39 @@
-# Presentation
+# GEDOT for MSFS 2024
 
-<p class="md-badges">
-<a href="https://hits.seeyoufarm.com" target="_blank"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FThalixte%2FGoogle-Earth-Decoder-Optimization-Tools&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=true" class="md-badge"/></a>
-<img src="https://img.shields.io/github/license/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/v/release/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/stars/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/forks/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/issues/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
+GEDOT is a Blender addon that turns Google Earth photogrammetry tiles into an optimized scenery package for Microsoft
+Flight Simulator 2024.
 
+It is an independent fork of [Google-Earth-Decoder-Optimization-Tools](https://github.com/Thalixte/Google-Earth-Decoder-Optimization-Tools)
+by Thalixte, rewritten to a large degree for MSFS 2024 and Blender 3.5. It is not meant to be merged back upstream.
 
-</p>
+## What a scenery goes through
 
-## What is GEDOT ?
+The raw tiles of a download don't make a good MSFS scenery as they are:
 
-GEDOT (for Google Earth Decoder Optimization Tools) is a [Blender][1] Addon which aims at 
-providing a bunch of tasks to ease the process of integrating photogrammetry data retrieved with the Google Earth Decoder Tool 
-into [Microsoft Flight Simulator&copy; 2020](https://www.flightsimulator.com/) \.  
+* their textures carry the colours, the haze and the shadows of the moment they were photographed;
+* the nodes of the photogrammetry overlap, which flickers in the sim;
+* the Google Earth water surface pokes through the MSFS water;
+* the MSFS terrain doesn't follow the tiles, so it shows through them, or the tiles float;
+* MSFS places its own buildings and trees on top of the photogrammetry.
 
-Because it is a [Blender][1] addon, this tool is written in [python](https://www.python.org/) (v3.10).
+GEDOT handles these in numbered steps, each one a menu entry with its settings window:
 
-## GEDOT main features
+1. **Initialize** the MSFS 2024 project.
+2. **Optimize** the tiles: exact placement, packed textures, LOD sizes.
+   * **Landmarks** (optional): chosen buildings in more detail than the tiles, and the points of interest.
+   * **2a, Colour correction:** haze, white balance and tone of the textures, with a live preview.
+   * **2b, Shadow lightening:** the baked-in shadows lightened, since MSFS lights the tiles again.
+3. **Polygons:** building and vegetation exclusions and terraform polygons from OpenStreetMap.
+4. **Trim:** node overlaps removed, excluded ground cut out, the water pushed under the MSFS water.
+5. **Height data:** the MSFS terrain shaped to the ground of the tiles.
+6. **Finalize:** the tiles prepared for MSFS, the points of interest written, unused files removed.
+7. **Colliders:** collision and road traffic in one light collider per tile.
 
-* initialize a new MSFS 2020 scenery project structure
-* optimize the downloaded tiles in order to keep reasonable framerate while flying over the scenery
-* generate automatically exclusion building polygons, as well as exclusion vegetation polygons, and some extra terraforming polygons, using [OpenStreetMap (OSM)][2] data
-* remove unnecessary vertices (water vertices, vegetation vertices), using [OpenStreetMap (OSM)][2] data
-* generate automatically 10m DEM data for each tile, based on the tile's 3d data, and [OpenStreetMap (OSM)][2] data
-* add a collider for each tile of the scenery, in order to optimize the CPU resources for collision detection and road traffic
-* reduce the texture memory footprint by compressing them in DDS non-transparent format
-* generate automatically landmark location from an [OSM][2] geocode
-* generate automatically lights around a specific location, using [OSM][2]  geocode, or [OSM][2] id
-* remove automatically a specific location from the tiles, using [OSM][2]  geocode, or [OSM][2] id
-* isolate automatically a specific location from the tiles, using [OSM][2]  geocode, or [OSM][2] id
-* ... and some extra specific features  
+Then the package is built with the MSFS 2024 SDK.
 
-[1]:https://www.blender.org/
-[2]:https://www.openstreetmap.org/
+## Where to start
+
+* [Prerequisites](installation/prerequisites.md): what you need besides the addon.
+* [Installation](installation/installation.md): the addon, its Python libraries and its preferences.
+* [Workflow](workflow.md): a scenery from the download to the Community folder.
+* The pages of the steps, the [other tools](tools.md) and the [settings](settings.md).

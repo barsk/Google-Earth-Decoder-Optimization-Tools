@@ -767,7 +767,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     brightness: FloatProperty(
         name="Brightness",
-        description="Brightness of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        description="Brightness of the textures downloaded by the tile downloader (1 = unchanged): use the value of the tiles download",
         soft_min=0.0,
         soft_max=2.0,
         step=1,
@@ -777,7 +777,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     contrast: FloatProperty(
         name="Contrast",
-        description="Contrast of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        description="Contrast of the textures downloaded by the tile downloader (1 = unchanged): use the value of the tiles download",
         soft_min=0.0,
         soft_max=2.0,
         step=1,
@@ -787,7 +787,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     saturation: FloatProperty(
         name="Saturation",
-        description="Saturation of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        description="Saturation of the textures downloaded by the tile downloader (1 = unchanged): use the value of the tiles download",
         soft_min=0.0,
         soft_max=2.0,
         step=1,
@@ -797,7 +797,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     hue: FloatProperty(
         name="Hue",
-        description="Hue of the textures downloaded with TileDownloader (0 = unchanged): use the value of the tiles download",
+        description="Hue of the textures downloaded by the tile downloader (0 = unchanged): use the value of the tiles download",
         step=1,
         precision=2,
         default=float(bpy.types.Scene.project_settings.hue) if bpy.types.Scene.project_settings is not None else 0.0,
@@ -805,7 +805,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     red_level: FloatProperty(
         name="Red level",
-        description="Red level of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        description="Red level of the textures downloaded by the tile downloader (1 = unchanged): use the value of the tiles download",
         soft_min=0.0,
         soft_max=2.0,
         step=1,
@@ -815,7 +815,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     green_level: FloatProperty(
         name="Green level",
-        description="Green level of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        description="Green level of the textures downloaded by the tile downloader (1 = unchanged): use the value of the tiles download",
         soft_min=0.0,
         soft_max=2.0,
         step=1,
@@ -825,7 +825,7 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     blue_level: FloatProperty(
         name="Blue level",
-        description="Blue level of the textures downloaded with TileDownloader (1 = unchanged): use the value of the tiles download",
+        description="Blue level of the textures downloaded by the tile downloader (1 = unchanged): use the value of the tiles download",
         soft_min=0.0,
         soft_max=2.0,
         step=1,

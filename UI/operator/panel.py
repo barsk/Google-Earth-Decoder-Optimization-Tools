@@ -373,7 +373,7 @@ class SettingsOperator(PanelOperator):
         col = self.draw_header(split, display_save=False)
         col.separator()
         if self.operator_name == "wm.upgrade_landmarks":
-            col.label(text="Colors of the landmarks downloaded with TileDownloader: use the values of the tiles download (1 = unchanged, hue 0 = unchanged)", icon=INFO_ICON)
+            col.label(text="Colors of the landmarks downloaded by the tile downloader: use the values of the tiles download (1 = unchanged, hue 0 = unchanged)", icon=INFO_ICON)
             col.separator()
             for name, label in (("brightness", "Brightness"), ("contrast", "Contrast"), ("saturation", "Saturation"), ("hue", "Hue"), ("red_level", "Red level"), ("green_level", "Green level"), ("blue_level", "Blue level")):
                 draw_splitted_prop(context.scene.setting_props, col, SPLIT_LABEL_FACTOR, name, label)

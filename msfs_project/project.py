@@ -786,7 +786,7 @@ class MsfsProject:
 
     def __download_landmarks_level(self, masks, max_level, settings):
         # The tiles of a project downloaded up to their max lod level (e.g. lod 17-19) have no more detailed data for the landmarks:
-        # only the nodes of the next level touching the landmarks are downloaded (Earth2MSFS TileDownloader, one run for all), placed
+        # only the nodes of the next level touching the landmarks are downloaded (the optional tile downloader, one run for all), placed
         # in their tile and added to it as its most detailed lod, in the project and in the backup of the original tiles (the
         # landmarks are isolated from it). The rest of the tool is the same as with a project downloaded up to that level
         from UI.prefs import get_prefs
@@ -809,12 +809,12 @@ class MsfsProject:
                 pr_bg_orange("The tiles were placed by an older version (bounding box): create the project again from its download to add the level %d of the landmarks" % level + EOL + CEND)
                 return False
 
-        # the downloader: GEDOT_TILE_DOWNLOADER (e.g. set by Earth2Scenery, whose downloader has TileDownloader's options), else the
+        # the downloader: GEDOT_TILE_DOWNLOADER (e.g. set by a tool running GEDOT, its downloader with the same options), else the
         # addon preference
         prefs = get_prefs()
         exe = os.environ.get("GEDOT_TILE_DOWNLOADER") or (prefs.tile_downloader_exe_path if prefs is not None else str())
         if not exe or not os.path.isfile(bpy.path.abspath(exe)):
-            pr_bg_orange("Set the path of the Earth2MSFS TileDownloader.exe in the addon preferences to download the level %d of the landmarks" % level + EOL + CEND)
+            pr_bg_orange("Set the path of the tile downloader in the addon preferences (optional, see the documentation) to download the level %d of the landmarks" % level + EOL + CEND)
             return False
         exe = bpy.path.abspath(exe)
 

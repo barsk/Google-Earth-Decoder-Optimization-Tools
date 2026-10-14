@@ -1,94 +1,93 @@
-# Google-Earth-Decoder-Optimization-Tools
-Python blender addon designed to be used with Google Earth Decoder Tool sceneries
+# GEDOT for MSFS 2024
 
-<p class="md-badges">
-<a href="https://hits.seeyoufarm.com" target="_blank"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FThalixte%2FGoogle-Earth-Decoder-Optimization-Tools&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=true" class="md-badge"/></a>
-<img src="https://img.shields.io/github/license/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/v/release/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/stars/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/forks/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
-<img src="https://img.shields.io/github/issues/Thalixte/Google-Earth-Decoder-Optimization-Tools?style=flat-square" class="md-badge">
+A Blender addon that turns Google Earth photogrammetry tiles into an optimized scenery package for **Microsoft Flight
+Simulator 2024**: tiles placed in their exact position, colours and baked shadows corrected, the overlaps and the water
+trimmed, the terrain matched to the tiles, landmark buildings kept in more detail, points of interest, and the MSFS
+package files written.
 
+## Status of this fork
 
-</p>
+This is an independent fork of [Google-Earth-Decoder-Optimization-Tools](https://github.com/Thalixte/Google-Earth-Decoder-Optimization-Tools)
+(GEDOT) by Thalixte. Thanks to Thalixte for the original addon, which this fork builds on.
 
-**1) Presentation:**
+* **Targets MSFS 2024 and Blender 3.5.** The MSFS 2020 code paths are still there (the *Target simulator* addon
+  preference), but are no longer tested.
+* **Lives its own life.** Since the fork, the processing has been rewritten to a large degree (more than 100 commits),
+  so it is not meant to be merged back upstream.
+* **Licence:** GNU General Public License, version 2 or later, like the original (see the headers of the source files).
 
-This blender addon is designed to provide tools to help optimizing city sceneries, retrieved via the Google Earth Decoder Tool, made by u/Jonahex111.
+## What it does
 
-This addon is coded in Python, and sources are available here: https://github.com/Thalixte/Google-Earth-Decoder-Optimization-Tools.
+The addon adds a *Google Earth Decoder Optimization Tools* menu to Blender's top bar. A scenery goes through numbered
+steps, each with a settings window:
 
-**2) Prerequisites:**
+| Step | Menu entry | Result |
+|---|---|---|
+| 1 | Initialize a new MSFS scenery project | The MSFS 2024 project structure (project, package definition, asset groups). |
+| 2 | Optimize an existing MSFS scenery project | The tiles placed exactly in their octree cells, their textures packed per tile LOD, the LOD sizes set. |
+| | Upgrade the landmarks of the scenery | Chosen buildings kept as separate objects in more detail (e.g. LOD 20) than the tiles; `landmarks.csv` also lists the points of interest. |
+| 2a | Colour correction | Haze, white balance, brightness, contrast and saturation of the textures, with a live preview. |
+| 2b | Shadow lightening | The shadows baked into the textures lightened, since MSFS lights the tiles again. |
+| 3 | Create the terraform and exclusion polygons | Building and vegetation exclusions, terraform polygons, optional vegetation polygons, from OpenStreetMap. |
+| 4 | Trim the Google Earth tiles | Overlaps between nodes removed, excluded ground cut out, the water pushed under the MSFS water. |
+| 5 | Generate height data | The MSFS terrain under the tiles, flat water levels, the floor under cut-out forests. |
+| 6 | Finalize the tiles for MSFS | Materials and normals for MSFS, points of interest, unused files removed. |
+| 7 | Add a collider for each tile | Collision and road traffic in one light collider per tile. |
 
-* Blender 2.83 or superior
+Then the package is built with the MSFS 2024 SDK. See [Workflow](docs/workflow.md) for the complete walkthrough.
 
-* Texture packing (no external addon needed): the textures of each tile lod are packed into a single texture, to reduce the number of texture files. Reducing the number of texture files reduce the loading time of the scenery, and can reduce stuttering related to texture streaming inside the sim
+## Main changes from the original GEDOT
 
-* Optional: once your package has been successfully built, you can further reduce its size by using the "Optimize the bulilt package by compressing the texture files" entry of the addon menu. To do so, you have to download the Compressonator tool from GPUOpen.
+* **MSFS 2024 packaging:** projects in the MSFS 2024 form (`ModelLib` asset group version 1, publishing groups, package
+  order hint), texture configuration files (`.png.xml`) so that the builder converts the textures to KTX2,
+  non-metallic materials (tiles were rendered too dark), terraforming in the MSFS 2024 form.
+* **Exact tile placement:** the tiles are placed in their octree cells from the names of their nodes, in the WGS 84
+  frame of the project (the old placement by bounding box with a 1.0045 scale left gaps of up to 1.8 m between tiles).
+* **Texture packing** built in (no paid addon), always on.
+* **Landmarks:** buildings listed in `landmarks.csv` (suggested from OpenStreetMap and Wikidata) keep a more detailed
+  LOD than the tiles. Rows marked as points of interest become MSFS POIs above their roof. The more detailed level can be
+  fetched for the landmarks only (optional, see [The optional tile downloader](docs/tile-downloader.md)).
+* **Step 2a, colour correction,** with automatic haze and white balance measurement, a grey picker and a live preview.
+* **Step 2b, shadow lightening:** the sun of the capture is estimated from the shadows, the shaded sides of walls,
+  roofs and trees are brightened, and cast shadows are lifted, with the originals kept.
+* **OpenStreetMap:** a single Overpass query per step, any Overpass server (e.g. a local one), the settings set once
+  in step 3 for steps 3 to 5, exclusions of forests, woods, other ground, nature reserves and parks on their own.
+* **Step 4, Trim:** nodes clipped to their octree cells and the ground duplicated between octants removed (no flicker
+  between overlapping nodes), the water pushed down under the MSFS water instead of cut (no holes along the shores),
+  sloped streams on local levels, beaches smoothed, the tiles covering only water removed.
+* **Step 5, height data:** a ground filter keeps buildings and trees out of the terrain, high precision from the most
+  detailed LODs, flat water levels at the Google Earth waterline, an estimated floor under cut-out forests, the ground
+  under buildings interpolated, the outer edges of the scenery blended into the tiles.
+* **Step 6, Finalize:** the normals along the node edges computed again (no dark ramps in the sim), points of interest
+  written, broken LODs and unused files removed.
+* **Speed:** the Blender tasks run as a pool, the LODs of a tile in one Blender process, and memory-heavy tasks are
+  limited by the free memory. Steps 4 and 5 are about three times faster.
+* Many fixes: reruns of steps on finished projects, invalid OpenStreetMap geometries, collider handling, panel settings
+  saved before each step.
 
-**3) Installation:**
+## Requirements
 
-Download the Google-Earth-Decoder-Optimization-Tools.zip archive. In Blender, open the preferences window: Edit > Preferences..., then select the Add-ons tab. Click on the Install... button, then browse to the archive you have just downloaded. Once installed, enable the addon.
-If everything worked correctly, you should see a new menu in Blender, called "Google Earth Decoder Optimization Tools".
+* **Blender 3.5**
+* **Microsoft Flight Simulator 2024** and its **SDK** (the package builder, `fspackagetool.exe`)
+* **Google Earth photogrammetry tiles as glTF**, in the layout of an Earth2MSFS download. Using Google's 3D tiles is
+  subject to Google's terms; make sure you have the right to use the tiles you process.
+* **Internet access** for OpenStreetMap: an Overpass server (public, or a local one for large sceneries), the
+  OpenStreetMap API and Nominatim. The addon installs its Python libraries on first use.
 
-**4) Usage:**
+See [Prerequisites](docs/installation/prerequisites.md) and [Installation](docs/installation/installation.md).
 
-Open the "Google Earth Decoder Optimization Tools" menu in Blender.
+## Documentation
 
-Choose an action from the menu entries:
+* [Presentation](docs/index.md)
+* [Prerequisites](docs/installation/prerequisites.md) and [Installation](docs/installation/installation.md)
+* [Workflow](docs/workflow.md)
+* The steps: [1 Initialize](docs/steps/1-initialize.md), [2 Optimize](docs/steps/2-optimize.md),
+  [Landmarks](docs/steps/landmarks.md), [2a Colour correction](docs/steps/2a-colour-correction.md),
+  [2b Shadow lightening](docs/steps/2b-shadow-lightening.md), [3 Polygons](docs/steps/3-polygons.md),
+  [4 Trim](docs/steps/4-trim.md), [5 Height data](docs/steps/5-height-data.md), [6 Finalize](docs/steps/6-finalize.md),
+  [7 Colliders](docs/steps/7-colliders.md), [Build](docs/steps/build.md)
+* [Other tools](docs/tools.md)
+* [Settings](docs/settings.md)
+* [The optional tile downloader](docs/tile-downloader.md)
 
-* **Initialize a new Msfs scenery project:**
-This script creates the MSFS structure of a scenery project, if it does not already exist.
-Once created, you can copy the result of the Google Earth decoder Output folder into the PackageSources folder of the newly created project. 
-You can also create the structure, then in the Google Earth Decoder tool, point the Output folder to the PackageSources folder of the project.
-The structure is the same as the one provided in the SimpleScenery project of the MSFS SDK samples.
-
-
-* **Optimize an existing Msfs scenery project:**
-This script optimizes an existing Google Earth Decoder scenery project (textures, Lods, CTD fix).
-If the "Bake textures enabled" checkbox is ticked (enabled by default) in the tool menu (section PROJECT), the textures of the project are merged per tile lods, which significantly reduce the number of the project files.
-It fixes the bounding box of each tile in order for them to fit the MSFS lod management system.
-This script also adds Asobo extension tags in order to manage collisions, road traffic, and correct lightning.
- 
-
-* **Clean the unused files of the msfs project:**
-This script cleans the unused files of the MSFS scenery project.
-Once you removed some tiles of a project, use this script to clean the gltf, bin and texture files associated to those tiles.
-Merge an existing MSFS scenery project into another one:
-
-
-* **Merge the tiles of a MSFS scenery project into another MSFS scenery project:**
-This script merges the tiles of a MSFS scenery project into another MSFS scenery project.
-In the MERGE section, select the project that you want to merge into the project indicated in the PROJECT section.
-
-**Update the position of the MSFS scenery tiles:**
-This script calculates the position of the MSFS scenery tiles.
-If you are not satisfied with the resulting positions, you can setup a latitude correction and/or a longitude correction in the TILE section.
-
-
-* **Update LOD min size values for each tile of the project:**
-This script updates the LOD min size values for each tile of the project.
-In the LODS section, you can setup each minsize value of each LOD level.
-According to the MSFS SDK documentation, the selection process is as follows:
-starting from LoD 0, going down, the first LoD with a minSize smaller than the model's current size on screen will be selected for display.
-The selection will also take into account forced and disabled LoDs as configured by the model options.
-
-
-* **Fix lightning issues on tiles at dawn or dusk:**
-This script fixes the lightning issues on tiles at dawn or dusk.
-To do so, it adds a specific Asobo extension tag ("ASOBO_material_fake_terrain") in the gltf files corresponding to the tiles Lod levels.
-
-
-* **Optimize the built package by compressing the texture files:**
-This script optimizes the built package of a MSFS scenery project by compressing the DDS texture files.
-For the script to process correctly, the package must have been successfully built prior to executing the script.
-
-
-* **Add a collider for each tile of the project:**
-This is an extra optimization of the scenery, wich is totally optional. When the scenery is optimized using the "Optimize an existing Msfs scenery project" script, the collision detection tags and the road tags are included in all the lods, which can produce CPU overload (even if my tests indicate that this is not really significant, in my config with a relatively old Intel(R) Core(TM) i7-4790K CPU @ 4.00GHz). This script removes the collision and road tags for all the LODs, and creates a specific transparent collider that embeds those tags for each tile of the project. Each collider object is created from the less detailed lod tile to decrease the CPU overload.
-
-
-* **Remove the colliders for each tile of the project:**
-This script removes all the colliders objects that have been created with the "Add a collider for each tile of the project" script. It also reverts back the road and collision tags for all the lods.
-
-If you want to donate, you will always be welcome to help me continue with more projects and update the existing ones https://paypal.me/Thalixte.
+The documentation can also be served as a site with [MkDocs](https://www.mkdocs.org/) (`mkdocs.yml`, Material theme).

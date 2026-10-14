@@ -67,7 +67,7 @@ class GEDOT_PREFS(AddonPreferences):
     )
     msfs_steam_version: BoolProperty(
         name="Msfs Steam version",
-        description="Set this to true if you have the MSFS 2020 Steam version",
+        description="Set this to true if you have the Steam version of MSFS (the package builder is started with -forcesteam)",
         default=False
     )
     msfs_target: EnumProperty(
@@ -93,13 +93,13 @@ class GEDOT_PREFS(AddonPreferences):
     )
 
     ########################################################################
-    # Earth2MSFS TileDownloader
+    # Tile downloader (optional)
     ########################################################################
 
     tile_downloader_exe_path: StringProperty(
         subtype="FILE_PATH",
-        name="Path to TileDownloader.exe",
-        description="Earth2MSFS command line downloader, used by the landmarks tool to download the more detailed level of the landmarks only",
+        name="Path to the tile downloader",
+        description="Optional command line tile downloader (see the documentation for the interface it must have), used by the landmarks tool to download the more detailed level of the landmarks only",
         maxlen=1024,
     )
 
@@ -182,7 +182,7 @@ class GEDOT_PREFS(AddonPreferences):
         row = box.row()
 
         box = layout.box()
-        box.label(text="Earth2MSFS TileDownloader")
+        box.label(text="Tile downloader (optional)")
         box.prop(self, "tile_downloader_exe_path")
         row = box.row()
 

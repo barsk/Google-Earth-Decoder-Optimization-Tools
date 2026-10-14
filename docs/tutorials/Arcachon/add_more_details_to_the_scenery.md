@@ -1,1 +1,0 @@
-# Add more details to the MSFS Arcachon scenery

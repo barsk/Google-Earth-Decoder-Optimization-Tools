@@ -1,11 +1,11 @@
-site_name: GEDOT
+site_name: GEDOT for MSFS 2024
 
 # Copyright
-copyright: Copyright &copy; 2022 - 2023 Thalixte
+copyright: Copyright &copy; 2022 - 2023 Thalixte, 2026 barsk. GNU GPL v2 or later
 
 # Repository
 repo_name: Google-Earth-Decoder-Optimization-Tools
-repo_url: https://github.com/Thalixte/Google-Earth-Decoder-Optimization-Tools
+repo_url: https://github.com/barsk/Google-Earth-Decoder-Optimization-Tools
 edit_uri: edit/main/docs/
 
 extra_javascript:
@@ -91,7 +91,7 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.magiclink:
       repo_url_shorthand: true
-      user: thalixte
+      user: barsk
       repo: Google-Earth-Decoder-Optimization-Tools
   - pymdownx.mark
   - pymdownx.smartsymbols
@@ -129,17 +129,19 @@ nav:
   - Getting started:
     - Prerequisites: installation/prerequisites.md
     - Installation: installation/installation.md
-  - Features:
-    - Initialize a new MSFS scenery project: features/initialize_scenery.md
-    - Optimize an existing MSFS scenery project: features/optimize_scenery.md
-    - Merge an existing MSFS scenery project into another one: features/merge_sceneries.md
-    - Create terraform and exclusion polygons: features/create_terraform_and_exclusion_polygons.md
-    - Cleanup the 3d data from the photogrammetry tiles: features/cleanup_3d_data_from_the_photogrammetry_tiles.md
-    - Generate height data from the photogrammetry tiles: features/generate_height_data_from_the_photogrammetry_tiles.md
-  - Step by step tutorials:
-      - Arcachon:
-          - 1. Initialize the Arcachon MSFS scenery project: tutorials/Arcachon/initialize_scenery.md
-          - 2. Retrieve the MSFS scenery photogrammetry tiles: tutorials/Arcachon/retrieve_tiles.md
-          - 3. Optimize the MSFS scenery photogrammetry tiles: tutorials/Arcachon/optimize_scenery.md
-          - 4. Add more details to the Arcachon MSFS scenery: tutorials/Arcachon/add_more_details_to_the_scenery.md
-          - 5. Create terraform and exclusion polygons: tutorials/Arcachon/create_terraform_and_exclusion_polygons.md
+    - Workflow: workflow.md
+  - Steps:
+    - 1. Initialize: steps/1-initialize.md
+    - 2. Optimize: steps/2-optimize.md
+    - Landmarks and points of interest: steps/landmarks.md
+    - 2a. Colour correction: steps/2a-colour-correction.md
+    - 2b. Shadow lightening: steps/2b-shadow-lightening.md
+    - 3. Polygons: steps/3-polygons.md
+    - 4. Trim: steps/4-trim.md
+    - 5. Height data: steps/5-height-data.md
+    - 6. Finalize: steps/6-finalize.md
+    - 7. Colliders: steps/7-colliders.md
+    - Build: steps/build.md
+  - Other tools: tools.md
+  - Settings: settings.md
+  - The optional tile downloader: tile-downloader.md
