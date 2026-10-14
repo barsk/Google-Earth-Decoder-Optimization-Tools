@@ -14,7 +14,8 @@ This is an independent fork of [Google-Earth-Decoder-Optimization-Tools](https:/
   preference), but are no longer tested.
 * **Lives its own life.** Since the fork, the processing has been rewritten to a large degree (more than 100 commits),
   so it is not meant to be merged back upstream.
-* **Licence:** GNU General Public License, version 2 or later, like the original (see the headers of the source files).
+* **Licence:** GNU General Public License, version 2 or later, like the original: the licence text is in
+  [LICENSE](LICENSE), the "or later" in the headers of the source files.
 
 ## What it does
 
