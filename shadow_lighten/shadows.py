@@ -56,6 +56,11 @@ MIN_REFERENCE = 20          # lit texels needed around a texel for its reference
 MIN_SHADOW_PAIRS = 200      # confident shadow texels needed to measure a tile's lit / shadow ratio
 DARKNESS_RANGE = (0.55, 0.9)  # luminance against the lit reference: fully a shadow below, not at all above
 DARKNESS_BLUR = 2           # the luminance for the darkness blurred over 5 x 5 texels
+OWN_DARKNESS = (0.25, 0.4)  # a texel's own luminance against the lit reference: dark by itself below, not above (see correct_lod)
+DARK_EDGE_BAND = 2          # the dark texels this close (texels) to texels that are not dark: an edge
+LIKELIHOOD_RANGE = (0.3, 0.7)  # shadow likelihood: no shadow below, fully above
+DARK_LIKELIHOOD_RANGE = (0.0, 0.3)  # the same for the texels dark by themselves
+SOFT_LIKELIHOOD_RANGE = (0.7, 0.95)  # below: the soft edge of the predicted shadow, above: inside it
 SMOOTH_CELL = 2.0           # vegetation normals: averaged over the 3 x 3 x 3 cells of this size around a vertex
 # the work size of the likelihood and the reference per LOD (upsampled), so that their texels are ~0.8 m on every LOD
 # by rank: the most detailed LOD of the tile, the next one, ...
@@ -363,12 +368,41 @@ def correct_lod(model_lib_folder, tile, lod, placements, sun, fit, parameters, o
         del ref_big
         blurred = box_blur(lum(part1), covered, DARKNESS_BLUR)
         q = blurred[ys, xs] / np.maximum(ref_lum, 1e-6)
+        del blurred
+        # The edges of the shadows (Umea's Avion: a dark outline around the lightened shadows, its two texels at half the
+        # shadow's brightness). (1) Each texel was brought to the lit reference by its 5 x 5 mean: along an edge the mean takes in
+        # the lit texels across it, the shadow texels there looked lighter than they were and got too little gain. The texels
+        # dark by themselves now take their darkness from their dark neighbours only, and those next to texels that are not
+        # dark are brought to the reference by their own brightness (the photos' sharpening leaves them darker than the shadow).
+        # (2) The predicted shadow is soft (the jittered rays) and ends a little short of the photo's (its last meter had a
+        # likelihood of 0.02-0.5: 0-13 % of the brightening): a weaker likelihood is enough for the texels dark by themselves.
+        # (3) The lit and half lit texels where the predicted shadow is soft never go above the reference (the mean of their dark
+        # neighbours brightened them above the lit ground). Inside the predicted shadow the half lit ones keep the mean: a lit
+        # texel and a bright thing in a shadow (e.g. a road marking) have the same brightness, the mean keeps the contrast
+        own = lum(part1[ys, xs]) / np.maximum(ref_lum, 1e-6)
+        dark = np.zeros(covered.shape, dtype=bool)
+        dark[ys, xs] = own < OWN_DARKNESS[1]
+        blurred = box_blur(lum(part1), dark, DARKNESS_BLUR)
+        light = np.zeros(covered.shape)
+        light[ys, xs] = own >= OWN_DARKNESS[1]
+        near_light = box_blur(light, covered, DARK_EDGE_BAND)[ys, xs] > 0.0
+        del dark, light
+        plain = smoothstep(own, *OWN_DARKNESS)
+        q = (1.0 - plain) * blurred[ys, xs] / np.maximum(ref_lum, 1e-6) + plain * q
         del blurred, ref_lum
-        weight = smoothstep(t["likelihood"][ys, xs], 0.3, 0.7) * (1.0 - smoothstep(q, *DARKNESS_RANGE))
+        likelihood = t["likelihood"][ys, xs]
+        weight = (1.0 - plain) * smoothstep(likelihood, *DARK_LIKELIHOOD_RANGE) + plain * smoothstep(likelihood, *LIKELIHOOD_RANGE)
+        weight *= 1.0 - smoothstep(q, *DARKNESS_RANGE)
         weight *= np.where(vegetation(srgb_from_8bit(t["srgb8"][ys, xs])), parameters["shadow_vegetation_strength"], 1.0)
         ratio = fit["shadow_ratio"]
         ratio_lum = max(float(lum(ratio)), 1.0001)
-        gain = 1.0 + weight * (np.clip(np.minimum(ratio_lum, 1.0 / np.maximum(q, 1e-6)), 1.0, None) - 1.0)
+        by_own = 1.0 / np.maximum(own, 1e-6)
+        dark_edge = (1.0 - plain) * near_light
+        target = (1.0 - dark_edge) / np.maximum(q, 1e-6) + dark_edge * by_own
+        soft = plain * (1.0 - smoothstep(likelihood, *SOFT_LIKELIHOOD_RANGE))
+        target = (1.0 - soft) * target + soft * np.minimum(target, np.maximum(by_own, 1.0))
+        gain = 1.0 + weight * (np.clip(np.minimum(ratio_lum, target), 1.0, None) - 1.0)
+        del plain, likelihood, own, near_light, by_own, dark_edge, soft, target
         exponent = parameters["shadow_strength"] * np.log(gain) / math.log(ratio_lum)
         tinted = ratio_lum * (ratio / ratio_lum) ** parameters["shadow_color"]
         brightness_before, brightness_part1 = lum(linear[covered]).mean(), lum(part1[covered]).mean()
