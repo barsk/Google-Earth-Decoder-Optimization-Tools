@@ -143,6 +143,7 @@ nav:
     - 6. Finalize: steps/6-finalize.md
     - 7. Colliders: steps/7-colliders.md
     - Build: steps/build.md
+  - Usage scenarios: scenarios.md
   - Other tools: tools.md
   - Settings: settings.md
   - The optional tile downloader: tile-downloader.md

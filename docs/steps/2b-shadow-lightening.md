@@ -28,17 +28,18 @@ folder.
 
 ## Settings
 
-The SHADOW_LIGHTENING section, as percent sliders (hover for the details):
+The SHADOW_LIGHTENING section, as percent sliders (hover for the details). The defaults are a safe floor: most
+sceneries take stronger values, see [Usage scenarios](../scenarios.md#tuning-the-shadow-lightening).
 
 | Setting | Default | Effect |
 |---|---|---|
-| **Shaded side: max boost** | 300 % | The most a shaded side is brightened (300 % = up to 3 times). |
+| **Shaded side: max boost** | 400 % | The most a shaded side is brightened (400 % = up to 4 times). |
 | **Shaded side: color fix** | 50 % | The share of the shaded side's colour shift that is fixed: 0 % = brightness only (stays bluish), 100 % = the full shift (tends to orange). |
 | **Shaded side: vegetation** | 90 % | The share of the correction applied to trees and other vegetation. |
-| **Cast shadows: strength** | 60 % | How much the cast shadows are lifted: 100 % = up to the lit surface around them. Lower keeps some shadow and gives fewer artifacts. |
+| **Cast shadows: strength** | 80 % | How much the cast shadows are lifted: 100 % = up to the lit surface around them. Lower keeps some shadow and gives fewer artifacts. |
 | **Cast shadows: color fix** | 50 % | The share of the shadows' bluish colour shift that is removed (100 % can turn yellowish). |
-| **Cast shadows: max boost** | 600 % | The most a cast shadow is brightened, before the strength is applied. Shadows of a sunny capture can be 10 to 20 times darker than the lit ground. |
-| **Cast shadows: vegetation** | 50 % | The share of the cast shadow correction applied to vegetation (shadows of trees on trees). |
+| **Cast shadows: max boost** | 700 % | The most a cast shadow is brightened, before the strength is applied. Shadows of a sunny capture can be 10 to 20 times darker than the lit ground. |
+| **Cast shadows: vegetation** | 70 % | The share of the cast shadow correction applied to vegetation (shadows of trees on trees). |
 | **Sun directions** | empty | The sun directions of the capture as azimuth/elevation in degrees, separated by commas (e.g. `168/34, 150/40`). Empty: estimated from the tiles. |
 
 Strong settings make the lightened shadows look flat and blocky: the dark parts of an 8-bit texture hold few levels,

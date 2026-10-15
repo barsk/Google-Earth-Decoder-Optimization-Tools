@@ -63,6 +63,9 @@ Keep the paths free of characters outside ASCII (å, ä, ö, é...): the MSFS 20
 
 ## Reruns and backups
 
+Which steps to run again for common changes (colours, shadows, landmarks, exclusions, tiles): see
+[Usage scenarios](scenarios.md).
+
 * **Steps 2a and 2b** can run again at any time with other settings: they start from the original textures, kept in
   `backup\colors` and `backup\shadow_lightening`. Run 2b again after 2a.
 * **Step 4** keeps the tiles as they were before its first run in `backup\cleanup_3d_data`, and each rerun starts from

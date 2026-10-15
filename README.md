@@ -91,6 +91,7 @@ See [Prerequisites](docs/installation/prerequisites.md) and [Installation](docs/
   [2b Shadow lightening](docs/steps/2b-shadow-lightening.md), [3 Polygons](docs/steps/3-polygons.md),
   [4 Trim](docs/steps/4-trim.md), [5 Height data](docs/steps/5-height-data.md), [6 Finalize](docs/steps/6-finalize.md),
   [7 Colliders](docs/steps/7-colliders.md), [Build](docs/steps/build.md)
+* [Usage scenarios](docs/scenarios.md): tuning the colours and the shadows, changing landmarks, exclusions or tiles
 * [Other tools](docs/tools.md)
 * [Settings](docs/settings.md)
 * [The optional tile downloader](docs/tile-downloader.md)
