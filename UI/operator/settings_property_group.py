@@ -827,13 +827,13 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     wall_gain_cap: FloatProperty(
         name="Wall gain cap",
         description="The most the shaded side of walls, roofs and trees is brightened towards its lit side (300 % = up to 3 times; "
-                    "its colour fix is kept, see the color fix). Default: 300 %",
+                    "its colour fix is kept, see the color fix). Default: 400 %",
         subtype="NONE",
         min=100.0,
         max=2000.0,
         step=100,
         precision=0,
-        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "wall_gain_cap", 3.0)) if bpy.types.Scene.project_settings is not None else 300.0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "wall_gain_cap", 4.0)) if bpy.types.Scene.project_settings is not None else 400.0,
         update=wall_gain_cap_updated
     )
     wall_color: FloatProperty(
@@ -861,13 +861,13 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_strength: FloatProperty(
         name="Shadow strength",
-        description="How much the cast shadows are lifted (100 % = up to the lit surface around them; lower keeps some shadow and fewer artifacts). Default: 60 %",
+        description="How much the cast shadows are lifted (100 % = up to the lit surface around them; lower keeps some shadow and fewer artifacts). Default: 80 %",
         subtype="NONE",
         min=0.0,
         max=100.0,
         step=100,
         precision=0,
-        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_strength", 0.6)) if bpy.types.Scene.project_settings is not None else 60.0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_strength", 0.8)) if bpy.types.Scene.project_settings is not None else 80.0,
         update=shadow_strength_updated
     )
     shadow_color: FloatProperty(
@@ -883,25 +883,25 @@ class SettingsPropertyGroup(bpy.types.PropertyGroup):
     )
     shadow_gain_cap: FloatProperty(
         name="Shadow gain cap",
-        description="The most a cast shadow is brightened, before the strength is applied (600 % = up to 6 times; the shadows of a "
-                    "sunny capture can be 10 to 20 times darker than the lit ground). Default: 600 %",
+        description="The most a cast shadow is brightened, before the strength is applied (700 % = up to 7 times; the shadows of a "
+                    "sunny capture can be 10 to 20 times darker than the lit ground). Default: 700 %",
         subtype="NONE",
         min=100.0,
         max=2500.0,
         step=100,
         precision=0,
-        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_gain_cap", 6.0)) if bpy.types.Scene.project_settings is not None else 600.0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_gain_cap", 7.0)) if bpy.types.Scene.project_settings is not None else 700.0,
         update=shadow_gain_cap_updated
     )
     shadow_vegetation_strength: FloatProperty(
         name="Shadow vegetation strength",
-        description="The share of the cast shadow correction applied to vegetation (shadows of trees on trees). Default: 50 %",
+        description="The share of the cast shadow correction applied to vegetation (shadows of trees on trees). Default: 70 %",
         subtype="NONE",
         min=0.0,
         max=100.0,
         step=100,
         precision=0,
-        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_vegetation_strength", 0.5)) if bpy.types.Scene.project_settings is not None else 50.0,
+        default=100.0 * float(getattr(bpy.types.Scene.project_settings, "shadow_vegetation_strength", 0.7)) if bpy.types.Scene.project_settings is not None else 70.0,
         update=shadow_vegetation_strength_updated
     )
     sun_candidates: StringProperty(

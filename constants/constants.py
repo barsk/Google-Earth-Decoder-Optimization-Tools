@@ -166,8 +166,9 @@ SHADOW_LIGHTENING_TASK_MEMORY_GB = 5.5
 # vegetation at vegetation_strength; part 2, the cast shadows lifted
 # by gain^shadow_strength (a full shadow ~x2.9), shadow_color of the shadow ratio's color shift, at most x shadow_gain_cap,
 # vegetation at shadow_vegetation_strength. sun_candidates: "azimuth/elevation, ..." (empty: estimated from the tiles)
-SHADOW_LIGHTENING_DEFAULTS = {"wall_gain_cap": 3.0, "wall_color": 0.5, "vegetation_strength": 0.9, "shadow_strength": 0.6, "shadow_color": 0.5,
-                              "shadow_gain_cap": 6.0, "shadow_vegetation_strength": 0.5}
+# (since the safeguards of 2026-10-13/14 stronger values hold: these are a safe floor, tuned upwards per scenery)
+SHADOW_LIGHTENING_DEFAULTS = {"wall_gain_cap": 4.0, "wall_color": 0.5, "vegetation_strength": 0.9, "shadow_strength": 0.8, "shadow_color": 0.5,
+                              "shadow_gain_cap": 7.0, "shadow_vegetation_strength": 0.7}
 RESIZE_SCENERY_TEXTURES_BACKUP_FOLDER = "resize_scenery_textures"
 
 SCRIPT_PREFIX = "_script"
